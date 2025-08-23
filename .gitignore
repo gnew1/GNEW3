@@ -6,3 +6,12 @@ creaREP_report.json
 repetidos/
 QuizaErrores/
 docs/_imported/
+
+# Stray root artifacts archived or generated
+/.py
+/.ts
+/schema.graphql
+/uno.txt
+/dos.txt
+/TRES.txt
+/OCHO.txt

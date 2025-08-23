@@ -18,5 +18,5 @@ feat(quality): módulo M6 con DORA metrics, SonarQube, Codecov y quality gates
 - Falsos positivos en métricas → mitigado con thresholds claros en runbook.
 
 
-M_pointer actualizado: M7
+Este documento fue movido a `docs/modules/M6.md`.
 
