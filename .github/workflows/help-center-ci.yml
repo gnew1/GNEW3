@@ -1,4 +1,4 @@
-name: Help Center CI
+name: help-center-ci
 on:
   pull_request:
     paths: ["apps/web/content/help/**","apps/web/src/modules/help/**","services/helpdesk/**","tools/**"]
@@ -6,77 +6,8 @@ on:
     branches: [main]
     paths: ["apps/web/content/help/**","services/helpdesk/**","tools/**"]
 jobs:
-  validate-index:
+  archived:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: pnpm i
-      - run: pnpm tsx tools/validate-help-freshness.ts
-      - run: pnpm tsx tools/build-help-index.ts
-  helpdesk:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: gnew }
-        ports: ["5432:5432"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: npm ci
-        working-directory: services/helpdesk
-      - run: npm run migrate
-        env: { DATABASE_URL: postgres://postgres:postgres@localhost:5432/gnew }
-        working-directory: services/helpdesk
-      - run: npm run build
-        working-directory: services/helpdesk
-
- 
-Pruebas / DoD
-●	Reducción de tickets L1 ≥ X% vs baseline 4 semanas (panel Grafana y /v1/metrics/l1).
-
-●	Lighthouse ≥ 90 (a11y/PWA) en páginas help/* y widget.
-
-●	Búsqueda: top 3 hit relevante para ≥ Y% de consultas comunes.
-
-●	Feedback capturado (tasa de respuesta ≥ Z%) y visible en dashboard.
-
-●	Frescura: CI falla si lastReviewed > 90 días o falta owner.
-
-●	Observabilidad: métricas expuestas; runbooks para escalado a L1/L2.
-
-●	Demo reproducible en entorno limpio (compose de web+helpdesk+db).
-
-Sustituir X/Y/Z con Soporte+Data antes del Sprint 1 y documentar en Docusaurus.
- 
-Riesgos & Controles
-●	Documentación obsoleta → owners por sección + verificación CI de “lastReviewed”.
-
-●	Privacidad → feedback y tickets con user_anon_id seudónimo; no PII en KB ni logs.
-
-●	Sesgo en resultados → embeddings locales + lista blanca por audiencia; auditoría mensual.
-
-●	Carga de Soporte → escalado a L1 sólo tras lectura/auto ayuda; límites de tickets por usuario.
-
- 
-Integración (con otros N)
-●	N51 Web: widget en layout; atajos ?help=slug para deep link.
-
-●	N53 Onboarding: enlazar “Cómo empezar”.
-
-●	N54 Learning: artículos embebibles en MDX tutoriales.
-
-●	N55 Gamificación: evento help_resolved para puntos (no especulativos).
-
-●	N56 DID: tickets anónimos; si logueado, usar sub (DID) como user_anon_id.
-
-●	N57 Personalización: priorizar resultados por perfil/actividad (local first).
-
-¿Te dejo también un docker-compose.yml (web+helpdesk+postgres) y el JSON del dashboard Grafana para seguimiento de L1/CTR/satisfacción?
-Tú dijiste:
-programa a detalle N59 6.9 Chatbot de soporte (Prompt 59) Objetivo: Resolver dudas comunes y escalar a humano. Roles: Data/ML, Soporte, Seguridad. Stack: RAG sobre KB, límites de acción, guardrails. Entregables: Bot en web y móvil, panel de handoff. Pasos: Conector de contexto (cuenta, estado) con privacidad. Flujos de verificación antes de sugerir acciones sensibles. Pruebas / DoD: CSAT ≥4/5, tasa de resolución L0 ≥ Y%. Riesgos & Controles: Alucinaciones → citaciones y fallback humano.
-ChatGPT Plus
-Pensó durante 1m 2s
+      - name: Archived original workflow
+        run: echo "See docs/_imported/help-center-ci.yml.md for the archived content"
