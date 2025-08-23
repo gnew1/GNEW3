@@ -1,0 +1,20 @@
+openapi: 3.1.0 
+info: { title: GNEW Regulatory Reports API, version: 1.0.0 } 
+paths: 
+  /v1/reports/definitions: 
+    get: { summary: Listar definiciones y últimas corridas, responses: 
+{ "200": { description: OK } } } 
+  /v1/reports/definitions/reload: 
+    post: { summary: Recargar YAML, responses: { "202": { description: 
+Accepted } } } 
+  /v1/reports/runs/schedule: 
+    post: 
+      summary: Programar período manualmente 
+      responses: { "201": { description: Created } } 
+  /v1/reports/runs/{id}: 
+    get: { summary: Ver estado/artefactos/entregas, responses: { 
+"200": { description: OK } } } 
+  /v1/reports/runs/{id}/retry: 
+    post: { summary: Reintentar, responses: { "202": { description: 
+Accepted } } } 
+ 

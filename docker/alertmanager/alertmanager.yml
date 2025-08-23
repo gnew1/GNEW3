@@ -1,0 +1,20 @@
+route: 
+  receiver: default 
+  group_by: ["alertname", "contract"] 
+  group_wait: 30s 
+  group_interval: 2m 
+  repeat_interval: 2h 
+ 
+receivers: 
+  - name: default 
+    # Ejemplo Slack (rellena con tu hook) 
+    slack_configs: 
+      - api_url: "https://hooks.slack.com/services/T000/B000/XXXXXXXX" 
+        channel: "#gnew-alerts" 
+        text: | 
+          *{{ .Status | toUpper }}* — {{ .CommonAnnotations.summary }} 
+          {{ range .Alerts -}} 
+          • {{ .Annotations.description }} 
+          Labels: {{ .Labels }} 
+          {{ end }} 
+ 

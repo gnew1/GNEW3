@@ -1,0 +1,99 @@
+name: Chaos Security (SC & Backend)
+on:
+  schedule:
+    - cron: "0 2 * * 2,5"   # Ensayos periódicos: martes y viernes 02:00 CET
+  workflow_dispatch: {}
+jobs:
+  sc-chaos:
+    runs-on: ubuntu-latest
+    env:
+      FORK_URL: ${{ secrets.FORK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: nightly }
+      - name: Deps
+        working-directory: security/chaos
+        run: make forge-deps
+      - name: Ataques (fork)
+        working-directory: security/chaos
+        run: |
+          mkdir -p chaos-reports
+          forge test --fork-url $FORK_URL --match-path 'test/attack/*.t.sol' -vvv | tee chaos-reports/sc-attack.txt
+      - name: Fuzz/Invariant
+        working-directory: security/chaos
+        run: forge test --fork-url $FORK_URL --match-path 'test/fuzz/*.t.sol' -vv | tee -a chaos-reports/sc-fuzz.txt
+      - name: Subir reportes
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-reports-sc
+          path: security/chaos/chaos-reports/
+
+  backend-chaos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - name: Smoke
+        working-directory: security/chaos
+        run: BASE_URL=${{ secrets.BACKEND_BASE_URL }} make k6-smoke || true
+      - name: Chaos
+        working-directory: security/chaos
+        run: BASE_URL=${{ secrets.BACKEND_BASE_URL }} make k6-chaos | tee chaos-reports/backend-chaos.txt || true
+      - name: Subir reportes
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-reports-backend
+          path: security/chaos/chaos-reports/
+
+  triage:
+    needs: [sc-chaos, backend-chaos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Evaluar resultados y abrir issues si falló una defensa
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          # Heurística simple: si "Fail" o "Error" aparece en reportes, abrir issue
+          FAIL=false
+          for f in $(ls -1 **/chaos-reports/* 2>/dev/null || true); do
+            if grep -Eqi "Fail|Error|assert" "$f"; then FAIL=true; fi
+          done
+          if [ "$FAIL" = "true" ]; then
+            ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            title="SEC: Chaos run detected failures ($ts)"
+            body="Automated chaos run found failures.\n\nAttach reports.\n\nDoD: cerrar brechas; medir MTTR desde este issue."
+            gh issue create --title "$title" --body "$body" || true
+          fi
+
+ 
+Correcciones y cierre de brechas (proceso operativo)
+●	Cuando un ataque pasa (fail):
+
+1.	Workflow crea issue (ver triage).
+
+2.	Seguridad + Eng. SC preparan PR de corrección con:
+
+■	Patrón CEI/pull (si aplica), caps/TWAP oráculo, o cambio de flujo por griefing.
+
+■	Test que reproduzca el exploit y verifique el fix.
+
+3.	Se ejecuta chaos-redteam en la PR (manual) y en cron, hasta ver verde.
+
+4.	MTTR: se mide desde creación del issue hasta merge del PR que pone verde el job.
+
+ 
+Nota de alineación con N61/N60
+●	Reutiliza plantillas seguras de N61 (PullPaymentEscrow) para demostrar defensas.
+
+●	Los ensayos periódicos se integran con métricas de backend (k6) y con reportes artefacto CI.
+
+●	Los playbooks documentan ataque/defensa y quedan listos para Docusaurus (“Runbooks”).
+
+¿Quieres que conecte estos ensayos a un dashboard de Grafana con panel de éxitos/fallos por vector y MTTR por sprint? Puedo generarte el JSON del dashboard y los alertas (Prometheus/Alertmanager) en el siguiente paso.
+Tú dijiste:
+programa a nivel de detalle para GNEW N64 7.4 Privacidad con zk-SNARKs (Prompt 64) Objetivo: Pruebas de conocimiento cero para operaciones privadas. Roles: Cripto/zk, Eng. SC. Stack: Circom/Noir, Groth16/Plonk, verifiers. Entregables: Circuitos y verificadores on-chain. Pasos: Seleccionar casos (votación, saldos). Parámetros confiables y ceremony. DoD: Gas y tiempos aceptables, verificación correcta. Riesgos & Controles: Toxic waste → MPC y rotación.
+ChatGPT Plus
+Pensó durante 1m 9s

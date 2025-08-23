@@ -1,0 +1,53 @@
+
+### Moderar texto
+POST http://localhost:8096/moderate
+Content-Type: application/json
+
+{
+  "text": "Giveaway crypto! Click here http://bad.tk to double your money",
+  "userId": "u_123"
+}
+
+### Mask de PII
+POST http://localhost:8096/mask
+Content-Type: application/json
+
+{ "text": "Contact me at alice@example.com, card 4242-4242-4242-4242" }
+
+### Contenidos (lista)
+GET http://localhost:8096/contents
+
+### Cola de revisión
+GET http://localhost:8096/queue
+
+### Etiquetar caso
+POST http://localhost:8096/labels
+Content-Type: application/json
+
+{ "contentId": "{{contentId}}", "label": "needs_changes", "note": "contexto ambiguo" }
+
+### Listas: añadir término de deny
+POST http://localhost:8096/lists/upsert
+Content-Type: application/json
+
+{ "list": "denyTerms", "value": "mega-giveaway" }
+
+### Política (bajar review spam a 0.5)
+POST http://localhost:8096/policy
+Content-Type: application/json
+
+{ "review": { "spam": 0.5 } }
+
+### Export casos de agosto
+GET http://localhost:8096/export/cases?since=2025-08-01&until=2025-08-31&format=json
+
+Notas de cumplimiento y límites
+
+Heurístico y reglas: no usa modelos externos; ideal para pre‑filtro y cumplimiento mínimo. Puede integrarse con un motor ML más adelante vía webhook/feature store.
+
+Privacidad: /mask permite enmascarar PII; los textos completos se guardan para auditoría y mejora, ajustable si se requiere solo huellas (hashHex) en entornos estrictos.
+
+Auditoría: todas las acciones relevantes añaden entrada en hash‑chain.
+
+Siguiente (+1): N165 – Trazabilidad de datos (lineage) (pídelo y continúo).
+

@@ -1,0 +1,26 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "CommonJS",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true
+  }
+}
+
+Prompt N363 — Voting Results Service
+
+Stack: Node.js + Express + TypeScript.
+
+Endpoints:
+
+GET /results/:proposalId → retorna agregación de votos (yes/no/abstain).
+
+POST /results/vote → permite a usuarios enviar o actualizar su voto.
+
+GET /health → health check.
+
+Persistencia: memoria (simulación, extensible a BD).
+

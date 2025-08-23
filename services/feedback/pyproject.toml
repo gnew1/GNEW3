@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "gnew-feedback"
+version = "0.1.0"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "pydantic-settings",
+  "sqlalchemy>=2",
+  "prometheus-client",
+  "httpx",
+  "orjson",
+  "python-jose[cryptography]",
+  "passlib[bcrypt]",
+]
+

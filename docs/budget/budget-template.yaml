@@ -1,0 +1,30 @@
+fiscalYear: 2025 
+currency: USD 
+controller: "0xSAFE"    # tesorería operativa (Gnosis Safe) 
+categories: 
+  - id: ops 
+    name: Operaciones 
+  - id: rnd 
+    name: I+D 
+  - id: grants 
+    name: Grants 
+quarters: 
+  Q1: 
+    ops:    "100000.00" 
+    rnd:    "50000.00" 
+    grants: "25000.00" 
+  Q2: 
+    ops:    "110000.00" 
+    rnd:    "55000.00" 
+    grants: "25000.00" 
+  Q3: 
+    ops:    "110000.00" 
+    rnd:    "60000.00" 
+    grants: "30000.00" 
+  Q4: 
+    ops:    "120000.00" 
+    rnd:    "65000.00" 
+    grants: "30000.00" 
+attachments: 
+narrativeCID: "ipfs://..." 
+kpisCID: "ipfs://..."   # KPIs propuestos (OKR, tasas de ejecución) 

@@ -1,0 +1,28 @@
+jurisdiction: ES 
+currency: EUR 
+vat: 
+  standard_rate: 0.21 
+  reduced_rates: 
+    - { rate: 0.10, categories: ["hosteleria","transporte","entradas"] 
+} 
+    - { rate: 0.04, categories: ["libros","alimentos_basicos"] } 
+  reverse_charge: 
+    # B2B intracomunitario con NIF-IVA válido -> 0% y autoliquidación 
+    eu_b2b_vat_id_required: true 
+  exemptions: 
+    - { reason: "export_outside_eu", rate: 0.0 } 
+withholding_irpf: 
+  freelance_default: 0.15     # general 
+  freelance_reduced: 0.07     # inicio actividad 
+corporate_tax_is: 
+  advance_rate_q: 0.18        # pagos fraccionados trimestrales 
+validation: 
+  required_invoice_fields: 
+["invoice_number","issue_date","seller_vat","buyer_vat","amount_net","
+ vat_rate","country_code"] 
+reports: 
+  iva_model: "IVA-ES-303" 
+  is_model: "IS-ES-PagosFracc" 
+  irpf_model: "IRPF-111" 
+ 
+ 

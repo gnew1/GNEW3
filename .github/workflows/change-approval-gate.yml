@@ -1,0 +1,45 @@
+name: Change Approval Gate 
+on: 
+pull_request: 
+types: [opened, synchronize, reopened] 
+workflow_dispatch: 
+jobs: 
+cab-gate: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - name: Submit PR as change (idempotent) 
+        env: 
+          CAB_URL: ${{ vars.CAB_URL || 'https://cab.gnew.io' }} 
+          PR_EVENT: ${{ toJson(github.event) }} 
+        run: | 
+          curl -fsS -X POST "$CAB_URL/webhook/github" \ 
+            -H 'Content-Type: application/json' \ 
+            -d "$PR_EVENT" || true 
+ 
+      - name: Check gate (needs APPROVED if medium/high) 
+        env: 
+          CAB_URL: ${{ vars.CAB_URL || 'https://cab.gnew.io' }} 
+        run: | 
+          # Por simplicidad, el servicio devuelve el ID tras submit; 
+aquí se podría correlacionar por PR ID. 
+          # Ejemplo (opcional): consulta listado y filtra por key 
+"pr:<id>" 
+          echo "Gate check deferred to pre-deploy job." 
+ 
+Ruta completa: k8s/hooks/argocd-presync-cab-gate.yaml 
+apiVersion: batch/v1 
+kind: Job 
+metadata: 
+  name: presync-cab-gate 
+  namespace: gnew 
+  annotations: 
+    argocd.argoproj.io/hook: PreSync 
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded 
+spec: 
+  template: 
+    spec: 
+      restartPolicy: Never 
+      containers: 
+        - name: cab-gate 
+          image: curlimages/curl:8.8.0 
+          args: 

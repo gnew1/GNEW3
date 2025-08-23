@@ -1,0 +1,50 @@
+version: v1-2025-08 
+defaults: 
+  action: delete 
+  ttl_days: 365 
+rules: 
+  # Estrictamente necesario / seguridad → interés legítimo y TTL corto 
+  - match: { purpose: security_antiabuse } 
+    action: delete 
+    ttl_days: 30 
+ 
+  # Marketing basado en consentimiento → borrar al retirar, si no, TTL 
+180d 
+  - match: { purpose: marketing, baseLegal: consent } 
+    action: delete 
+    ttl_days: 180 
+    on_withdraw: { accelerate_to_days: 0 } 
+ 
+  # Analítica con agregación → compactar (agregar) a los 90d y borrar 
+crudos a los 30d 
+  - match: { purpose: analytics, dataCategory: event_raw } 
+    action: compact 
+    ttl_days: 30 
+    compact_to: { table: analytics.events_daily, keys: [day, feature], 
+metrics: [count, uniq_subjects] } 
+  - match: { purpose: analytics, dataCategory: event_agg } 
+    action: delete 
+    ttl_days: 365 
+ 
+  # Datos contractuales / facturación → obligación legal 7 años 
+(región EU) 
+  - match: { purpose: accounting, baseLegal: legal_obligation, region: 
+EU } 
+    action: delete 
+    ttl_days: 2555  # 7 años 
+ 
+  # Minimización por propósito: sólo estos campos en 'users' para 
+'personalization' 
+  - match: { system: core.users, purpose: personalization } 
+    action: delete 
+    ttl_days: 365 
+    fields_allow: [subjectId, preferences, locale]  # ¡no email/ip en 
+este uso! 
+ 
+  # Archivos adjuntos S3 → lifecycle nativo 
+  - match: { system: s3.attachments } 
+    action: s3_lifecycle 
+    ttl_days: 90 
+ 
+ 
+Backend — servicio y rutas 

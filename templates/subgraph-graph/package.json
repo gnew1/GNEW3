@@ -1,0 +1,173 @@
+```json 
+{ 
+  "name": "gnew-subgraph", 
+  "version": "1.0.0", 
+  "scripts": { 
+    "codegen": "graph codegen", 
+    "build": "graph build", 
+    "deploy": "bash scripts/deploy.sh" 
+  }, 
+  "devDependencies": { 
+    "@graphprotocol/graph-cli": "0.68.4", 
+    "@graphprotocol/graph-ts": "0.35.2", 
+    "typescript": "5.6.2" 
+  } 
+} 
+ 
+ 
+ruta completa: ./templates/subgraph-graph/subgraph.yaml 
+specVersion: 0.0.5 
+schema: 
+  file: ./schema.graphql 
+dataSources: 
+  - kind: ethereum 
+    name: ERC20 
+    network: mainnet 
+    source: 
+      address: "0x0000000000000000000000000000000000000000" # <-- 
+Cambiar 
+      abi: ERC20 
+      startBlock: 0 
+    mapping: 
+      kind: ethereum/events 
+      apiVersion: 0.0.7 
+      language: wasm/assemblyscript 
+      entities: 
+        - Transfer 
+      abis: 
+        - name: ERC20 
+          file: ./abis/ERC20.json 
+      eventHandlers: 
+        - event: Transfer(indexed address,indexed address,uint256) 
+          handler: handleTransfer 
+      file: ./src/mapping.ts 
+ 
+ 
+ruta completa: ./templates/subgraph-graph/schema.graphql 
+type Transfer @entity { 
+  id: ID! 
+  from: Bytes! 
+  to: Bytes! 
+  value: BigInt! 
+  txHash: Bytes! 
+  blockNumber: BigInt! 
+  timestamp: BigInt! 
+} 
+ 
+ 
+ruta completa: ./templates/subgraph-graph/src/mapping.ts 
+import { Transfer as TransferEvent } from "../generated/ERC20/ERC20"; 
+import { Transfer } from "../generated/schema"; 
+ 
+export function handleTransfer(event: TransferEvent): void { 
+  const id = event.transaction.hash.toHex() + "-" + 
+event.logIndex.toString(); 
+  const t = new Transfer(id); 
+  t.from = event.params.from; 
+  t.to = event.params.to; 
+  t.value = event.params.value; 
+  t.txHash = event.transaction.hash; 
+  t.blockNumber = event.block.number; 
+  t.timestamp = event.block.timestamp; 
+  t.save(); 
+} 
+ 
+ 
+ruta completa: ./templates/subgraph-graph/abis/ERC20.json 
+{ 
+  "abi": [ 
+    { 
+      "anonymous": false, 
+      "inputs": [ 
+        { "indexed": true, "internalType": "address", "name": "from", 
+"type": "address" }, 
+        { "indexed": true, "internalType": "address", "name": "to", 
+"type": "address" }, 
+        { "indexed": false, "internalType": "uint256", "name": 
+"value", "type": "uint256" } 
+      ], 
+      "name": "Transfer", 
+      "type": "event" 
+    } 
+  ] 
+} 
+ 
+ 
+ruta completa: ./templates/subgraph-graph/tsconfig.json 
+{ 
+  "extends": "@graphprotocol/graph-ts/types/tsconfig.base.json" 
+} 
+ 
+ 
+ruta completa: ./templates/subgraph-graph/scripts/deploy.sh 
+#!/usr/bin/env bash 
+set -euo pipefail 
+: "${GRAPH_ACCESS_TOKEN:?Set GRAPH_ACCESS_TOKEN secret}" 
+: "${SUBGRAPH_SLUG:?Set SUBGRAPH_SLUG (e.g. yourname/gnew-starter)}" 
+SUBGRAPH_NODE="${SUBGRAPH_NODE:-https://api.studio.thegraph.com/deploy
+ /}" 
+ 
+npm run codegen 
+npm run build 
+ 
+npx graph deploy --studio "$SUBGRAPH_SLUG" \ 
+  --node "$SUBGRAPH_NODE" \ 
+  --ipfs https://api.thegraph.com/ipfs/ \ 
+  --access-token "$GRAPH_ACCESS_TOKEN" 
+ 
+ 
+ruta completa: ./templates/subgraph-graph/.github/workflows/ci.yml 
+name: subgraph-ci 
+on: 
+  push: 
+    paths: ["templates/subgraph-graph/**"] 
+  pull_request: 
+    paths: ["templates/subgraph-graph/**"] 
+jobs: 
+  build: 
+    runs-on: ubuntu-latest 
+    defaults: { run: { working-directory: templates/subgraph-graph } } 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-node@v4 
+        with: { node-version: '20', cache: 'npm' } 
+      - run: npm ci 
+      - run: npm run codegen 
+      - run: npm run build 
+ 
+ 
+ruta completa: ./templates/subgraph-graph/.github/workflows/deploy.yml 
+name: Deploy Subgraph 
+on: 
+  workflow_dispatch: 
+    inputs: 
+      subgraph_slug: 
+        description: "Subgraph slug (e.g. yourname/gnew-starter)" 
+        required: true 
+jobs: 
+  deploy: 
+    runs-on: ubuntu-latest 
+    defaults: { run: { working-directory: templates/subgraph-graph } } 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-node@v4 
+        with: { node-version: '20', cache: 'npm' } 
+      - run: npm ci 
+      - name: Deploy (graph-cli) 
+        env: 
+          GRAPH_ACCESS_TOKEN: ${{ secrets.GRAPH_ACCESS_TOKEN }} 
+          SUBGRAPH_SLUG: ${{ inputs.subgraph_slug }} 
+          SUBGRAPH_NODE: ${{ vars.SUBGRAPH_NODE }} 
+        run: bash scripts/deploy.sh 
+ 
+ 
+ruta completa: ./templates/microservice-fastapi/README.md 
+# GNEW Microservicio (FastAPI) 
+ - Salud (`/healthz`), métricas simples y tests. - CI listo + 1‑click deploy (Render/Railway). - **Arranque limpio**: 
+```bash 
+python -m venv .venv && source .venv/bin/activate 
+pip install -r requirements.txt 
+uvicorn app.main:app --reload 
+Despliegue 1‑click 
+● Render: render.yaml 
+● Railway: railway.json --- 

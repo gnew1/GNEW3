@@ -1,0 +1,32 @@
+{ 
+  "funds": { 
+    "operativo": { 
+      "safe": "0xOPERATIVO_SAFE", 
+      "owners": [ 
+        "0xCFO...", "0xFINOPS1...", "0xFINOPS2...", "0xEXEC1..." 
+      ], 
+      "threshold": 2 
+    }, 
+    "grants": { 
+      "safe": "0xGRANTS_SAFE", 
+      "owners": [ 
+        "0xGRANTSLEAD...", "0xCFO...", "0xEXEC1..." 
+      ], 
+      "threshold": 2 
+    }, 
+    "rnd": { 
+      "safe": "0xRND_SAFE", 
+      "owners": [ 
+        "0xRNDLEAD...", "0xCFO...", "0xEXEC2..." 
+      ], 
+      "threshold": 2 
+    } 
+  }, 
+  "emergencyGuardian": "0xGUARDIAN...",  
+  "quorumPolicy": { 
+    "X_native_eth_wei": "200000000000000000",  
+    "N_signatures": 3 
+  } 
+} 
+ 
+ 

@@ -1,0 +1,21 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.24"
+optimizer = true
+optimizer_runs = 200
+evm_version = "paris"
+via_ir = true
+fs_permissions = [{ access = "read", path = "./"}]
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "short"
+multiline_func_header = "all"
+
+[profile.ci]
+optimizer_runs = 10
+

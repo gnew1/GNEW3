@@ -1,0 +1,27 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "commonjs",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  }
+}
+
+Prompt N383 — Metrics Collector Service
+
+Stack: Node.js + Express + TypeScript.
+
+Servicio backend para recopilar métricas de distintos servicios de GNEW.
+
+Endpoints:
+
+POST /api/metrics → registrar una métrica {service, metric, value}.
+
+GET /api/metrics → listar métricas, con filtro opcional ?service=....
+
+Servirá como base para dashboards internos y monitorización de la red GNEW.
+

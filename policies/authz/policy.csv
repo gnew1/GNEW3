@@ -1,0 +1,10 @@
+p, admin, /api/*, (r.ctx.tenant == r.sub.tenant), allow
+p, auditor, /api/reports/*, (r.sub.department == "risk" && r.ctx.tenant == r.sub.tenant), allow
+p, manager, /api/projects/:projectId/*, (r.sub.department == "ops" && r.ctx.projectOwnerId == r.sub.id), allow
+p, role_finance, /api/payments/*, (r.sub.clearance >= 3 && r.ctx.tenant == r.sub.tenant), allow
+p, role_finance, /api/ledger/*, (r.sub.clearance >= 4), allow
+p, user:alice, /api/feature-flags/*, (true), allow
+
+# Ejemplos de denegación explícita
+p, *, /api/keys/*, (true), deny
+

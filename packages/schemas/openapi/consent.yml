@@ -1,0 +1,46 @@
+openapi: 3.1.0 
+info: { title: GNEW Consent API, version: 1.0.0 } 
+paths: 
+  /v1/consent/catalog: 
+    get: 
+      summary: Catálogo de propósitos/categorías/usos efectivos 
+      responses: { "200": { description: OK } } 
+  /v1/consent/{subjectId}: 
+    get: 
+      summary: Estado efectivo del sujeto 
+      parameters: 
+        - in: path; name: subjectId; required: true; schema: { type: 
+string } 
+      responses: { "200": { description: OK } } 
+  /v1/consent/{subjectId}/decisions: 
+    post: 
+      summary: Registrar decisiones (opt-in/out) 
+      requestBody: { required: true, content: { application/json: { 
+schema: { $ref: '#/components/schemas/Decisions' }}}} 
+      responses: { "202": { description: Accepted } } 
+components: 
+  schemas: 
+    Decision: 
+      type: object 
+      required: [purposeKey, dataCategoryKey, processingUseKey, state, 
+policyVersion, provenance] 
+      properties: 
+        purposeKey: { type: string } 
+        dataCategoryKey: { type: string } 
+        processingUseKey: { type: string } 
+        state: { type: string, enum: [granted, denied, limited] } 
+        policyVersion: { type: string } 
+        expiresAt: { type: string, format: date-time } 
+        provenance: { type: string, enum: [ui_center, ui_modal, api, 
+import_gpc] } 
+    Decisions: 
+      type: object 
+      required: [decisions] 
+      properties: 
+        decisions: 
+          type: array 
+          minItems: 1 
+          items: { $ref: '#/components/schemas/Decision' } 
+ 
+ 
+CI/CD (GitHub Actions) 

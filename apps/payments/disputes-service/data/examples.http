@@ -1,0 +1,49 @@
+
+### Abrir disputa (chargeback)
+POST http://localhost:8085/disputes/open
+Content-Type: application/json
+
+{
+  "paymentId": "pay_123",
+  "partnerId": "partner_abc",
+  "currency": "EUR",
+  "amountMinor": 12345,
+  "reasonCode": "13.1",
+  "notes": "Cardholder claims not received"
+}
+
+### Listar disputas abiertas
+GET http://localhost:8085/disputes?status=chargeback
+
+### Añadir evidencia (recibo)
+POST http://localhost:8085/disputes/{{disputeId}}/evidence
+Content-Type: application/json
+
+{
+  "kind": "receipt",
+  "url": "https://example.com/receipts/pay_123.pdf",
+  "meta": { "po": "PO-2025-001" }
+}
+
+### Mandar a representment
+POST http://localhost:8085/disputes/{{disputeId}}/represent
+
+### Avanzar a prearbitration
+POST http://localhost:8085/disputes/{{disputeId}}/advance
+Content-Type: application/json
+
+{ "to": "prearbitration" }
+
+### Cerrar (won)
+POST http://localhost:8085/disputes/{{disputeId}}/close
+Content-Type: application/json
+
+{ "result": "won" }
+
+### Holds activos
+GET http://localhost:8085/holds?partnerId=partner_abc
+
+### Export ajustes (CSV)
+GET http://localhost:8085/adjustments/export?since=2025-08-01&until=2025-08-31&format=csv
+
+

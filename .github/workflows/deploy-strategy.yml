@@ -1,0 +1,100 @@
+name: Deploy (Strategy) 
+on: 
+workflow_dispatch: 
+inputs: 
+service:  { description: "Servicio", required: true, type: 
+string, default: "gateway" } 
+      version:  { description: "Imagen tag/digest", required: true, 
+type: string } 
+      strategy: { description: "canary|bluegreen|direct", required: 
+true, type: choice, options: ["canary","bluegreen","direct"] } 
+      env:      { description: "staging|prod", required: true, type: 
+choice, options: ["staging","prod"] } 
+ 
+env: 
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/gnew 
+ 
+jobs: 
+  prep: 
+    runs-on: ubuntu-latest 
+    outputs: 
+      image: ${{ steps.out.outputs.image }} 
+    steps: 
+      - id: out 
+        run: echo "image=${IMAGE_PREFIX}-${{ inputs.service }}:${{ 
+inputs.version }}" >> $GITHUB_OUTPUT 
+ 
+  canary: 
+    if: inputs.strategy == 'canary' 
+    runs-on: ubuntu-latest 
+    needs: prep 
+    steps: 
+      - uses: actions/checkout@v4 
+      - name: Update image tag (GitOps repo) 
+        run: | 
+          yq -i '.values.services.${{ inputs.service }}.image = "${{ 
+needs.prep.outputs.image }}"' infra/helm/gnew-platform/values.${{ 
+inputs.env }}.yaml 
+          git config user.name "ci"; git config user.email 
+"ci@users.noreply.github.com" 
+          git commit -am "deploy(${ { inputs.service } }): canary ${{ 
+inputs.version }}" || true 
+          git push 
+      - name: Apply Canary CR 
+        run: | 
+          kubectl apply -f apps/${{ inputs.service }}/canary/${{ 
+inputs.service }}-canary.yaml 
+      - name: Wait for promotion 
+        run: | 
+          # Flagger marca status; opcionalmente observa eventos 
+          kubectl -n gnew-system wait canary/${{ inputs.service }} --for=condition=Promoted --timeout=30m 
+ 
+  bluegreen: 
+    if: inputs.strategy == 'bluegreen' 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+      - name: Update GREEN deployment image 
+        run: | 
+          FILE=apps/${{ inputs.service 
+}}/kustomize/base/deployment-green.yaml 
+          sed -i "s#image: .*#image: ${IMAGE_PREFIX}-${{ 
+inputs.service }}:${{ inputs.version }}#" "$FILE" 
+          git config user.name "ci"; git config user.email 
+"ci@users.noreply.github.com" 
+          git commit -am "deploy(${ { inputs.service } }): green ${{ 
+inputs.version }}" || true 
+          git push 
+      - name: Switch traffic BLUE→GREEN (ArgoCD) 
+        env: 
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }} 
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }} 
+        run: | 
+          argocd app set gnew-gateway-prod --path apps/${{ 
+inputs.service }}/kustomize/overlays/prod-green --grpc-web 
+          argocd app sync gnew-gateway-prod --grpc-web 
+      - name: Health check 
+        run: bash scripts/ci/health-check.sh 
+"https://api.gnew.example/health" 
+ 
+  direct: 
+    if: inputs.strategy == 'direct' 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+      - name: Bump image & push (GitOps) 
+        run: | 
+          yq -i '.values.services.${{ inputs.service }}.image = "${{ 
+env.IMAGE_PREFIX }}-${{ inputs.service }}:${{ inputs.version }}"' 
+infra/helm/gnew-platform/values.${{ inputs.env }}.yaml 
+          git config user.name "ci"; git config user.email 
+"ci@users.noreply.github.com" 
+          git commit -am "deploy(${ { inputs.service } }): direct ${{ 
+inputs.version }}" || true 
+          git push 
+ 
+Impacto controlado: en Canary Flagger analiza métricas y revierte si se incumple 
+el SLO. En Blue/Green, el switch es instantáneo y el BLUE queda como “hot 
+standby” para volver en 1 click. 
+ 
+Rollback en un click 

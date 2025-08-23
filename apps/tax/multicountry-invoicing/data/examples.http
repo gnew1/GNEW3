@@ -1,0 +1,53 @@
+
+### Crear serie ES 2025 A
+POST http://localhost:8090/series
+Content-Type: application/json
+
+{ "country": "ES", "year": 2025, "code": "A" }
+
+### Alta cliente profesional (aplica IRPF demo)
+POST http://localhost:8090/customers
+Content-Type: application/json
+
+{ "id": "PRO123456", "country": "ES", "taxId": "PRO123456", "name": "Profesional Demo", "address": "Calle Falsa 123, Madrid", "city": "Madrid", "zip": "28000" }
+
+### Crear factura ES
+POST http://localhost:8090/invoices
+Content-Type: application/json
+
+{
+  "country": "ES",
+  "currency": "EUR",
+  "series": { "country": "ES", "year": 2025, "code": "A" },
+  "supplier": { "name": "GNEW SA", "taxId": "ESB00000000" },
+  "customer": { "id": "PRO123456" },
+  "lines": [
+    { "description": "Servicio consultoría", "qty": 1, "unitPrice": 100, "taxCode": "ES:IVA21" }
+  ]
+}
+
+### Exportar UBL
+GET http://localhost:8090/export/ubl/{{invoiceId}}
+
+### SAF-T 2025
+GET http://localhost:8090/export/saft?country=ES&year=2025
+
+### XBRL Q3
+GET http://localhost:8090/export/xbrl?country=ES&period=2025-Q3
+
+Notas de cumplimiento del prompt
+
+Motor fiscal + plantillas por jurisdicción: src/rules/{es,pt,us}.ts y rulesRegistry. Retenciones ES (IRPF demo).
+
+Numeración y archivo legal: src/numbering.ts (series/año) y src/archive.ts (hash‑chain apend‑only).
+
+E‑invoicing + Firma: src/ubl.ts genera UBL 2.1; src/sign.ts produce JWS sobre XML (extensible a XAdES).
+
+Export XBRL/SAF‑T: src/xbrl.ts y src/saft.ts (estructura mínima interoperable).
+
+Validaciones: Zod en endpoints y reglas específicas por país (ES). Tests verifican IVA/retención.
+
+Relación con N104 (facturación e‑invoicing previa) y Módulo 16 (comercio): este módulo amplía con multi‑país y reporting fiscal.
+
+Siguiente entrega programada: N157 – Marketplace fees y revenue share (avanza +1).
+

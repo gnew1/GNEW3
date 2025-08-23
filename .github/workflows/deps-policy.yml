@@ -1,0 +1,74 @@
+name: Dependency Policy (OSV/License) 
+on: 
+  pull_request: 
+    paths: 
+      - "**/package.json" 
+      - "**/pnpm-lock.yaml" 
+      - "**/requirements.txt" 
+      - "chain/go.mod" 
+      - "**/Dockerfile" 
+jobs: 
+  guard: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: google/osv-scanner-action@v1 
+        with: 
+          path: . 
+          fail-on-vuln: true 
+          recursive: true 
+      - name: License check (deny GPL) 
+        run: | 
+          npx -y license-checker --production --json > 
+/tmp/licenses.json || true 
+          (jq -r 'to_entries[] | select(.value.licenses|test("GPL")) | 
+.key' /tmp/licenses.json | wc -l | grep -q '^0$') \ 
+            || (echo "Licencia GPL detectada" && exit 1) 
+ 
+ 
+5) Verificación en despliegue (integra con 
+N92) 
+Añade este paso antes del helm upgrade en tus workflows 
+deploy-staging.yml/deploy-prod.yml. 
+Ruta completa: .github/workflows/deploy-verify-snippet.yml (fragmento) 
+     - name: Verify supply chain (cosign + sbom) 
+        uses: ./.github/workflows/reusable-verify.yml 
+        with: 
+          image: ${{ env.IMAGE_PREFIX }}-gateway:${{ 
+steps.tag.outputs.TAG }} 
+          expected_identity: "https://github.com/${{ github.repository 
+}}/.github/workflows/supply-chain.yml@refs/heads/main" 
+ 
+Repite por cada servicio (o pasa una matrix de imágenes). 
+ 
+6) Conftest/OPA: SBOM gate “no 
+HIGH/CRITICAL” 
+Ruta completa: security/conftest/sbom.rego 
+package sbom.vulns 
+ 
+deny[msg] { 
+  some i 
+  input.packages[i].vulnerabilities[_].severity == "HIGH" 
+  msg := sprintf("Vulnerabilidad HIGH en paquete %s", 
+[input.packages[i].name]) 
+} 
+deny[msg] { 
+  some i 
+  input.packages[i].vulnerabilities[_].severity == "CRITICAL" 
+  msg := sprintf("Vulnerabilidad CRITICAL en paquete %s", 
+[input.packages[i].name]) 
+} 
+ 
+Ruta completa: scripts/sbom/validate.sh 
+#!/usr/bin/env bash 
+set -euo pipefail 
+SBOM="${1:?sbom file}" 
+# Normaliza a JSON con campo packages+vulnerabilities (syft+grype 
+pueden exportar esto) 
+conftest test --policy security/conftest "$SBOM" 
+ 
+(En el workflow principal ya fallamos con Grype; esto añade un gate extra si deseáis validar un 
+SBOM enriquecido.) 
+ 
+7) Pre-commit: bloqueo de “latest” y 
+lockfiles 

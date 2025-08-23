@@ -1,0 +1,21 @@
+
+name: Final Report CI
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 18 }
+      - run: pnpm --filter @gnew/final-report i
+      - run: pnpm --filter @gnew/final-report build
+      - run: pnpm --filter @gnew/final-report generate
+
+
+✅ Progreso persistente actualizado: N420 completado (Final Report).
+🛑 Secuencia terminada: el ciclo de ejecución de prompts se detiene aquí, conforme a las reglas (N398 → N420).
+

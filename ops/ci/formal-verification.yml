@@ -1,0 +1,40 @@
+
+name: Formal Verification
+
+on:
+  pull_request:
+    paths:
+      - "contracts/security/**"
+      - "analysis/**"
+
+jobs:
+  slither:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install solc
+        run: sudo snap install solc --classic
+      - name: Run Slither
+        run: slither ./contracts/security/GovernanceTreasury.sol --config-file ./analysis/slither.config.json
+
+  certora:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Certora Prover
+        run: |
+          echo "Certora Prover command here"
+          # certoraRun contracts/security/GovernanceTreasury.sol \
+          #   --verify GovernanceTreasury:analysis/certora/GovernanceTreasury.spec \
+          #   --solc 0.8.24
+
+  echidna:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Echidna
+        run: |
+          docker run --rm -v $PWD:/src trailofbits/echidna \
+          echidna-test /src/analysis/foundry/EchidnaTreasuryTest.sol --contract EchidnaTreasuryTest
+
+

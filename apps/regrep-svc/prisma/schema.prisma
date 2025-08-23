@@ -1,0 +1,86 @@
+generator client { provider = "prisma-client-js" } 
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") } 
+model ReportDefinition { // snapshot materializado del YAML 
+id          
+String   @id @default(cuid()) 
+key         
+tx_thresholds 
+version     
+title       
+String   @unique           
+String 
+String 
+authority   String                    
+jurisdiction String 
+schedule    
+String                    
+transport   String                    
+// ej. aml_sar, tax_vat_moss, 
+// FIU-ES, FIU-FR, TAX-EU, ... 
+// cron ("0 6 * * *") 
+// https | sftp 
+  format      String                    // csv | json | xml | xbrl 
+(stub) 
+  config      Json 
+  active      Boolean   @default(true) 
+  createdAt   DateTime  @default(now()) 
+  updatedAt   DateTime  @updatedAt 
+} 
+ 
+model ReportRun { 
+  id          String   @id @default(cuid()) 
+  defId       String 
+  periodStart DateTime 
+  periodEnd   DateTime 
+  status      String   // scheduled | generating | delivering | sent | 
+acknowledged | failed 
+  attempts    Int      @default(0) 
+  ackId       String? 
+  ackAt       DateTime? 
+  messageId   String?  // id de envío si lo hay (ticket/trace) 
+  error       String? 
+  createdAt   DateTime @default(now()) 
+  updatedAt   DateTime @updatedAt 
+  definition  ReportDefinition @relation(fields: [defId], references: 
+[id]) 
+  artifacts   ReportArtifact[] 
+  deliveries  DeliveryAttempt[] 
+  evidences   ReportEvidence[] 
+  @@index([defId, periodStart, status]) 
+} 
+ 
+model ReportArtifact { 
+  id        String   @id @default(cuid()) 
+  runId     String 
+  kind      String   // data | manifest | signature | pgp_encrypted | 
+ack 
+  path      String 
+  mime      String 
+  size      Int 
+  sha256    String 
+  createdAt DateTime @default(now()) 
+  run       ReportRun @relation(fields: [runId], references: [id]) 
+} 
+ 
+model DeliveryAttempt { 
+  id        String   @id @default(cuid()) 
+  runId     String 
+  transport String   // https | sftp 
+  url       String? 
+  status    String   // pending | sent | acked | failed 
+  response  Json? 
+  startedAt DateTime @default(now()) 
+  finishedAt DateTime? 
+  run       ReportRun @relation(fields: [runId], references: [id]) 
+} 
+ 
+model ReportEvidence { 
+  id        String   @id @default(cuid()) 
+  runId     String 
+  kind      String   // query_hash | row_count | pgp_recipient | 
+ack_hash | anchor_tx 
+  content   Json 
+  createdAt DateTime @default(now()) 
+  run       ReportRun @relation(fields: [runId], references: [id]) 
+} 
+ 

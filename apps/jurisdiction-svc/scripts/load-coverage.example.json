@@ -1,0 +1,15 @@
+{ 
+  "items": [ 
+    { "code": "ES", "status": "covered" }, 
+    { "code": "FR", "status": "covered" }, 
+    { "code": "DE", "status": "covered" }, 
+    { "code": "NL", "status": "covered" }, 
+    { "code": "PT", "status": "covered" }, 
+    { "code": "IT", "status": "covered" }, 
+    { "code": "UK", "status": "covered" }, 
+    { "code": "US", "status": "partial", "notes": "sin estados" }, 
+    { "code": "BR", "status": "partial" }, 
+    { "code": "MX", "status": "partial" } 
+  ] 
+} 
+ 

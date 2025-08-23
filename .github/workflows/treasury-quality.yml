@@ -1,0 +1,34 @@
+name: Treasury Policies & Contracts 
+ 
+on: 
+  pull_request: 
+  push: 
+    branches: [ main ] 
+ 
+jobs: 
+  opa-and-contracts: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+ 
+      - name: Setup Node 
+        uses: actions/setup-node@v4 
+        with: 
+          node-version: 20 
+ 
+      - name: Install 
+        run: npm ci 
+ 
+      - name: OPA test 
+        uses: open-policy-agent/setup-opa@v2 
+        with: 
+          version: latest 
+      - run: npm -w @repo/treasury-cli run opa:test 
+ 
+      - name: Contracts compile 
+        run: npm -w @repo/contracts-treasury run build 
+ 
+      - name: Lint CLI 
+        run: npm -w @repo/treasury-cli run lint 
+ 
+ 

@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messaging
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: messaging } }
+  template:
+    metadata: { labels: { app: messaging } }
+    spec:
+      containers:
+      - name: app
+        image: ghcr.io/gnew/messaging:latest
+        ports: [{ containerPort: 8020 }]
+      - name: envoy
+        image: envoyproxy/envoy:v1.31.0
+        args: ["-c","/etc/envoy/envoy.yaml"]
+        volumeMounts:
+        - { name: envoy, mountPath: /etc/envoy }
+        - { name: tls, mountPath: /etc/tls, readOnly: true }
+        ports: [{ containerPort: 8443 }]
+      volumes:
+      - name: envoy
+        configMap: { name: envoy-config }
+      - name: tls
+        secret: { secretName: messaging-tls }  # mTLS: server cert + CA
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: envoy-config }
+data:
+  envoy.yaml: |
+    (pega aquí el contenido de infra/envoy/envoy.yaml)
+

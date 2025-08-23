@@ -1,0 +1,9 @@
+
+{
+  "name": "@gnew/create-quickstart",
+  "version": "0.1.0",
+  "bin": { "create-quickstart": "bin/index.mjs" },
+  "type": "module"
+}
+
+

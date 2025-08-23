@@ -1,0 +1,80 @@
+version: v1.0.0-2025-08 
+defaults: 
+  source: { kind: postgres, url_env: WAREHOUSE_PG_URL } # o clickhouse 
+  pgp: { encrypt: true, recipients: ["TAX_EU_PUB.asc"], sign: true } 
+  retry_policy: { max_attempts: 5, base_delay_ms: 2000, jitter_ms: 500 
+} 
+reports: 
+  - key: aml_sar 
+    title: Suspicious Activity Report (SAR) 
+    authority: FIU-ES 
+    jurisdiction: ES 
+    schedule: "0 7 * * *" # diario 07:00 
+    transport: https 
+    format: json 
+    config: 
+      http: 
+        url: https://fiu-es.example.gov/api/v1/reports/sar 
+        auth: { kind: mtls, cert_env: FIU_CLIENT_CERT_PEM, key_env: 
+FIU_CLIENT_KEY_PEM } 
+        ack: { path: "$.receipt.id", timestamp: "$.receipt.at" } 
+      extract: 
+        sql: | 
+          SELECT 
+            now()::date as report_date, 
+            t.id as tx_id, 
+            t.amount, t.currency, 
+            t.country_from, t.country_to, 
+            s.subject_id, s.risk_score, s.flags 
+          FROM warehouse.tx_suspicious t 
+          JOIN warehouse.subject_risk s ON s.subject_id = t.subject_id 
+          WHERE t.occurred_at >= $1 AND t.occurred_at < $2; 
+      redact: [ "subject_id" ]   # seudónimos sólo; PII nunca 
+  - key: tax_vat_moss 
+    title: VAT OSS (EU Digital Services) 
+    authority: TAX-EU 
+    jurisdiction: EU 
+    schedule: "0 6 1 * *"       # mensual 
+    transport: sftp 
+    format: csv 
+    config: 
+      sftp: 
+        host: sftp.tax-eu.gov 
+        port: 22 
+        username_env: TAX_SFTP_USER 
+        password_env: TAX_SFTP_PASS 
+        remote_dir: /ingest/oss 
+        ack_pattern: "ACK_{{basename}}.ok" # archivo de ack remoto 
+      extract: 
+        sql: | 
+          SELECT 
+            to_char(period_start, 'YYYY-MM') as period, 
+            country_to as country, 
+            sum(amount_eur) as amount_eur, 
+            sum(tax_eur) as vat_eur 
+          FROM warehouse.vat_aggregates 
+          WHERE period_start >= $1 AND period_end < $2 
+          GROUP BY 1,2 
+          ORDER BY 1,2; 
+      csv: { header: true, delimiter: "," } 
+  - key: tx_thresholds 
+    title: Reporte de transacciones superiores a umbral 
+    authority: AML-EU 
+    jurisdiction: EU 
+    schedule: "*/30 * * * *"   # cada 30 min 
+    transport: https 
+    format: csv 
+    config: 
+      http: 
+        url: https://aml-eu.gov/api/thresholds 
+        bearer_env: AML_API_TOKEN 
+        ack: { path: "$.ackId", timestamp: "$.ackAt" } 
+      extract: 
+        sql: | 
+          SELECT tx_id, subject_id, amount, currency, occurred_at 
+          FROM warehouse.tx 
+          WHERE occurred_at >= $1 AND occurred_at < $2 
+            AND amount_eur >= 1000 
+          ORDER BY occurred_at; 
+      csv: { header: true } 
+ 

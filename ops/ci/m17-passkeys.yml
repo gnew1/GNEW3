@@ -1,0 +1,24 @@
+
+name: M17 Passkeys Tests
+
+on:
+  pull_request:
+    paths:
+      - "services/auth/passkeys/**"
+      - "apps/dao-web/pages/api/auth/passkeys/**"
+      - "tests/auth/test_m17_passkeys.spec.ts"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Ejecutar tests M17
+        run: npx mocha tests/auth/test_m17_passkeys.spec.ts
+
+

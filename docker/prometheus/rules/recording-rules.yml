@@ -1,0 +1,16 @@
+groups: 
+  - name: gnew-recording 
+    rules: 
+      - record: gnew_tx_failure_rate 
+        expr: | 
+          sum(rate(gnew_tx_failures_total[5m])) by (contract) 
+          / 
+          clamp_min(sum(rate(gnew_tx_total[5m])) by (contract), 1) 
+      - record: gnew_events_per_minute 
+        expr: sum(rate(gnew_events_total[5m])) by (contract, event) * 
+60 
+      - record: gnew_failure_rate_baseline_1h 
+        expr: avg_over_time(gnew_tx_failure_rate[1h]) 
+      - record: gnew_failure_rate_stddev_1h 
+        expr: stddev_over_time(gnew_tx_failure_rate[1h]) 
+ 

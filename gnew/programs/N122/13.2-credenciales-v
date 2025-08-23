@@ -1,0 +1,37 @@
+ erificables.md 
+N122 — 13.2 Credenciales verificables (VCs) 
+Objetivo: Emisión y validación de VCs (roles, logros) con selective disclosure (SD‑JWT / 
+BBS+) y verificación local; listas de revocación ancladas on‑chain. 
+Roles: Identidad, Legal, Backend. 
+Stack: W3C VC Data Model 2.0, SD‑JWT (selective disclosure), BBS+ (JSON‑LD), did:gnew 
+(N121), Status List (bitstring) con anclaje on‑chain. 
+DoD: 
+● Emisión de VC (roles/logros) en SD‑JWT y BBS+. 
+● Presentación con divulgación selectiva y verificación local (sin red) usando cachés y 
+anclajes. 
+● Revocation list funcional (publicación IPFS + hash anclado) y API de revocación. 
+● Pruebas de interoperabilidad (resolución DID, verificación SD‑JWT y BBS+, estado 
+revocado/activo). 
+Alcance y principios 
+● Tipos de VC (mínimo): 
+○ GnewRoleCredential → rol/área/guild + expiración. 
+○ GnewAchievementCredential → logro/score/fecha. 
+● Métodos de prueba: 
+○ SD‑JWT: JWT con claims desagregadas (disclosures) → el holder presenta solo 
+lo necesario. 
+○ BBS+: firma sobre JSON‑LD → prueba con selective disclosure en 
+presentación. 
+● Revocación: Status List (bitstring) alojada en IPFS; su contentHash anclado en 
+StatusListRegistry on‑chain. Cada VC incluye índice (statusListIndex). 
+● Verificación local: 
+○ Caché de: (a) DID Document del issuer (del GnewDIDRegistry), (b) status list 
++ contentHash anclado, (c) claves públicas usadas. 
+○ Si el caché está fresco y concuerda con el anclaje (hash), la verificación es 
+100% offline. 
+Entregables 
+1. Smart contract StatusListRegistry.sol (anclaje de listas y versiones). 
+2. Servicio VC /services/vc (API emisión/verificación/presentación/revocación). 
+3. SDK /packages/sdk/src/vc.ts (emitir, presentar, verificar local). 
+4. Esquemas JSON para Role/Achievement. 
+5. Pruebas (Jest + Hardhat). 
+6. Runbooks y Helm (despliegue). 

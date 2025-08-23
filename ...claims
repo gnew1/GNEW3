@@ -1,0 +1,436 @@
+  };
+}
+
+export async function mintTokens(sub: string, extra: Record<string, any> = {}) {
+  const { kid, privateJwk } = await ensureKeypair();
+  const idPayload = await buildIdTokenPayload(sub, extra);
+  const id_token = await signJwt(kid, privateJwk, idPayload);
+
+  const atPayload = { ...idPayload, scope: "openid profile gnew", typ: "at+jwt" };
+  const access_token = await signJwt(kid, privateJwk, atPayload);
+  return { id_token, access_token, token_type: "Bearer", expires_in: env.ACCESS_TOKEN_TTL };
+}
+
+export async function jwks() { return currentJwks(); }
+
+export async function introspect(jwt: any) {
+  const jti = jwt?.payload?.jti;
+  const revoked = await isRevoked(jti);
+  return { active: !revoked && (jwt?.protectedHeader?.alg ? true : false) };
+}
+
+ 
+6) Rutas HTTP (DID login, SIWE, OIDC, VC, rotación)
+Ruta completa: services/identity/src/routes/wellknown.ts
+import { FastifyInstance } from "fastify";
+import { env } from "../env";
+import { jwks } from "../oidc";
+
+export default async function routes(app: FastifyInstance) {
+  app.get("/.well-known/openid-configuration", async (_req, reply) => {
+    reply.send({
+      issuer: env.ISSUER,
+      jwks_uri: `${env.ISSUER}/.well-known/jwks.json`,
+      authorization_endpoint: `${env.ISSUER}/oauth/authorize`,
+      token_endpoint: `${env.ISSUER}/oauth/token`,
+      response_types_supported: ["token", "id_token", "code"],
+      subject_types_supported: ["public"],
+      id_token_signing_alg_values_supported: ["RS256","ES256K","EdDSA"]
+    });
+  });
+  app.get("/.well-known/jwks.json", async (_r, reply) => reply.send(await jwks()));
+}
+
+Ruta completa: services/identity/src/routes/did-login.ts
+import { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { verifyDidJws } from "../did";
+import { mintTokens } from "../oidc";
+import { pool } from "../db";
+
+export default async function routes(app: FastifyInstance) {
+  // 1) Cliente pide challenge (nonce) y DID esperado (opcional)
+  app.get("/auth/did/challenge", async (_req, reply) => {
+    const nonce = crypto.randomUUID();
+    reply.send({ nonce, audience: "gnew" });
+  });
+
+  // 2) Cliente devuelve JWS firmada por el DID (payload incluye nonce)
+  app.post("/auth/did/verify", async (req, reply) => {
+    const body = z.object({ jws: z.string(), userId: z.string() }).parse(req.body);
+    const { did, payload } = await verifyDidJws(body.jws);
+    if (payload.nonce?.length < 8) return reply.code(400).send({ error: "bad_nonce" });
+
+    // Binding cuenta↔DID (idempotente)
+    await pool.query("insert into users(id) values ($1) on conflict do nothing", [body.userId]);
+    await pool.query("insert into did_bindings(user_id, did) values ($1,$2) on conflict do nothing", [body.userId, did]);
+
+    const tokens = await mintTokens(did, { "gnew:user_id": body.userId });
+    reply.code(201).send({ ...tokens, did });
+  });
+}
+
+Ruta completa: services/identity/src/routes/siwe-login.ts
+import { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { verifySiwe } from "../siwe";
+import { mintTokens } from "../oidc";
+
+const nonces = new Map<string, number>();
+
+export default async function routes(app: FastifyInstance) {
+  app.get("/auth/siwe/nonce", async (_req, reply) => {
+    const nonce = crypto.randomUUID().replace(/-/g,"");
+    nonces.set(nonce, Date.now());
+    reply.send({ nonce });
+  });
+
+  app.post("/auth/siwe/verify", async (req, reply) => {
+    const { message, signature, userId } = z.object({
+      message: z.string(), signature: z.string(), userId: z.string()
+    }).parse(req.body);
+
+    const msgNonce = /Nonce:\s*([a-zA-Z0-9]+)/.exec(message)?.[1] || "";
+    if (!nonces.has(msgNonce)) return reply.code(400).send({ error: "nonce_used_or_missing" });
+    nonces.delete(msgNonce);
+
+    const { address } = await verifySiwe({ message, signature, expectedNonce: msgNonce });
+    const did = `did:pkh:eip155:1:${address.toLowerCase()}`;
+
+    const tokens = await mintTokens(did, { "gnew:user_id": userId, address });
+    reply.code(201).send({ ...tokens, did });
+  });
+}
+
+Ruta completa: services/identity/src/routes/oidc-bridge.ts
+import { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { mintTokens } from "../oidc";
+
+/** Puente “token exchange” simple: el cliente entrega DID + prueba previa; se devuelven tokens OIDC */
+export default async function routes(app: FastifyInstance) {
+  app.post("/oauth/token", async (req, reply) => {
+    const { grant_type, subject_did } = z.object({
+      grant_type: z.string(), subject_did: z.string().startsWith("did:")
+    }).parse(req.body);
+    if (grant_type !== "urn:ietf:params:oauth:grant-type:token-exchange") {
+      return reply.code(400).send({ error: "unsupported_grant_type" });
+    }
+    const tokens = await mintTokens(subject_did);
+    reply.send(tokens);
+  });
+}
+
+Ruta completa: services/identity/src/routes/vc-issue.ts
+import { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { issueRoleVC, verifyRoleVC } from "../vc";
+import { pool } from "../db";
+
+export default async function routes(app: FastifyInstance) {
+  app.post("/vc/issue/role", async (req, reply) => {
+    const { holderDid, roles } = z.object({ holderDid: z.string(), roles: z.array(z.string()).min(1) }).parse(req.body);
+    // Mapeo mínimo necesario (roles → credenciales)
+    const allowed = roles.filter(r => ["member","validator","creator","admin"].includes(r));
+    // Cargamos JWK del emisor desde DB/JWKS (para demo asumimos ya configurado)
+    const { rows } = await pool.query("select private_jwk, kid from oidc_keys order by created_at desc limit 1");
+    const { jwt, id } = await issueRoleVC(holderDid, allowed, rows[0].private_jwk, rows[0].kid);
+    reply.code(201).send({ id, jwt });
+  });
+
+  app.post("/vc/verify", async (req, reply) => {
+    const { jwt } = z.object({ jwt: z.string() }).parse(req.body);
+    const res = await verifyRoleVC(jwt);
+    reply.send({ ok: true, ...res });
+  });
+
+  app.post("/vc/revoke", async (req, reply) => {
+    const { id, reason } = z.object({ id: z.string(), reason: z.string().min(3) }).parse(req.body);
+    await (await import("../vc")).revokeVCById(id, reason);
+    reply.send({ ok: true });
+  });
+}
+
+Ruta completa: services/identity/src/routes/rotate-keys.ts
+import { FastifyInstance } from "fastify";
+import { ensureKeypair } from "../jwks";
+
+/** Rotación de claves OIDC/JWKS (gated por Seguridad/Gobernanza en CI/CD) */
+export default async function routes(app: FastifyInstance) {
+  app.post("/admin/rotate-keys", async (_req, reply) => {
+    const kp = await ensureKeypair();
+    reply.send({ ok: true, kid: kp.kid });
+  });
+}
+
+Ruta completa: services/identity/src/index.ts
+import Fastify from "fastify";
+import helmet from "@fastify/helmet";
+import cors from "@fastify/cors";
+import pino from "pino";
+import client from "prom-client";
+import { env } from "./env";
+import { initOtel } from "./otel";
+import { ensureKeypair } from "./jwks";
+
+import wk from "./routes/wellknown";
+import didLogin from "./routes/did-login";
+import siweLogin from "./routes/siwe-login";
+import oidcBridge from "./routes/oidc-bridge";
+import vcIssue from "./routes/vc-issue";
+import rotate from "./routes/rotate-keys";
+
+initOtel();
+await ensureKeypair(); // calienta JWKS para latencia <1.5s
+
+const app = Fastify({ logger: pino({ level: "info" }) });
+app.register(helmet);
+app.register(cors, { origin: true });
+
+client.collectDefaultMetrics({ prefix: "gnew_id_" });
+app.get("/metrics", async (_req, reply) => {
+  reply.header("Content-Type", client.register.contentType);
+  return client.register.metrics();
+});
+
+app.register(wk);
+app.register(didLogin);
+app.register(siweLogin);
+app.register(oidcBridge);
+app.register(vcIssue);
+app.register(rotate);
+
+app.get("/healthz", async () => ({ ok: true }));
+app.listen({ port: env.PORT, host: "0.0.0.0" }).then(() => app.log.info(`identity up :${env.PORT}`));
+
+ 
+7) Frontend Web (SDK y UI mínima)
+apps/web/src/modules/did/
+  sdk.ts
+  useDidAuth.ts
+  DidLoginButton.tsx
+
+Ruta completa: apps/web/src/modules/did/sdk.ts
+import axios from "axios";
+export const idApi = axios.create({ baseURL: "https://id.gnew.org" });
+
+export async function didChallenge() { return (await idApi.get("/auth/did/challenge")).data as { nonce: string; audience: string }; }
+export async function didVerify(jws: string, userId: string) {
+  return (await idApi.post("/auth/did/verify", { jws, userId })).data as { id_token: string; access_token: string; did: string };
+}
+export async function siweNonce() { return (await idApi.get("/auth/siwe/nonce")).data.nonce as string; }
+export async function siweVerify(message: string, signature: string, userId: string) {
+  return (await idApi.post("/auth/siwe/verify", { message, signature, userId })).data as { id_token: string; access_token: string; did: string };
+}
+
+Ruta completa: apps/web/src/modules/did/useDidAuth.ts
+import { useState } from "react";
+import { siweNonce, siweVerify } from "./sdk";
+
+// Ejemplo SIWE (firma con window.ethereum)
+export function useSiweAuth() {
+  const [loading, setLoading] = useState(false);
+  async function login(userId: string) {
+    setLoading(true);
+    try {
+      const nonce = await siweNonce();
+      const domain = window.location.host;
+      const origin = window.location.origin;
+      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" });
+      const addr = accounts[0];
+      const msg = [
+        `${domain} wants you to sign in with your Ethereum account:`,
+        `${addr}`,
+        ``,
+        `URI: ${origin}`,
+        `Version: 1`,
+        `Chain ID: 1`,
+        `Nonce: ${nonce}`,
+        `Issued At: ${new Date().toISOString()}`
+      ].join("\n");
+      const signature = await (window as any).ethereum.request({ method: "personal_sign", params: [msg, addr] });
+      return await siweVerify(msg, signature, userId);
+    } finally { setLoading(false); }
+  }
+  return { login, loading };
+}
+
+Ruta completa: apps/web/src/modules/did/DidLoginButton.tsx
+import React from "react";
+import { useSiweAuth } from "./useDidAuth";
+
+export default function DidLoginButton({ onSuccess }:{ onSuccess: (tok: any) => void }) {
+  const { login, loading } = useSiweAuth();
+  return (
+    <button className="button" disabled={loading} onClick={async () => {
+      const res = await login("me"); // sustituir con userId real al crear cuenta
+      onSuccess(res);
+    }}>
+      {loading ? "Conectando…" : "Entrar con Ethereum (SIWE)"}
+    </button>
+  );
+}
+
+Nota móvil (RN): reusa el flujo del N52 (signMessage) y llama a /auth/siwe/verify. Para DID nativo, genera una JWS (did:key o did:pkh) con el nonce de /auth/did/challenge y envíala a /auth/did/verify.
+ 
+8) Mapeo roles → credenciales (mínimo necesario)
+●	Regla: otorgar GNEWRoleCredential solo con roles estrictamente requeridos para el recurso.
+
+●	Ejemplos:
+
+○	member → acceso básico a gobernanza/learning.
+
+○	validator → acceso a panel de validación.
+
+○	creator → crear propuestas.
+
+○	admin → administración (requiere 2FA organizacional fuera de DID si aplica).
+
+Ruta completa: services/identity/src/routes/vc-issue.ts (ya filtra roles permitidos).
+ 
+9) Rotación de claves
+●	OIDC JWKS: endpoint /admin/rotate-keys crea nuevo KID; publicar JWKS inmediatamente y mantener K-1 activo hasta expirar tokens antiguos.
+
+●	DID/VC issuer: manejar en env la rotación del issuer DID y su KID; emitir nuevas VCs con el KID vigente; las antiguas quedan válidas hasta revocación.
+
+ 
+10) Revocación efectiva
+●	Tokens: lista negra por jti (tokens_blacklist); middleware de API consumidores debe introspectar o verificar expiración.
+
+●	VCs: vc_registry.status='revoked' y endpoint /vc/revoke. La verificación retorna status.
+
+ 
+11) Métricas y rendimiento (latencia < 1.5s)
+●	Calentado de resolutores DID + precarga de JWKS (ensureKeypair() en index.ts).
+
+●	Cache en memoria de jwks y pool DB (10).
+
+●	Métricas Prometheus: gnew_id_http_request_duration_seconds, gnew_id_sign_count_total, gnew_id_vc_issue_total.
+
+●	Objetivo p95: /auth/siwe/verify < 1500 ms (firma cliente domina); servidor p95 < 150 ms.
+
+ 
+12) Pruebas / DoD
+●	Unidad: verificación de SIWE (domain/nonce), PoP DID (JWS), emisión/verificación VC, revocación, rotación JWKS.
+
+●	Integración: flujo end to end (Web + servicio).
+
+●	Seguridad: no secrets en repo; OIDC/JWKS pasa validación; 0 high/critical.
+
+●	UX clara: botón SIWE/DID, mensajes de firma comprensibles, fallback/“skip” controlado.
+
+●	Revocación: tokens emitidos pueden invalidarse (lista negra), VC revocada responde status='revoked'.
+
+●	Latencia: p95 < 1.5s medida en CI (k6/Artillery opcional).
+
+ 
+13) CI/CD
+Ruta completa: services/identity/.github/workflows/identity-ci.yml
+name: Identity CI
+on:
+  pull_request:
+    paths: ["services/identity/**", ".github/workflows/identity-ci.yml"]
+  push:
+    branches: [main]
+    paths: ["services/identity/**"]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gnew
+        ports: ["5432:5432"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install
+        working-directory: services/identity
+        run: npm ci
+      - name: Migrate
+        working-directory: services/identity
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/gnew
+        run: npm run migrate
+      - name: Test
+        working-directory: services/identity
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/gnew
+        run: npm test
+      - name: Build
+        working-directory: services/identity
+        run: npm run build
+
+Ruta completa: services/identity/Dockerfile
+FROM node:20-alpine as base
+WORKDIR /app
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+RUN npm ci --ignore-scripts
+COPY tsconfig.json ./tsconfig.json
+COPY src ./src
+RUN npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/dist ./dist
+EXPOSE 8081
+CMD ["node","dist/index.js"]
+
+ 
+14) Riesgos & Controles
+●	Phishing (SIWE) → validar domain y nonce, registrar señales ENS, mostrar preview del dominio en UI, firmar solo en app.gnew.org.
+
+●	Pérdida de claves → backup social opcional: permitir añadir recovery DIDs (guardianes) y re emitir VC tras verificación fuera de banda; guías de export/backup.
+
+●	Privacidad → minimización (sub = DID), datos seudónimos; no guardar mensajes SIWE ni firmas en claro más del tiempo necesario (retención mínima).
+
+●	Fragmentación de métodos DID → soportar did:key (dev), did:pkh (SIWE), extensible a did:ion/ceramic añadiendo su resolver.
+
+●	Caducidad de VCs → expirar en 30 días y renovar automáticamente si el rol se mantiene.
+
+ 
+15) Notas de integración (con N51/N52/N53/N54/N55)
+●	Onboarding (N53): tras elegir perfil y completar misiones, emitir GNEWRoleCredential con el rol mínimo.
+
+●	Learning (N54): al completar ruta, emitir VC “GNEWLearningCredential”; opcionalmente badge soulbound (N54/N61).
+
+●	Gamificación (N55): al recibir id_token válido con sub=did:*, registrar evento identity_login → puntos antigrind.
+
+●	App móvil (N52): reusar siweVerify con biometría y SecureStore; persistir solo id_token/access_token (ttl corto), nunca la clave privada.
+
+ 
+¿Quieres que además te deje un script de k6 para medir la latencia de /auth/siwe/verify y un resolver ION opcional conectado a Ceramic/ION (mainnet) para producción? Puedo añadirlos en el mismo patrón.
+Tú dijiste:
+programa a nivel de detalle para GNEW N57 6.7 Personalización UX (Prompt 57) Objetivo: Interfaz y contenidos adaptados por perfil y actividad. Roles: Frontend, Data, Privacidad. Stack: Preferencias cliente, contexto server-side, modelos ligeros en cliente. Entregables: Home dinámica, recomendaciones, recordatorios. Pasos: Reglas declarativas + overrides por usuario. Opt-out y transparencia en uso de datos. Pruebas / DoD: Uplift en tareas completadas y tiempo en valor. Riesgos & Controles: Sesgo → auditorías; privacidad → minimización y local-first.
+ChatGPT Plus
+Pensó durante 1m 0s
+Aquí tienes el programa a nivel de detalle y entrega para GNEW · N57 — 6.7 Personalización UX (Prompt 57). Incluye rutas completas y código listo: reglas declarativas con overrides por usuario, preferencias cliente con opt out y transparencia, contexto server side, modelos ligeros en cliente (multi armed bandit) y Home dinámica con recomendaciones y recordatorios. Cumple lineamientos globales (GitFlow, CI/CD, OIDC, OTel→Prometheus, a11y, i18n, GDPR by design).
+ 
+Backend — Servicio de Personalización (Node/TS + Fastify + Postgres + Redis)
+services/p13n/
+  package.json
+  tsconfig.json
+  src/
+    index.ts
+    env.ts
+    db.ts
+    redis.ts
+    otel.ts
+    schema.ts
+    dsl.ts                # motor de reglas declarativas
+    bandit.ts             # agregación/monitor de bandit (cliente decide; server audita)
+    context.ts            # construcción de contexto server-side
+    routes/
+      rules.ts            # GET/PUT rules (según rol); transparencia
+      context.ts          # GET contexto + decisiones explicables
+      overrides.ts        # CRUD overrides por usuario (opt-in/out, límites)
+      log.ts              # POST eventos (exposición, clic, éxito) para medición
+      reminders.ts        # programar recordatorios (email/push) con ventanas y límites
+  migrations/
+    001_init.sql

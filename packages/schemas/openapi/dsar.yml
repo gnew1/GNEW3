@@ -1,0 +1,40 @@
+openapi: 3.1.0 
+info: { title: GNEW DSAR API, version: 1.0.0 } 
+paths: 
+  /v1/dsar/requests: 
+    get: { summary: Listar DSAR, responses: { "200": { description: OK 
+} } } 
+    post: 
+      summary: Crear solicitud DSAR 
+      requestBody: 
+        required: true 
+        content: 
+          application/json: 
+            schema: 
+              type: object 
+              required: [subjectId, type, region] 
+              properties: 
+                subjectId: { type: string } 
+                type: { type: string, enum: [access, erasure] } 
+                region: { type: string } 
+                scope: { type: object } 
+      responses: { "202": { description: Accepted } } 
+  /v1/dsar/requests/{id}: 
+    get: { summary: Ver detalle, responses: { "200": { description: OK 
+} } } 
+  /v1/dsar/requests/{id}/verify: 
+    post: { summary: Adjuntar verificación identidad, responses: { 
+"204": { description: No Content } } } 
+  /v1/dsar/requests/{id}/approve: 
+    post: { summary: Aprobar y orquestar, responses: { "202": { 
+description: Accepted } } } 
+  /v1/dsar/requests/{id}/export: 
+    post: { summary: Generar export, responses: { "202": { 
+description: Accepted } } } 
+  /v1/dsar/requests/{id}/erase: 
+    post: { summary: Ejecutar borrado/anonimización, responses: { 
+"202": { description: Accepted } } } 
+  /v1/dsar/requests/{id}/artifacts: 
+get: { summary: Descargar artefactos (export, certificado), 
+responses: { "200": { description: OK } } } 
+Backend — servicio DSAR 

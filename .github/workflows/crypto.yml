@@ -1,0 +1,40 @@
+name: Crypto & Messaging CI
+on:
+  push:
+    paths: ["crypto/ratchet/**","services/messaging/**","infra/envoy/**","policies/crypto/**"]
+  schedule:
+    - cron: "0 1 * * 1"   # Lunes 01:00 CET: revisar rotaciones
+jobs:
+  build-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build & test ratchet
+        working-directory: crypto/ratchet
+        run: |
+          npm ci
+          npm run build
+          npm test
+  lint-rotation-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate rotation policy
+        run: |
+          python - << 'PY'
+import yaml, sys, re
+p = yaml.safe_load(open('policies/crypto/rotation.yml'))
+assert 'keys' in p
+for k,v in p['keys'].items():
+    assert re.match(r'^P[T\d]+D?$', v.get('rotation','P0D')), f'bad rotation {k}'
+print("rotation policy OK")
+PY
+  rotation-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Emit reminder issues if nearing rotation (demo)
+        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        run: |
+          echo "Check upcoming rotations..."; gh issue create -t "Rotation review (weekly)" -b "Review keys per policies/crypto/rotation.yml" || true
+

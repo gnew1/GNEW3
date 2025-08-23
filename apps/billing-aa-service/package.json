@@ -1,0 +1,30 @@
+
+{
+  "name": "@gnew/billing-aa-service",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/app.js",
+    "dev": "tsx src/app.ts",
+    "test": "jest --coverage"
+  },
+  "dependencies": {
+    "ethers": "^6.13.2",
+    "express": "^4.19.2",
+    "pino": "^9.0.0",
+    "pino-http": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.12.12",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.5"
+  }
+}
+
+

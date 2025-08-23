@@ -1,0 +1,73 @@
+{ 
+"systems": [ 
+{ "system": "core.users", "connector": "postgres", "config": { 
+"table": "User", "subjectColumn": "subjectId", "anonymizeColumns": 
+["email","phone"] }}, 
+{ "system": "consent", "connector": "postgres", "config": { 
+"table": "ConsentRecord", "subjectColumn": "subjectId" }}, 
+{ "system": "attachments", "connector": "s3", "config": { 
+"bucket": "gnew-prod", "prefixTpl": "users/{subjectId}/" }} 
+] 
+} 
+SQL de verificación (ejemplos) 
+/apps/dsar-svc/prisma/verify-examples.sql -- Verificación de ausencia post-borrado 
+SELECT COUNT(*) AS remaining FROM "ConsentRecord" WHERE "subjectId" = 
+$1; -- Verificación de anonimización (email nulo) 
+SELECT COUNT(*) AS anon_ok FROM "User" WHERE "subjectId" = $1 AND 
+email IS NULL; 
+DoD — Cómo demostrarlo en demo 
+1. Crear DSAR access para subj_abc → acuse < 24h (marca). 
+2. Aprobar → exporta User, ConsentRecord, S3 → artefactos listados con SHA‑256. 
+3. Crear DSAR erasure → ejecutar → evidencias before/after y erasure-certificate.json 
+firmado + tx_hash de anclaje. 
+4. Ejecutar consultas de verificación (0 filas) y mostrar en console. 
+5. SLA: panel muestra que ambos casos resueltos < 30 días. 
+Variables de entorno clave 
+DATABASE_URL=postgres://... 
+DSAR_API=https://dsar-svc... 
+DSAR_S3_BUCKET=gnew-prod 
+AWS_REGION=eu-west-1 
+RPC_URL=... 
+ANCHOR_PK=0x.... 
+CONSENT_ANCHOR_ADDR=0x... 
+DSAR_CERT_ED25519_PRIV="-----BEGIN PRIVATE KEY-----\n...\n-----END 
+PRIVATE KEY-----" 
+Si quieres, en la siguiente entrega añado zipping y descargas firmadas, políticas por 
+edad/región, y conector webhook para borrar datos en SaaS externos (con firma HMAC y 
+reintentos). 
+Tú dijiste: 
+programa a nivel de detalle para gnew N132 14.2 Retención y minimización (Prompt 132) 
+Objetivo: Políticas de retención por tipo de dato. Roles: Privacidad, Data. DoD: expiración 
+automática + logs. 
+ChatGPT Plus 
+Pensó durante 45s 
+/apps/retention-svc — GNEW N132 · 14.2 
+Retención y minimización (expiración 
+automática + logs) 
+A continuación tienes el programa a nivel de detalle y entrega, con arquitectura, flujos, 
+políticas en YAML, código listo para pegar (TypeScript/Prisma/YAML/JSON), conectores, 
+CI/CD, pruebas, métricas y playbooks. Coherente con N130 (Consent) y N131 (DSAR): 
+seudonimización, OpenTelemetry, GitFlow, SBOM, anclaje auditable. 
+Objetivo 
+Definir y aplicar políticas de retención por tipo de dato/uso/sistema con: 
+● Expiración automática (delete/anonimizar/compactar). 
+● Minimización por diseño (colectar lo mínimo; almacenar lo justo; purgar lo residual). 
+● Logs y evidencias: manifiesto de borrado/anonimización con hash y anclaje on‑chain. 
+● Controles: legal holds, excepciones, auditoría, métricas SLA de purga. 
+Roles: Privacidad (lead), Data (inventario y minimización), Backend (enforcement). 
+Arquitectura (alto nivel) 
+● retention-svc (apps/retention-svc): servicio de políticas + orquestación de purgas. 
+● Retention Registry (RetentionTag): índice de recursos sujetos a retención 
+(tabla/objeto/ítem), con expireAt calculado. 
+● Policy Engine: resuelve TTL y acción desde retention.policies.yaml por 
+data_category, purpose, system, region/age/baseLegal. 
+● Connectors (packages/retention-connectors): Postgres/Prisma, S3, ClickHouse 
+(logs), Webhook para SaaS externos. 
+● Jobs: sweep-expirations (cron/worker) → ejecuta borrado/anonimización → genera 
+RetentionEvent con evidencia → Merkle root → ConsentAnchor (reuso) para anclaje. 
+● Minimización: 
+○ En ingestión: SDK para guardar solo campos permitidos por propósito 
+(whitelist). 
+○ En logs: middleware redactor + linter de PII en CI. 
+○ En analítica: vistas/materializadas con columnas mínimas. 
+Esquema de datos (Prisma) 

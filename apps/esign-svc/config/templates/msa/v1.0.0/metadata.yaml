@@ -1,0 +1,22 @@
+key: msa 
+title: Master Services Agreement 
+semver: v1.0.0 
+locale: es-ES 
+jurisdiction: ES 
+purpose: MSA 
+fields_schema: 
+  type: object 
+  required: [company_name, company_address, counterparty_name, 
+counterparty_address, effective_date] 
+  properties: 
+    company_name: { type: string, minLength: 2 } 
+    company_address: { type: string } 
+    counterparty_name: { type: string } 
+    counterparty_address: { type: string } 
+    effective_date: { type: string, format: date } 
+signature_anchors: 
+  - id: sign_company 
+    label: Firma (Empresa) 
+  - id: sign_counterparty 
+    label: Firma (Contraparte) 
+ 

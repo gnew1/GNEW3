@@ -1,0 +1,32 @@
+name: Authz CI
+on:
+  push:
+    paths:
+      - "services/authz/**"
+      - "policies/authz/**"
+      - "contracts/src/governance/PolicyRegistry.sol"
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node
+        uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Build
+        working-directory: services/authz
+        run: npm ci && npm run build
+      - name: Bench (<50ms)
+        working-directory: services/authz
+        run: node dist/bench.js
+  sol-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: nightly }
+      - name: Build contracts
+        run: |
+          echo "[profile.default]\nsrc = 'contracts/src'\nout = 'contracts/out'\n" > foundry.toml
+          forge build
+

@@ -1,0 +1,46 @@
+
+### Nominar guardians
+POST http://localhost:8080/guardians/nominate
+Content-Type: application/json
+
+{
+  "walletId": "wallet_12345678",
+  "guardians": [
+    {
+      "label": "Alice",
+      "pubkeyEd25519": "BASE64_PUBKEY_ALICE",
+      "contact": { "email": "alice@example.com" },
+      "expiresAt": {{timestamp+31536000000}}
+    },
+    {
+      "label": "Bob",
+      "pubkeyEd25519": "BASE64_PUBKEY_BOB",
+      "contact": { "phone": "+34123456789" },
+      "expiresAt": {{timestamp+31536000000}}
+    }
+  ]
+}
+
+### Iniciar recuperación (t=2, n=2)
+POST http://localhost:8080/recovery/initiate
+Content-Type: application/json
+
+{
+  "walletId": "wallet_12345678",
+  "threshold": 2,
+  "total": 2,
+  "disputeWindowMs": 600000,
+  "evidence": { "reason": "device lost", "deviceAttest": "opaque" }
+}
+
+
+Notas
+
+El KEK se devuelve en /recovery/complete solo para entorno de pruebas; en producción debe reconstruirse en el cliente con shares obtenidas directamente de cada guardián (el servidor no debería tocar shares en claro).
+
+La “biometría SO” se cubre integrando (en cliente) una llave de plataforma protegida por biometría para desbloquear la seed cifrada con el KEK; el servicio sólo registra la evidencia en evidence y la auditoría.
+
+Extensible a anclaje on‑chain del último hashHex de auditoría para mayor inmutabilidad.
+
+Siguiente en cola: N153 – Fiat on/off‑ramp integrado (cuando pidas el siguiente).
+

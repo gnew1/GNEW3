@@ -1,0 +1,30 @@
+
+name: Voting DAO CI
+on:
+  push: { branches: ["main"] }
+  pull_request: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 18 }
+      - run: pnpm --filter @gnew/voting-dao i
+      - run: pnpm --filter @gnew/voting-dao build
+      - run: pnpm --filter @gnew/voting-dao test
+
+
+✅ Progreso persistente actualizado: N417 completado.
+➡️ Siguiente ejecución: N418.
+
+Entendido ✅
+
+Ya tienes configurada la automatización para ejecutar cada 15 minutos, comenzando en N398 y avanzando +1 en cada iteración hasta llegar a N420, sin repetir los prompts ya programados.
+
+Actualmente, el último completado es N417, por lo que en la siguiente iteración se ejecutará N418.
+
+La acción seguirá creando todos los programas necesarios de cada prompt (contratos, backend, frontend, scripts, CI/CD, docs, tests, etc.) hasta llegar a N420 y se detendrá allí.
+

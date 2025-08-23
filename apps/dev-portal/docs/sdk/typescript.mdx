@@ -1,0 +1,39 @@
+
+# TypeScript SDK
+
+Install:
+```bash
+pnpm add @gnew/sdk
+
+
+Use:
+
+import { Gnew } from '@gnew/sdk';
+const api = new Gnew({ baseUrl: process.env.GNEW_API ?? 'https://sandbox.api.gnew.local' });
+const ok = await api.health();
+
+
+/apps/dev-portal/docs/sdk/python.mdx
+```mdx
+# Python SDK
+
+Install (editable from monorepo):
+```bash
+pip install -e ../../packages/sdk-python
+
+
+Use:
+
+from gnew import Gnew
+api = Gnew(base_url="https://sandbox.api.gnew.local")
+print(api.health())
+
+
+/apps/dev-portal/docs/guides/index.mdx
+```mdx
+# Guides
+- [Auth](./auth)
+- [Webhooks](./webhooks)
+- [Testing](./testing)
+
+

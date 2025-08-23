@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: Namespace
+metadata: { name: observability }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: prometheus, namespace: observability }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: prometheus } }
+  template:
+    metadata: { labels: { app: prometheus } }
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.55.1
+          args: ["--config.file=/etc/prometheus/prometheus.yml","--web.enable-lifecycle"]
+          ports: [{ containerPort: 9090 }]
+          volumeMounts:
+            - { name: prom-config, mountPath: /etc/prometheus }
+      volumes:
+        - name: prom-config
+          configMap: { name: prom-config }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: prom-config, namespace: observability }
+data:
+  prometheus.yml: |
+    {{ PASTE CONTENT OF observability/prometheus/prometheus.yml }}
+  rules.security-alerts.yml: |
+    {{ PASTE CONTENT OF observability/prometheus/rules/security-alerts.yml }}
+  rules.recording.yml: |
+    {{ PASTE CONTENT OF observability/prometheus/rules/recording.yml }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: alertmanager, namespace: observability }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: alertmanager } }
+  template:
+    metadata: { labels: { app: alertmanager } }
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+          ports: [{ containerPort: 9093 }]
+          volumeMounts:
+            - { name: am-config, mountPath: /etc/alertmanager }
+      volumes:
+        - name: am-config
+          configMap: { name: alertmanager-config }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: alertmanager-config, namespace: observability }
+data:
+  alertmanager.yml: |
+    {{ PASTE CONTENT OF observability/alertmanager/alertmanager.yml }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: grafana, namespace: observability }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: grafana } }
+  template:
+    metadata: { labels: { app: grafana } }
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.1.0
+          ports: [{ containerPort: 3000 }]
+          volumeMounts:
+            - { name: gf-ds, mountPath: /etc/grafana/provisioning/datasources }
+            - { name: gf-db, mountPath: /var/lib/grafana }
+            - { name: gf-dash, mountPath: /var/lib/grafana/dashboards }
+      volumes:
+        - name: gf-ds
+          configMap: { name: grafana-datasources }
+        - name: gf-dash
+          configMap: { name: grafana-dashboards }
+        - name: gf-db
+          emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: grafana-datasources, namespace: observability }
+data:
+  datasources.yaml: |
+    {{ PASTE CONTENT OF grafana/provisioning/datasources/datasources.yaml }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: grafana-dashboards, namespace: observability }
+data:
+  security-kpis.json: |
+    {{ PASTE CONTENT OF grafana/dashboards/security-kpis.json }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: sec-bridge, namespace: observability }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: sec-bridge } }
+  template:
+    metadata: { labels: { app: sec-bridge } }
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/gnew/sec-bridge:latest
+          ports: [{ containerPort: 8055 }]
+

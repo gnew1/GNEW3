@@ -1,0 +1,26 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "CommonJS",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true
+  }
+}
+
+Prompt N334 — Activity Tracker
+
+Stack: Node.js + Express + TypeScript.
+
+Endpoints:
+
+POST /track/event → registrar evento { userId, event, metadata }.
+
+GET /health → health check.
+
+Persistencia: simple archivo JSON (/data/events.json).
+
+Útil para monitorizar acciones de usuarios dentro del ecosistema GNEW.
+

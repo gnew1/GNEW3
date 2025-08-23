@@ -1,0 +1,30 @@
+name: Rollback (1-click) 
+on: 
+  workflow_dispatch: 
+    inputs: 
+      app: { description: "ArgoCD app (e.g., gnew-gateway-prod)", 
+required: true, type: string } 
+      revision: { description: "Revision index (0=previous)", 
+required: false, type: number, default: 0 } 
+ 
+jobs: 
+  rollback: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - name: ArgoCD rollback 
+        env: 
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }} 
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }} 
+        run: | 
+          argocd app rollback "${{ inputs.app }}" "${{ inputs.revision 
+}}" --grpc-web 
+          argocd app sync "${{ inputs.app }}" --grpc-web 
+ 
+ 
+7) FluxCD alternativa (si no usas ArgoCD) 
+Ruta completa: infra/gitops/flux/kustomizations/gateway-blue.yaml 
+apiVersion: kustomize.toolkit.fluxcd.io/v1 
+kind: Kustomization 
+metadata: { name: gateway-prod-blue, namespace: flux-system } 
+spec: 
+  interval: 1m 

@@ -1,0 +1,23 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "commonjs",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  }
+}
+
+Prompt N381 — Token Valuation Service
+
+Stack: Node.js + Express + TypeScript.
+
+Servicio backend que recibe inputs de precio, supply y factor de demanda.
+
+Expone /api/valuation (POST) y devuelve la valoración del token.
+
+Base para conectar con dashboards financieros de GNEW y simulaciones DeFi.
+

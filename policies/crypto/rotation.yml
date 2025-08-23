@@ -1,0 +1,36 @@
+version: 1
+owners:
+  - seguridad@gnew.example
+  - backend@gnew.example
+
+# Política de rotación y revocación
+keys:
+  e2e_prekeys:
+    description: "Prekeys X3DH (signed/one-time) por usuario"
+    rotation: "PT7D"           # rotación semanal
+    revoke_on_compromise: true
+    storage: "client-device"   # no en backend; sólo pk públicas
+  tls_service_certs:
+    rotation: "P90D"           # cada 90 días
+    revoke_on_compromise: true
+    managed_by: "PKI/ACME-interno"
+  kms_master_keys:
+    rotation: "P365D"          # anual o según auditoría
+    hsm: true
+  session_ratchet:
+    rotation: "per-message"    # PFS: derivación por mensaje
+    forward_secrecy: true
+
+revocation:
+  - condition: "dispositivo perdido/robado"
+    action: "revocar identidad cliente (mTLS), invalidar prekeys publicadas"
+  - condition: "cert CA comprometido"
+    action: "girar PKI completa, CRL/OCSP, re-deploy automatizado"
+audit:
+  log_minimum:
+    - "evento:rotation_succeeded"
+    - "evento:revocation_issued"
+    - "key_id"
+    - "actor"
+    - "timestamp"
+

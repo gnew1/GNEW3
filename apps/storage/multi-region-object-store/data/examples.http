@@ -1,0 +1,46 @@
+
+### Health
+GET http://localhost:8110/healthz
+
+### Subida simple (PUT stream)
+PUT http://localhost:8110/objects/demo/hello.txt
+Content-Type: text/plain
+
+Hola multi-region 👋
+
+### Descarga
+GET http://localhost:8110/objects/demo/hello.txt
+
+### Estado de replicación
+GET http://localhost:8110/replication/demo/hello.txt
+
+### Promover réplica a activa (manual)
+POST http://localhost:8110/admin/failover/promote
+Content-Type: application/json
+
+{ "to": "secondary" }
+
+### Pre-firmado PUT en primaria
+POST http://localhost:8110/admin/sign
+Content-Type: application/json
+
+{ "op": "put", "key": "uploads/big.bin", "contentType": "application/octet-stream", "expiresSec": 600 }
+
+### HEAD metadatos
+HEAD http://localhost:8110/objects/demo/hello.txt
+
+Notas finales
+
+Rutas y estilo coherentes con el monorepo previo (apps/*, TS + Express + SQLite + auditoría).
+
+S3 SDK v3 con forcePathStyle para compatibilidad MinIO/ceph.
+
+FAILOVER_MODE=auto activa failover al acumular 3 fallos de health consecutivos de la primaria.
+
+Puedes extender a N170 – CDC + Replaying de eventos de replicación en la siguiente ejecución si lo pides.
+
+Tú dijiste:
+Ejecuta y entrégame, como IA programadora, el siguiente prompt N de "N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N151 y avanzando +1 en cada ejecución. No repitas prompts ya entregados. Devuelve código completo con rutas coherentes con el monorepo y alineado con el stack indicado en cada prompt.
+ChatGPT Plus
+Pensó durante 55s
+

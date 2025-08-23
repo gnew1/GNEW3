@@ -1,0 +1,26 @@
+openapi: 3.1.0 
+info: { title: GNEW E‑Sign API, version: 1.0.0 } 
+paths: 
+  /v1/templates: 
+    get: { summary: Listar plantillas y versiones } 
+  /v1/templates/reload: 
+    post: { summary: Recargar plantillas desde FS (versionado SemVer) 
+} 
+  /v1/envelopes: 
+    post: 
+      summary: Crear sobre desde plantilla 
+      requestBody: { required: true } 
+  /v1/envelopes/{id}: 
+    get: { summary: Ver estado y auditoría } 
+  /v1/envelopes/{id}/render: 
+    post: { summary: Renderizar a PDF y calcular SHA‑256 } 
+  /v1/envelopes/{id}/send: 
+    post: { summary: Marcar como enviado y preparar enlaces de firma } 
+  /v1/envelopes/{id}/signers/{signerId}/link: 
+    get: { summary: Crear enlace de firma (token HMAC) } 
+  /v1/envelopes/sign/{token}: 
+    post: { summary: Aplicar firma (PNG opcional) y acuse; si completo 
+→ ancla on‑chain } 
+  /v1/envelopes/{id}/void: 
+    post: { summary: Anular sobre } 
+ 

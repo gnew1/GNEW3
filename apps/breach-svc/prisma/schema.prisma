@@ -1,0 +1,146 @@
+generator client { provider = "prisma-client-js" } 
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") } 
+model Incident { 
+id            
+String   @id @default(cuid()) 
+shortCode     
+status        
+String   @unique         
+// INC-2025-0001 
+String   @default("open") // 
+open|contained|notified|closed|false_positive 
+discoveredAt  DateTime 
+detectedBy    
+String? 
+summary       
+String 
+description   String 
+vector        
+String?                 
+// 
+phishing|ransomware|misconfig|api-leak|other 
+severity      
+String   @default("S2") // S0|S1|S2|S3 
+riskScore     
+Float    
+@default(0)    
+// 0..1 
+jurisdictions String[] @default([])   // ["EU","US","BR"] o países 
+ISO-3166-1 alpha-2 
+dataSubjects  Int?                    
+dpoSubjectId  String?                 
+// estimación afectados 
+// DPO owner 
+  leadSubjectId String?                 // Incident Commander 
+(SRE/Sec) 
+  createdAt     DateTime @default(now()) 
+  updatedAt     DateTime @updatedAt 
+  categories    ImpactedCategory[] 
+  stakeholders  Stakeholder[] 
+  tasks         NotificationTask[] 
+  checklist     ChecklistItem[] 
+  timeline      TimelineEntry[] 
+  evidences     Evidence[] 
+} 
+ 
+model ImpactedCategory { 
+  id           String   @id @default(cuid()) 
+  incidentId   String 
+  dataCategory String   // 
+email|name|gov_id|health|payment|password_hash|keys 
+  encryptedAtRest Boolean @default(false) 
+  encryptedInUse  Boolean @default(false) 
+  hashedOnly      Boolean @default(false) 
+  approximateCount Int? 
+  highRisk       Boolean  @default(false) 
+  Incident       Incident @relation(fields: [incidentId], references: 
+[id]) 
+  @@index([incidentId, dataCategory]) 
+} 
+ 
+model Stakeholder { 
+  id         String   @id @default(cuid()) 
+  incidentId String 
+  kind       String   // authority|processor|partner|data_subjects 
+  key        String?  // autoridad: "ES-AEPD", "FR-CNIL"; 
+data_subjects:null 
+  name       String 
+  email      String? 
+  url        String? 
+  country    String? 
+  Incident   Incident @relation(fields: [incidentId], references: 
+[id]) 
+  @@index([incidentId, kind, key]) 
+} 
+ 
+model NotificationTask { 
+  id          String   @id @default(cuid()) 
+  incidentId  String 
+  kind        String   // authority|data_subjects|partner|processor 
+  targetKey   String?  // autoridad|partner id 
+  channel     String   // email|https|sftp|manual 
+  templateKey String   // gdpr_authority|gdpr_subjects|us_state_ag|... 
+  dueAt       DateTime 
+  sentAt      DateTime? 
+  ackId       String? 
+  ackAt       DateTime? 
+  status      String   @default("pending") // 
+pending|sent|acknowledged|failed|skipped 
+  attempts    Int      @default(0) 
+  payloadSha  String? 
+  responseSha String? 
+  lastError   String? 
+  createdAt   DateTime @default(now()) 
+  updatedAt   DateTime @updatedAt 
+  Incident    Incident @relation(fields: [incidentId], references: 
+[id]) 
+ 
+  @@index([incidentId, kind, dueAt, status]) 
+} 
+ 
+model ChecklistItem { 
+  id          String   @id @default(cuid()) 
+  incidentId  String 
+  key         String   // gdpr_assess_risk, contain_threat, 
+preserve_evidence, etc. 
+  title       String 
+  description String? 
+  mandatory   Boolean  @default(true) 
+  status      String   @default("pending") // pending|done|n/a 
+  doneAt      DateTime? 
+  evidenceRef String? 
+  createdAt   DateTime @default(now()) 
+  Incident    Incident @relation(fields: [incidentId], references: 
+[id]) 
+  @@index([incidentId, status]) 
+} 
+ 
+model TimelineEntry { 
+  id         String   @id @default(cuid()) 
+  incidentId String 
+  type       String   // 
+created|updated|containment|forensics|authority_notified|subjects_noti
+ fied|closed|comment 
+  note       String 
+  actor      String? 
+  at         DateTime @default(now()) 
+  prevHash   String? 
+  eventHash  String   @unique 
+  batchId    String? 
+  txHash     String? 
+  Incident   Incident @relation(fields: [incidentId], references: 
+[id]) 
+  @@index([incidentId, at]) 
+} 
+ 
+model Evidence { 
+  id         String   @id @default(cuid()) 
+  incidentId String 
+  kind       String   // log|artifact|screenshot|ticket|pcap 
+  path       String 
+  sha256     String 
+  createdAt  DateTime @default(now()) 
+  Incident   Incident @relation(fields: [incidentId], references: 
+[id]) 
+} 
+ 

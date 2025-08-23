@@ -1,0 +1,11 @@
+crs: 
+  version: "1.0" 
+  sender_country: "NL" 
+  reporting_period_format: "YYYY" 
+  schema_hint: "OECD CRS simplified" 
+validation: 
+  required_account_fields: 
+["account_number","holder_name","holder_tin","holder_country","balance
+ "] 
+ 
+ 

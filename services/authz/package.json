@@ -1,0 +1,28 @@
+{
+  "name": "@gnew/authz",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --enable-source-maps dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test": "node dist/bench.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "casbin": "^5.29.0",
+    "casbin-js": "^1.7.0",
+    "ethers": "^6.13.2",
+    "express": "^4.21.2",
+    "helmet": "^7.1.0",
+    "lru-cache": "^10.4.3",
+    "pino": "^9.4.0",
+    "prom-client": "^15.1.1",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "typescript": "5.8.2"
+  }
+}
+

@@ -1,0 +1,37 @@
+openapi: 3.1.0 
+info: { title: GNEW Screening API, version: 1.0.0 } 
+paths: 
+  /v1/screening/check: 
+    post: 
+      summary: Ejecuta screening de un sujeto 
+      requestBody: 
+        required: true 
+        content: 
+          application/json: 
+            schema: 
+              type: object 
+              required: [subjectId] 
+              properties: 
+                subjectId: { type: string, description: "seudónimo" } 
+                name: { type: string } 
+                country: { type: string } 
+                dob: { type: string } 
+                docs: { type: array, items: { type: string } } 
+                wallets: { type: array, items: { type: string } } 
+      responses: { "200": { description: OK } } 
+  /v1/screening/subjects/{subjectId}: 
+    get: { summary: Estado del sujeto (clear/review/blocked), 
+responses: { "200": { description: OK } } } 
+  /v1/screening/hits/{runId}: 
+    get: { summary: Evidencias/hits de una ejecución, responses: { 
+"200": { description: OK } } } 
+  /v1/watchlists/status: 
+    get: { summary: Estado de listas (última actualización, hash, 
+items), responses: { "200": { description: OK } } } 
+  /v1/watchlists/refresh: 
+    post: { summary: Forzar actualización de listas, responses: { 
+"202": { description: Accepted } } } 
+  /v1/allowlist: 
+post: { summary: Registrar excepción temporal (false positive), 
+responses: { "201": { description: Created } } } 
+Backend — servicio y rutas 

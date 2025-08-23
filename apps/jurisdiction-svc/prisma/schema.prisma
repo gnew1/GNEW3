@@ -1,0 +1,35 @@
+generator client { provider = "prisma-client-js" } 
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") } 
+model JurisdictionPolicy {       
+efectivo 
+id         
+// snapshot versionado del YAML 
+String   @id @default(cuid()) 
+version    
+raw        
+String   @unique 
+Json 
+createdAt  DateTime @default(now()) 
+isActive   Boolean  @default(true) 
+} 
+model JurisdictionDecision {     // evidencia de resolución 
+(auditable) 
+  id         String   @id @default(cuid()) 
+  version    String 
+  input      Json 
+  output     Json 
+  eventHash  String   @unique 
+  batchId    String? 
+  txHash     String? 
+  createdAt  DateTime @default(now()) 
+  @@index([createdAt]) 
+} 
+ 
+model CoverageCountry {          // cobertura declarada (DoD) 
+  code       String   @id        // ISO-3166-1 alpha-2 (ES, FR, DE, 
+NL, PT, IT, UK, US, BR, MX) 
+  status     String              // covered | partial | out 
+  notes      String? 
+  updatedAt  DateTime @updatedAt 
+} 
+ 

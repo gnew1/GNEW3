@@ -1,0 +1,27 @@
+{ 
+  "$id": "https://gnew/policies/jx.schema.json", 
+  "type": "object", 
+  "required": ["version","defaults","rules"], 
+  "properties": { 
+    "version": { "type": "string" }, 
+    "defaults": { "type":"object" }, 
+    "rules": { 
+      "type": "array", 
+      "items": { 
+        "type":"object", 
+        "required":["match"], 
+        "properties": { 
+          "match": { 
+            "type":"object", 
+            "properties":{ 
+              "region":{"type":"string"}, 
+              "country":{"type":"string"}, 
+              "subdivision":{"type":"string"} 
+            } 
+          } 
+        } 
+      } 
+}, 
+"embargo_countries": { "type":"array", "items":{"type":"string"} } 
+} 
+} 

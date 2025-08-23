@@ -1,0 +1,36 @@
+{ 
+  "name": "notifications", 
+  "version": "1.0.0", 
+  "type": "module", 
+  "private": true, 
+  "scripts": { 
+    "dev": "node index.js", 
+    "test": "vitest run", 
+    "migrate": "alembic upgrade head || node 
+./scripts/sql-migrate.js", 
+    "lint": "echo 'ok'" 
+  }, 
+  "dependencies": { 
+    "apn": "^3.0.0", 
+    "express": "^4.21.2", 
+    "jsonwebtoken": "^9.0.1", 
+    "node-cron": "^3.0.3", 
+    "pg": "^8.11.5", 
+    "prom-client": "^15.1.1", 
+    "web-push": "^3.6.6", 
+    "@opentelemetry/api": "^1.9.0", 
+    "@opentelemetry/sdk-node": "^0.49.0", 
+    "@opentelemetry/exporter-trace-otlp-http": "^0.49.0", 
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.49.0", 
+    "@opentelemetry/auto-instrumentations-node": "^0.49.0", 
+    "@opentelemetry/resources": "^1.22.0", 
+    "@opentelemetry/semantic-conventions": "^1.22.0", 
+    "@opentelemetry/sdk-metrics": "^1.22.0" 
+  }, 
+  "devDependencies": { 
+    "vitest": "^1.6.0" 
+  }, 
+  "license": "GPL-3.0-or-later" 
+} 
+ 
+ 

@@ -1,0 +1,16 @@
+jurisdiction: US 
+currency: USD 
+forms: 
+  1099NEC: 
+    boxes: 
+      - { id: "1", name: "Nonemployee compensation" } 
+      - { id: "4", name: "Federal income tax withheld" } 
+    payer_required: ["payer_name","payer_tin","payer_address"] 
+    payee_required: ["payee_name","payee_tin","payee_address"] 
+withholding: 
+  backup_rate: 0.24   # Backup withholding si no hay TIN 
+válido/consentimiento W-9 
+validation: 
+  tin_regex: "^[0-9]{9}$" 
+ 
+ 

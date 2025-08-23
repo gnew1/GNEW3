@@ -1,0 +1,26 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "CommonJS",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true
+  }
+}
+
+Prompt N356 — Audit Log Microservice
+
+Stack: Node.js + Express + TypeScript.
+
+Endpoints:
+
+POST /audit/log → guardar acción del usuario.
+
+GET /audit/:userId → recuperar entradas de un usuario.
+
+GET /health → health check.
+
+Persistencia: memoria en este prototipo (futuro → base de datos).
+

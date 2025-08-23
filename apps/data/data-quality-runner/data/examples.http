@@ -1,0 +1,47 @@
+
+### Health
+GET http://localhost:8115/healthz
+
+### Crear reglas
+POST http://localhost:8115/rules/upsert
+Content-Type: application/json
+
+{
+  "name":"freshness-2h","db":"demo","table":"events",
+  "kind":"freshness","severity":"high","params":{"maxDelayMinutes":120}
+}
+
+###
+POST http://localhost:8115/rules/upsert
+Content-Type: application/json
+
+{
+  "name":"minfiles-10","db":"demo","table":"events",
+  "kind":"min_files","severity":"medium","params":{"min":10}
+}
+
+### Ejecutar todas las reglas de demo.events
+POST http://localhost:8115/run/execute
+Content-Type: application/json
+
+{ "db":"demo","table":"events" }
+
+### Ver resultados del run
+GET http://localhost:8115/runs/{{runId}}
+
+### Último reporte consolidado
+GET http://localhost:8115/reports/latest?db=demo&table=events
+
+### Métricas globales
+GET http://localhost:8115/metrics
+
+Notas de implementación
+
+Integración fuerte con N173: el runner lee ubicación/formato/columnas desde CATALOG_DB_URL. Si no hay catálogo para una regla, se puede definir location (URL s3://).
+
+S3 Probe eficiente por paginación (ListObjectsV2), configurado para AWS/MinIO (S3_FORCE_PATH_STYLE).
+
+Extensible: es sencillo añadir expectations adicionales o conectores (SQL engines) para métricas de contenido (nulos, unicidad, distribución).
+
+Persistencia: resultados y runs quedan en SQLite para auditoría y panelización posterior.
+

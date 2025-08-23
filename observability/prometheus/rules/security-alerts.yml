@@ -1,0 +1,43 @@
+groups:
+  - name: security-alerts
+    rules:
+      - alert: CriticalCVEsDetected
+        expr: sum(sec_cves_total{severity="critical"}) > 0
+        for: 2m
+        labels: { severity: critical, team: security }
+        annotations:
+          summary: "CVE críticas detectadas en últimas ingestas"
+          description: "Hay {{ $value }} CVEs críticas. Revisa panel CVEs → fuente CI/SBOM."
+
+      - alert: AuthzLatencySLOExceeded
+        expr: service:authz_eval_ms:p95 > 50
+        for: 5m
+        labels: { severity: high, team: sre }
+        annotations:
+          summary: "Authz p95 > 50ms"
+          description: "p95={{ $value }}ms > 50ms por más de 5m. Ver panel Latencias."
+
+      - alert: EndpointDown
+        expr: probe_success == 0
+        for: 2m
+        labels: { severity: high, team: sre }
+        annotations:
+          summary: "Endpoint no responde (blackbox)"
+          description: "Fallo de {{ $labels.instance }} (module=http_2xx)."
+
+      - alert: MTTD_SLO_Breached
+        expr: security:mttd_seconds:rate1h > security:mttd_slo_seconds
+        for: 10m
+        labels: { severity: high, team: security }
+        annotations:
+          summary: "MTTD medio (1h) excede SLO"
+          description: "MTTD={{ $value }}s > SLO={{ with query \"security:mttd_slo_seconds\" }}{{ . | first | value }}{{ end }}s"
+
+      - alert: PromScrapeStale
+        expr: time() - max(timestamp(up)) by (job) > 300
+        for: 1m
+        labels: { severity: medium, team: sre }
+        annotations:
+          summary: "Scrapes desactualizados >5m"
+          description: "Job afectado: {{ $labels.job }}"
+

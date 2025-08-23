@@ -1,0 +1,8 @@
+{ 
+"$schema": 
+"https://raw.githubusercontent.com/etherlabsio/addressbook-schema/main
+ /v1.json", 
+"project": "gnew-core", 
+"version": "0.1.0", 
+"deployments": [] 
+} 

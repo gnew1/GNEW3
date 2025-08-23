@@ -1,0 +1,25 @@
+{
+  "name": "@gnew/zk-circom",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "install:circom": "bash -lc 'command -v circom >/dev/null || (echo \"Install circom manually or via Docker\" && exit 0)'",
+    "clean": "rm -rf build",
+    "build": "mkdir -p build",
+    "compile:vote": "circom src/vote/vote.circom --r1cs --wasm --sym -o build/vote",
+    "compile:range": "circom src/balance/range.circom --r1cs --wasm --sym -o build/range",
+    "ptau:small": "snarkjs powersoftau new bn128 14 build/ptau/pot14_0000.ptau -v && snarkjs powersoftau contribute build/ptau/pot14_0000.ptau build/ptau/pot14_final.ptau -e randomtext",
+    "zkey:vote": "snarkjs groth16 setup build/vote/vote.r1cs build/ptau/pot14_final.ptau build/vote/vote_0000.zkey && snarkjs zkey contribute build/vote/vote_0000.zkey build/vote/vote_final.zkey -e anothersecret && snarkjs zkey export verificationkey build/vote/vote_final.zkey build/vote/vote_vk.json",
+    "zkey:range": "snarkjs groth16 setup build/range/range.r1cs build/ptau/pot14_final.ptau build/range/range_0000.zkey && snarkjs zkey contribute build/range/range_0000.zkey build/range/range_final.zkey -e anothersecret && snarkjs zkey export verificationkey build/range/range_final.zkey build/range/range_vk.json",
+    "export:sol:vote": "snarkjs zkey export solidityverifier build/vote/vote_final.zkey ../../contracts/src/zk/verifiers/VoteGroth16Verifier.sol",
+    "export:sol:range": "snarkjs zkey export solidityverifier build/range/range_final.zkey ../../contracts/src/zk/verifiers/RangeGroth16Verifier.sol",
+    "prove:vote": "node build/vote/vote_js/generate_witness.js build/vote/vote_js/vote.wasm inputs/vote.input.json build/vote/witness.wtns && snarkjs groth16 prove build/vote/vote_final.zkey build/vote/witness.wtns build/vote/proof.json build/vote/public.json",
+    "prove:range": "node build/range/range_js/generate_witness.js build/range/range_js/range.wasm inputs/range.input.json build/range/witness.wtns && snarkjs groth16 prove build/range/range_final.zkey build/range/witness.wtns build/range/proof.json build/range/public.json",
+    "verify:vote": "snarkjs groth16 verify build/vote/vote_vk.json build/vote/public.json build/vote/proof.json",
+    "verify:range": "snarkjs groth16 verify build/range/range_vk.json build/range/public.json build/range/proof.json"
+  },
+  "devDependencies": {
+    "snarkjs": "^0.7.4"
+  }
+}
+

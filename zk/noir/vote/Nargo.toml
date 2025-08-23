@@ -1,0 +1,8 @@
+[package]
+name = "gnew_vote"
+type = "bin"
+authors = ["GNEW"]
+compiler_version = ">=0.22.0"
+
+[dependencies]
+

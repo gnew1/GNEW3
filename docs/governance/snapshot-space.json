@@ -1,0 +1,16 @@
+{ 
+  "name": "GNEW DAO", 
+  "network": "1", 
+  "symbol": "gNEW", 
+  "about": "Espacio de gobernanza de GNEW", 
+  "strategies": [ 
+    { "name": "erc20-balance-of", "params": { "address": "0xTOKEN", 
+"symbol": "gNEW", "decimals": 18 } } 
+  ], 
+  "admins": ["0xADMIN"], 
+  "filters": { "minScore": 0, "onlyMembers": false }, 
+  "validation": { "name": "basic", "params": {} } 
+} 
+ 
+ 
+Endpoints mínimos para el portal (mock/subgraph) 

@@ -1,0 +1,43 @@
+ ml 
+version: 1 
+graph: 
+  edge_types: 
+    onchain_vote:        { w: 1.0, half_life_days: 120 } 
+    onchain_transfer:    { w: 0.3, half_life_days: 30, max_value_eth: 
+0.05 } 
+    onchain_proposal:    { w: 1.5, half_life_days: 180 } 
+    onchain_sbt_shared:  { w: 1.2, half_life_days: 365 } 
+    offchain_pr:         { w: 1.0, half_life_days: 60 } 
+    offchain_review:     { w: 1.0, half_life_days: 45 } 
+    offchain_forum:      { w: 0.6, half_life_days: 30 } 
+  min_edge_weight: 0.05 
+seeds: 
+  # DIDs con VC/SBT/stake verificados 
+  vc_required_types: ["GnewRoleCredential", "ProofOfHumanity"] 
+  sbt_required_types: ["CoreContributor","VerifiedHuman"] 
+  min_stake_norm: 0.4 
+ppr: 
+  alpha: 0.15 
+  tol: 1.0e-8 
+kmetrics: 
+  min_k_core: 3 
+  min_triangles: 2 
+risk: 
+  weights: 
+    ppr:  -1.8   # menor PPR -> mayor riesgo 
+    core: -0.8 
+    conductance: -0.9 
+    age_days: -0.6 
+    stake_norm: -0.7 
+    vc_score: -1.0 
+    device_diversity: -0.5 
+  bias: 0.8 
+  cap: [0.0, 1.0] 
+thresholds: 
+  green: 0.25 
+  amber: 0.50 
+ablation_eval: 
+  target_sybil_drop: 0.70 
+  max_fpr: 0.05 
+ 
+ 

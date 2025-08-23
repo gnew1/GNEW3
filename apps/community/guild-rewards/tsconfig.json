@@ -1,0 +1,26 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "CommonJS",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true
+  }
+}
+
+Prompt N364 — Guild Rewards Service
+
+Stack: Node.js + Express + TypeScript.
+
+Endpoints:
+
+GET /rewards/:guildId → retorna todas las recompensas asignadas dentro de un guild.
+
+POST /rewards/assign → permite a un guild asignar tokens a un miembro con cantidad definida.
+
+GET /health → health check.
+
+Persistencia: memoria (extensible a BD).
+

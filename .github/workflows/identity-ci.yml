@@ -1,0 +1,300 @@
+  Dockerfile
+  README.md
+
+ 
+0.1 Dependencias
+Ruta completa: services/identity/package.json
+{
+  "name": "@gnew/identity",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "migrate": "psql \"$DATABASE_URL\" -f migrations/001_init.sql",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "fastify": "4.28.1",
+    "@fastify/cors": "9.0.1",
+    "@fastify/helmet": "12.3.0",
+    "zod": "3.23.8",
+    "pg": "8.12.0",
+    "jose": "5.9.3",
+    "siwe": "2.3.2",
+    "ethers": "6.13.2",
+    "did-jwt": "7.4.6",
+    "did-jwt-vc": "3.1.3",
+    "did-resolver": "4.1.0",
+    "key-did-resolver": "3.0.1",
+    "pkh-did-resolver": "0.4.0",
+    "object-hash": "3.0.0",
+    "pino": "9.3.2",
+    "prom-client": "15.1.3",
+    "dotenv": "16.4.5",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/sdk-node": "0.54.0",
+    "@opentelemetry/auto-instrumentations-node": "0.50.1"
+  },
+  "devDependencies": {
+    "typescript": "5.6.2",
+    "tsx": "4.19.1",
+    "vitest": "2.1.2",
+    "@types/node": "22.7.5"
+  }
+}
+
+Ruta completa: services/identity/tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  }
+}
+
+ 
+0.2 Migraciones
+Ruta completa: services/identity/migrations/001_init.sql
+create extension if not exists "uuid-ossp";
+
+create table if not exists users (
+  id text primary key,          -- id de cuenta App (no PII)
+  handle text unique,
+  created_at timestamptz default now()
+);
+
+create table if not exists did_bindings (
+  id uuid primary key default uuid_generate_v4(),
+  user_id text not null references users(id) on delete cascade,
+  did text not null,
+  verified_at timestamptz not null default now(),
+  unique (user_id, did)
+);
+create index if not exists did_bindings_did on did_bindings(did);
+
+create table if not exists oidc_keys (
+  kid text primary key,
+  alg text not null,
+  public_jwk jsonb not null,
+  private_jwk jsonb not null,
+  created_at timestamptz default now(),
+  expires_at timestamptz
+);
+
+create table if not exists tokens_blacklist (
+  jti text primary key,
+  reason text,
+  ts timestamptz default now()
+);
+
+create table if not exists vc_registry (
+  id uuid primary key default uuid_generate_v4(),
+  holder_did text not null,
+  type text not null,
+  jwt text not null,
+  status text not null default 'active',  -- 'active' | 'revoked'
+  created_at timestamptz default now()
+);
+
+create table if not exists vc_revocations (
+  id uuid primary key default uuid_generate_v4(),
+  vc_id uuid not null references vc_registry(id),
+  reason text not null,
+  ts timestamptz default now()
+);
+
+ 
+0.3 Infra (ENV/OTel/DB)
+Ruta completa: services/identity/src/env.ts
+export const env = {
+  PORT: Number(process.env.PORT || 8081),
+  ISSUER: process.env.ISSUER || "https://id.gnew.org",
+  AUDIENCE_WEB: process.env.AUDIENCE_WEB || "https://app.gnew.org",
+  DATABASE_URL: process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/gnew",
+  // DID & VC
+  VC_ISSUER_DID: process.env.VC_ISSUER_DID || "did:key:z6Mki...",    // emisor de credenciales
+  VC_ISSUER_KID: process.env.VC_ISSUER_KID || "",                    // KID del JWK del emisor
+  // OIDC
+  ID_TOKEN_TTL: Number(process.env.ID_TOKEN_TTL || 900),
+  ACCESS_TOKEN_TTL: Number(process.env.ACCESS_TOKEN_TTL || 900),
+  // Seguridad
+  SIWE_ALLOWED_DOMAIN: process.env.SIWE_ALLOWED_DOMAIN || "app.gnew.org",
+  OTEL_ENABLE: process.env.OTEL_ENABLE === "1"
+};
+
+Ruta completa: services/identity/src/db.ts
+import pg from "pg";
+import { env } from "./env";
+export const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 10 });
+
+Ruta completa: services/identity/src/otel.ts
+import { env } from "./env";
+export function initOtel() {
+  if (!env.OTEL_ENABLE) return;
+  import("@opentelemetry/sdk-node").then(({ NodeSDK }) =>
+    import("@opentelemetry/auto-instrumentations-node").then(({ getNodeAutoInstrumentations }) => {
+      const sdk = new NodeSDK({ instrumentations: [getNodeAutoInstrumentations()] });
+      sdk.start();
+      process.on("SIGTERM", () => sdk.shutdown());
+    })
+  );
+}
+
+ 
+1) JWKS + rotación de claves (OIDC bridge)
+Ruta completa: services/identity/src/jwks.ts
+import { generateKeyPair, exportJWK, importJWK, SignJWT, JWTPayload, JWK } from "jose";
+import { pool } from "./db";
+
+export async function ensureKeypair(): Promise<{ kid: string; alg: string; publicJwk: JWK; privateJwk: JWK }> {
+  const { rows } = await pool.query("select kid, alg, public_jwk, private_jwk from oidc_keys order by created_at desc limit 1");
+  if (rows.length) return { kid: rows[0].kid, alg: rows[0].alg, publicJwk: rows[0].public_jwk, privateJwk: rows[0].private_jwk };
+
+  const { publicKey, privateKey } = await generateKeyPair("RS256", { modulusLength: 2048 });
+  const publicJwk = await exportJWK(publicKey); const privateJwk = await exportJWK(privateKey);
+  const kid = crypto.randomUUID();
+  await pool.query("insert into oidc_keys(kid, alg, public_jwk, private_jwk) values ($1,$2,$3,$4)", [kid, "RS256", publicJwk, privateJwk]);
+  return { kid, alg: "RS256", publicJwk, privateJwk };
+}
+
+export async function signJwt(kid: string, privateJwk: JWK, payload: JWTPayload) {
+  const key = await importJWK(privateJwk, "RS256");
+  return await new SignJWT(payload).setProtectedHeader({ alg: "RS256", kid }).setIssuedAt().setJti(crypto.randomUUID()).sign(key);
+}
+
+export async function currentJwks() {
+  const { rows } = await pool.query("select kid, alg, public_jwk from oidc_keys order by created_at desc");
+  return { keys: rows.map(r => ({ kid: r.kid, alg: r.alg, kty: r.public_jwk.kty, n: r.public_jwk.n, e: r.public_jwk.e })) };
+}
+
+Ruta completa: services/identity/src/revocation.ts
+import { pool } from "./db";
+export async function revokeJti(jti: string, reason = "revoked") {
+  await pool.query("insert into tokens_blacklist(jti, reason) values ($1,$2) on conflict do nothing", [jti, reason]);
+}
+export async function isRevoked(jti?: string | null) {
+  if (!jti) return false;
+  const { rows } = await pool.query("select 1 from tokens_blacklist where jti=$1", [jti]);
+  return rows.length > 0;
+}
+
+ 
+2) Resolución DID + pruebas de posesión (PoP)
+Ruta completa: services/identity/src/did.ts
+import { Resolver } from "did-resolver";
+import { getResolver as keyResolver } from "key-did-resolver";
+import { getResolver as pkhResolver } from "pkh-did-resolver";
+import { verifyJWT, createJWS, Resolver as DIDResolver } from "did-jwt";
+
+export function didResolver(): DIDResolver {
+  return new Resolver({ ...keyResolver(), ...pkhResolver() });
+}
+
+/** Verifica una JWS firmada por el DID como prueba de posesión (PoP) */
+export async function verifyDidJws(jws: string) {
+  const res = await verifyJWT(jws, { resolver: didResolver(), audience: "gnew" });
+  return { did: res.issuer, payload: res.payload };
+}
+
+ 
+3) SIWE (Sign In With Ethereum) + anti phishing
+Ruta completa: services/identity/src/siwe.ts
+import { SiweMessage } from "siwe";
+import { env } from "./env";
+import { ethers } from "ethers";
+
+/** Verifica EIP-4361 con controles de phishing (domain/chain/audience) y ENS opcional */
+export async function verifySiwe({ message, signature, expectedNonce }:{
+  message: string; signature: string; expectedNonce: string;
+}) {
+  const siwe = new SiweMessage(message);
+  const fields = await siwe.validate(signature);
+  // Domaine/audience
+  if (fields.domain !== env.SIWE_ALLOWED_DOMAIN) throw new Error("bad_domain");
+  if (fields.nonce !== expectedNonce) throw new Error("bad_nonce");
+  // Opcional: ENS reverse y TXT url/domain para señales anti-phishing (no bloqueante)
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || "https://rpc.ankr.com/eth");
+    const ens = await provider.lookupAddress(fields.address);
+    if (ens) {
+      const resolver = await provider.getResolver(ens);
+      const site = await resolver?.getText("url");
+      if (site && !site.includes(env.SIWE_ALLOWED_DOMAIN)) {
+        // Señal débil: registrar métrica/flag; no forzar fallo
+        console.warn("ENS url mismatch", { ens, site });
+      }
+    }
+  } catch {}
+  return { address: fields.address, statement: fields.statement, chainId: fields.chainId, resources: fields.resources };
+}
+
+ 
+4) Issuer/Verifier de Verifiable Credentials (VC JWT)
+Ruta completa: services/identity/src/vc.ts
+import { createVerifiableCredentialJwt, verifyCredential } from "did-jwt-vc";
+import { SignJWT, importJWK, JWK } from "jose";
+import { env } from "./env";
+import { pool } from "./db";
+import { didResolver } from "./did";
+
+/** Emite una VC tipo "GNEWRoleCredential" (roles mínimos necesarios) */
+export async function issueRoleVC(holderDid: string, roles: string[], issuerJwk: JWK, kid: string) {
+  const nbf = Math.floor(Date.now() / 1000) - 10;
+  const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30; // 30 días
+  const vc = {
+    sub: holderDid,
+    nbf, exp,
+    vc: {
+      "@context": ["https://www.w3.org/2018/credentials/v1"],
+      type: ["VerifiableCredential", "GNEWRoleCredential"],
+      credentialSubject: { id: holderDid, roles }
+    },
+    iss: env.VC_ISSUER_DID
+  };
+  const key = await importJWK(issuerJwk, "EdDSA").catch(() => importJWK(issuerJwk, "ES256K"));
+  // Si tu emisor es did:key (Ed25519), usa EdDSA; si es secp256k1, ES256K
+  const jwt = await new SignJWT(vc as any).setProtectedHeader({ alg: (key.alg||"EdDSA") as any, kid }).setIssuedAt().sign(key);
+  const { rows } = await pool.query("insert into vc_registry(holder_did, type, jwt) values ($1,$2,$3) returning id", [holderDid, "GNEWRoleCredential", jwt]);
+  return { id: rows[0].id as string, jwt };
+}
+
+export async function verifyRoleVC(jwt: string) {
+  const res = await verifyCredential(jwt, didResolver() as any);
+  // Chequeo estado (revocación off-chain)
+  const { rows } = await pool.query("select status from vc_registry where jwt=$1", [jwt]);
+  const status = rows[0]?.status || "unknown";
+  return { ...res, status };
+}
+
+export async function revokeVCById(id: string, reason: string) {
+  await pool.query("update vc_registry set status='revoked' where id=$1", [id]);
+  await pool.query("insert into vc_revocations(vc_id, reason) values ($1,$2)", [id, reason]);
+}
+
+ 
+5) OIDC Bridge (descubrimiento, JWKS, emisión de id_token/access_token)
+Ruta completa: services/identity/src/oidc.ts
+import { env } from "./env";
+import { currentJwks, ensureKeypair, signJwt } from "./jwks";
+import { isRevoked } from "./revocation";
+
+export async function buildIdTokenPayload(sub: string, claims: Record<string, any> = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    iss: env.ISSUER,
+    aud: env.AUDIENCE_WEB,
+    sub,                         // DID como subject
+    iat: now,
+    exp: now + env.ID_TOKEN_TTL,
+    auth_time: now,
+    acr: "urn:gnew:acr:did+siwe",
+    amr: ["did", "siwe"],

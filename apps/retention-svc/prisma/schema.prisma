@@ -1,0 +1,71 @@
+generator client { provider = "prisma-client-js" } 
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") } 
+model RetentionPolicy { // referencia cargada desde YAML (copia 
+efectiva/versionada) 
+id           
+version      
+scope        
+String   @id @default(cuid()) 
+String 
+Json     
+// criterios normalizados (region, age, 
+baseLegal, system, dataCategory, purpose) 
+  action       String   // delete | anonymize | compact | s3_lifecycle 
+  ttlDays      Int 
+  fieldsAllow  Json?    // minimización por propósito: lista de campos 
+permitidos 
+  isActive     Boolean  @default(true) 
+  createdAt    DateTime @default(now()) 
+  updatedAt    DateTime @updatedAt 
+} 
+ 
+model RetentionTag { // índice de recursos sujetos a retención 
+  id             String   @id @default(cuid()) 
+  subjectId      String?  // seudónimo si aplica (puede ser null para 
+agregados) 
+  system         String   // ej. core.users / consent / s3:attachments 
+  resourceType   String   // tabla/tipo 
+  resourceId     String   // PK o path (S3) 
+  dataCategory   String   // email / ip / device_id / message_body / 
+... 
+  purpose        String   // marketing / analytics / 
+security_antiabuse / ... 
+  baseLegal      String   // consent | legitimate_interest | contract 
+| legal_obligation 
+  region         String?  // EU/US-CA/BR/ALL 
+  policyVersion  String 
+  expireAt       DateTime 
+  legalHold      Boolean  @default(false) 
+  createdAt      DateTime @default(now()) 
+  updatedAt      DateTime @updatedAt 
+  @@index([system, resourceType, expireAt]) 
+  @@unique([system, resourceType, resourceId, dataCategory, purpose]) 
+} 
+ 
+model RetentionEvent { 
+  id        String   @id @default(cuid()) 
+  tagId     String 
+  action    String   // delete | anonymize | skip_hold | 
+skip_not_found 
+  result    Json 
+  eventHash String   @unique 
+  batchId   String? 
+  txHash    String? 
+  createdAt DateTime @default(now()) 
+  RetentionTag RetentionTag @relation(fields: [tagId], references: 
+[id]) 
+  @@index([createdAt]) 
+} 
+ 
+model LegalHold { 
+  id        String   @id @default(cuid()) 
+  system    String 
+  resourceType String 
+  resourceId String 
+  reason    String 
+  createdAt DateTime @default(now()) 
+  @@unique([system, resourceType, resourceId]) 
+} 
+ 
+ 
+Políticas (YAML) — versión controlada e i18n 

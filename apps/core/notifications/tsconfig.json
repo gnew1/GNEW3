@@ -1,0 +1,26 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "CommonJS",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true
+  }
+}
+
+Prompt N343 — Notifications Microservice
+
+Stack: Node.js + Express + TypeScript.
+
+Endpoints:
+
+POST /notifications/send → enviar notificación { userId, message, channel }.
+
+GET /health → health check.
+
+Canales soportados: "email" | "sms" | "inapp".
+
+Mock service: logs a JSON object to console (futuro → integraciones reales).
+

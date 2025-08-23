@@ -1,0 +1,47 @@
+ claje.md 
+N121 — 13.1 Registro DID y anclaje (GNEW) 
+Objetivo: Resolver/emitir DIDs con anclaje verificable en la cadena GNEW y/o servicios de 
+anclaje (Ceramic/ION), con CRUD y pruebas de interoperabilidad. 
+Roles: Identidad, Backend. 
+Stack: W3C DID Core, did-resolver, métodos did:gnew (propio), did:key, did:pkh, 
+envoltorios para Ceramic e ION; anclaje on‑chain en GnewDIDRegistry. 
+DoD: 
+● CRUD completo: Create, Read/Resolve, Update (servicios/VM/keys), 
+Deactivate/Revocation. 
+● Interop: resolución con did-resolver (drivers: gnew, key, pkh) y pruebas de 
+compatibilidad JSON‑LD. 
+● Anclaje: evento y estado on‑chain con docURI + contentHash (IPFS/Ceramic/ION 
+long‑form) y versión. 
+Alcance 
+● Método nativo did:gnew: ID = did:gnew:eip155:<chainId>:<address> 
+(controlador EVM) ó did:gnew:key:<multibase(pubkey)> (controlador Ed25519 
+sec. off‑chain con atestación DAO). 
+● Anclaje on‑chain: smart‑contract GnewDIDRegistry guarda hash y URI del DID 
+Document + controlador y versioning. 
+● Compatibilidad: importadores para did:key, did:pkh y wrapper para ION/Ceramic 
+(almacenan doc y anclan huella en GNEW). 
+● Política: sólo el controller o REGISTRAR_ROLE (DAO/Autoridad) pueden 
+registrar/actualizar; revocación auditable por evento. 
+Entregables 
+1. Contrato GnewDIDRegistry.sol (registro y anclaje). 
+2. Servicio /services/did (API REST + resolutor + jobs de anclaje). 
+3. SDK cliente (packages/sdk/did.ts) con helpers de emisión, anclaje y resolución. 
+4. Pruebas Jest + Hardhat (interop.test.ts, registry.test.ts). 
+5. Runbooks: rotación de claves, recuperación, migración de URIs, rescate de 
+controlador. 
+6. Dashboards (métricas básicas) y scripts de despliegue. 
+Flujos 
+1. Create 
+○ Genera/parsea clave → construye DID (did:gnew, did:key, did:pkh). 
+○ Publica DID Document en IPFS/Ceramic/ION → obtiene docURI y 
+contentHash. 
+○ Ancla en GnewDIDRegistry.register* (on‑chain). 
+2. Read/Resolve 
+○ did-resolver con driver gnew: consulta GnewDIDRegistry y recupera 
+docURI → fetch contenido → valida hash. 
+3. Update 
+○ Rotación de verificationMethod/services: actualiza doc off‑chain → re‑ancla 
+versión con update*. 
+4. Deactivate/Revocation 
+○ Marca revoked=true y emite evento; resolver devuelve deactivated: 
+true. 

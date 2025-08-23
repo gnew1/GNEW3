@@ -1,0 +1,55 @@
+image: 
+  repository: gnew/did-service 
+  tag: v0.1.0 
+env: 
+  GNEW_RPC_URL: https://rpc.gnew.example 
+  GNEW_DID_REGISTRY: "0xRegistryAddress" 
+REGISTRAR_PRIVATE_KEY: "vault://kv/did/registrar" 
+IPFS_NODE_URL: http://ipfs:5001 
+IPFS_GATEWAY: https://ipfs.io/ipfs/ 
+resources: 
+requests: { cpu: "100m", memory: "128Mi" } 
+limits: { cpu: "500m", memory: "512Mi" } 
+ingress: 
+enabled: true 
+hosts: [ "did.api.gnew.example" ] 
+Runbooks (extracto) 
+● Despliegue inicial 
+○ Desplegar GnewDIDRegistry con admin=MultisigGobernanza, 
+registrar=MultisigIdentidad. 
+○ Configurar variables en Helm y apuntar RPC/contract. 
+○ Probar POST /v1/dids (storage=inline) y resolver. 
+● Rotación de controlador 
+○ PATCH /v1/dids/:did con rotateControllerTo: 
+"eip155:<chainId>:<newAddr>" firmado por controller actual. 
+○ Verificar evento DIDControllerChanged. 
+● Migración de docURI (IPFS→Ceramic) 
+○ Resolver doc, re‑publicar a Ceramic (putDoc(...,"ceramic")) y 
+updateDocument. 
+● Revocación 
+○ DELETE /v1/dids/:did con autorización del controller → revoke. 
+DoD — Check de cierre 
+● CRUD DID: endpoints + contrato soportan create/read/update/deactivate. 
+● Interop: resolver gnew y prueba Jest de ida y vuelta; JSON conforme DID Core. 
+● Anclaje: hash + URI persistidos on‑chain con eventos, versionado y timestamp. 
+● Docs/Runbooks: incluidos; Helm values mínimos y tests. 
+Notas y próximos pasos 
+● Sustituir stubs (multibase, keccak, Ceramic e ION reales) por librerías: 
+○ multibase/multicodec: multiformats. 
+○ keccak256: js-sha3 o ethers. 
+○ Ceramic: @ceramicnetwork/http-client, 
+@ceramicnetwork/stream-tile. 
+○ ION: @decentralized-identity/ion-sdk (crear long‑form y, opcional, 
+submit anchor). 
+● Añadir driver universal a did-resolver para did:gnew con caché y verificación de 
+contentHash. 
+● Integrar AA wallets para que registerByController acepte controladores 
+ERC‑4337 (relación con N120). 
+● Políticas DAO: un policy engine para admisión de did:key anclados por 
+REGISTRAR_ROLE con VC de proof-of-personhood (si aplica). 
+Tú dijiste: 
+programa a nivel de detalle para GNEW N122 13.2 Credenciales verificables (Prompt 122) 
+Objetivo: Emisión/validación de VCs (roles, logros). Roles: Identidad, Legal, Back. Stack: 
+SD-JWT/BBS+; revocation list. DoD: selective disclosure y verificación local. 
+ChatGPT Plus 
+Pensó durante 58s 

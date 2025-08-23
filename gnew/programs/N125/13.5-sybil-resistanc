@@ -1,0 +1,49 @@
+ e.md 
+N125 — 13.5 Sybil‑resistance (GNEW) 
+Objetivo: Reducir la participación de cuentas sybil mediante un K‑graph de relaciones y 
+señales temporales, stake y verificación social, con decisiones de riesgo explicables y 
+anclaje on‑chain. 
+Roles: Data, Seguridad. 
+Stack: Python (pipeline de grafos y scoring), YAML (config), Solidity (anclaje/puerta), IPFS, 
+TS/Node (SDK/API), React (UI de riesgo). 
+DoD: 
+● Métrica operacional: caída de sybil ≥ 70% en ensayos A/B en funnel de acciones 
+críticas, manteniendo FPR ≤ 5%. 
+● K‑graph calculado (k‑core/truss + PPR seed‑based) + señales de edad/tiempo, stake y 
+VC/SBT (N121‑N123). 
+● Verificación local: Merkle root on‑chain + prueba de inclusión para “pase anti‑sybil” por 
+epoch. 
+● Auditoría de fórmula y parámetros (artefactos y hashes). 
+1) Modelo conceptual 
+1.1 K‑graph y señales 
+● Grafo de interacción G=(V,E)G=(V,E)G=(V,E): nodos = DIDs/EOAs; aristas ponderadas 
+y tipificadas: 
+○ On‑chain: co‑voto, transferencias pequeñas repetidas, co‑participación en 
+propuestas, SBTs compartidos. 
+○ Off‑chain: co‑autoría PR/review, menciones/foros, referrals verificados. 
+● Agregación con decaimiento temporal: we(t)=∑jαj⋅exp (−λjΔt)w_e(t)=\sum_j \alpha_j 
+\cdot \exp(-\lambda_j \Delta t)we (t)=∑j αj ⋅exp(−λj Δt). 
+● K‑graph features: 
+○ k‑core (coreness), k‑truss (triángulos), conductancia hacia seeds, PPR 
+personalizado con seeds (cuentas ancla con VC/SBT/stake). 
+● Señales auxiliares: 
+○ Edad de DID/wallet, tiempo de actividad (sesiones), stake efectivo 
+(bloqueado, con slashing), VC de humanidad/rol (N122), SBT (N123). 
+● Riesgo R∈[0,1]R\in[0,1]R∈[0,1] = f(PPR, coreness, conductancia, edad, stake, 
+VC/SBT, dispositivos hashados), con límites y monotonicidades. 
+1.2 Decisión y políticas 
+● Green (R≤0.25): acceso sin fricción. 
+● Amber (0.25<R≤0.5): pedir challenge suave (firma + captcha + rate). 
+● Red (R>0.5): exigir VC humano o stake ≥ umbral; o rechazar acción sensible. 
+2) Entregables 
+1. Pipeline de grafos /services/sybil (Python): ingesta, construcción de grafo, 
+K‑features, PPR, score, artefactos y Merkle. 
+2. Contrato SybilRootRegistry + SybilGate (Solidity): anclaje de raíz por epoch y 
+gate de acceso por score. 
+3. API /services/sybil-api (TS/Node): evaluar riesgo, devolver “razones”, servir 
+pruebas Merkle. 
+4. SDK /packages/sdk/sybil.ts (TS): verificar localmente pase anti‑sybil 
+(proof+root). 
+5. UI: tarjeta de riesgo y explicación (top features/razones). 
+6. Pruebas: simulación etiquetada, AUC, caída % sybil, FPR. 
+7. Runbooks y Helm. 

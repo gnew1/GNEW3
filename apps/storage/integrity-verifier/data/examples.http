@@ -1,0 +1,33 @@
+
+### Verificar hash + firma Ed25519 de un artefacto desde URL
+POST http://localhost:8095/verify
+Content-Type: application/json
+
+{
+  "source": { "type": "url", "url": "https://example.com/artifact.tar.gz" },
+  "hash": { "algo": "sha256", "expectedHex": "ab12cd34..." },
+  "signature": {
+    "scheme": "ed25519",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFA...\n-----END PUBLIC KEY-----\n",
+    "signatureBase64": "MEUCIQ..."
+  },
+  "labels": { "artifactId": "build-2025-08-20", "context": "release" }
+}
+
+### Verificar Merkle inclusion (leaf = hash del artefacto)
+POST http://localhost:8095/verify
+Content-Type: application/json
+
+{
+  "source": { "type": "base64", "data": "AAECAwQ=" },
+  "merkle": {
+    "hashAlgo": "sha256",
+    "rootHex": "ffee..",
+    "proof": [
+      { "position": "left", "hashHex": "aa.." },
+      { "position": "right", "hashHex": "bb.." }
+    ]
+  }
+}
+
+

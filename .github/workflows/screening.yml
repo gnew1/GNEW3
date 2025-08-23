@@ -1,0 +1,34 @@
+name: screening-svc 
+on: 
+  push: { paths: ["apps/screening-svc/**", "packages/screening-*/**", 
+"packages/schemas/openapi/screening.yml"] } 
+  pull_request: { branches: [ main ] } 
+jobs: 
+  build-test: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-node@v4 
+        with: { node-version: 20 } 
+      - run: npm ci 
+      - run: npm run lint --workspaces 
+      - run: npm test --workspaces 
+      - run: syft packages dir:. -o spdx-json=sbom-screening.json || 
+true 
+      - run: npx swagger-cli validate 
+packages/schemas/openapi/screening.yml 
+      - run: npm run build -w apps/screening-svc 
+  deploy: 
+    needs: build-test 
+    if: github.ref == 'refs/heads/main' 
+    runs-on: ubuntu-latest 
+    permissions: { id-token: write, contents: read } 
+    steps: 
+      - uses: actions/checkout@v4 
+      - name: Auth OIDC 
+        run: echo "auth" 
+      - name: Deploy 
+        run: ./infra/deploy-screening.sh 
+ 
+ 
+Pruebas (unit) 

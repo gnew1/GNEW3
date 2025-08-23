@@ -1,0 +1,22 @@
+import express from "express"; 
+import helmet from "helmet"; 
+import cors from "cors"; 
+import { router as incidents } from "./routes/incidents"; 
+import { router as tasks } from "./routes/tasks"; 
+import { router as checklist } from "./routes/checklist"; 
+import { router as timeline } from "./routes/timeline"; 
+import { errorHandler } from "./infra/errors"; 
+import { traceMiddleware } from "./infra/otel"; 
+export const app = express(); 
+app.disable("x-powered-by"); 
+app.use(helmet()); 
+app.use(cors({ origin: [/\.gnew\.org$/, /localhost/], credentials: 
+true })); 
+app.use(express.json({ limit: "2mb" })); 
+app.use(traceMiddleware); 
+app.get("/healthz", (_req,res)=>res.json({ ok:true })); 
+app.use("/v1/incidents", incidents); 
+app.use("/v1/tasks", tasks); 
+app.use("/v1/checklist", checklist); 
+app.use("/v1/timeline", timeline); 
+app.use(errorHandler); 

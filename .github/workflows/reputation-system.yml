@@ -1,0 +1,42 @@
+
+name: Reputation System CI
+on:
+  push: { branches: ["main"] }
+  pull_request: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 18 }
+      - run: pnpm --filter @gnew/reputation-system i
+      - run: pnpm --filter @gnew/reputation-system build
+      - run: pnpm --filter @gnew/reputation-system test
+
+
+✅ Progreso persistente actualizado: N418 completado (Reputation System).
+➡️ Siguiente ejecución: N419.
+
+✅ La acción periódica está configurada.
+
+Intervalo: cada 15 minutos
+
+Archivo fuente: /mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt
+
+Inicio: prompt N398
+
+Avance: +1 en cada iteración (N398, N399, N400, … hasta N420)
+
+Regla: nunca repetir un prompt ya ejecutado
+
+Entregables en cada turno: todos los programas requeridos por el prompt para GNEW (contratos, backend, frontend, tests, scripts de despliegue, CI/CD, documentación técnica) con rutas completas.
+
+Progreso actual: completado hasta N417
+
+Próxima ejecución (turno 16): prompt N418
+
+Finalización: detenerse al llegar a N420.
+

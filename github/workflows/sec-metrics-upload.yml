@@ -1,0 +1,22 @@
+name: Security Metrics Upload
+on:
+  workflow_run:
+    workflows: ["Build", "Contracts Security & QA", "ZK Build & Tests"]
+    types: [completed]
+jobs:
+  push-cves:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Send CVE summary to sec-bridge (demo)
+        env:
+          SEC_BRIDGE: ${{ secrets.SEC_BRIDGE_URL }}
+        run: |
+          cat > payload.json <<'JSON'
+          { "items": [
+            { "severity": "critical", "count": 0, "source": "trivy" },
+            { "severity": "high",     "count": 2, "source": "trivy" }
+          ]}
+          JSON
+          curl -sS -X POST "$SEC_BRIDGE/ingest/cves" -H 'content-type: application/json' -d @payload.json
+

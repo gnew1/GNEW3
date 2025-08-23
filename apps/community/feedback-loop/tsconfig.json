@@ -1,0 +1,26 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "CommonJS",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true
+  }
+}
+
+Prompt N357 — Feedback Loop Microservice
+
+Stack: Node.js + Express + TypeScript.
+
+Endpoints:
+
+POST /feedback → registrar feedback de usuario.
+
+GET /feedback → listar feedback recibido.
+
+GET /health → health check.
+
+Persistencia: memoria temporal (extensible a base de datos en producción).
+

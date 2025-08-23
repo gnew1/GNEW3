@@ -1,0 +1,780 @@
+
+Dependencias
+Ruta completa: services/support-bot/package.json
+{
+  "name": "@gnew/support-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "migrate": "psql \"$DATABASE_URL\" -f migrations/001_init.sql",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "fastify": "4.28.1",
+    "@fastify/cors": "9.0.1",
+    "@fastify/helmet": "12.3.0",
+    "pg": "8.12.0",
+    "ioredis": "5.4.1",
+    "zod": "3.23.8",
+    "pino": "9.3.2",
+    "prom-client": "15.1.3",
+    "dotenv": "16.4.5",
+    "object-hash": "3.0.0",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/sdk-node": "0.54.0"
+  },
+  "devDependencies": {
+    "typescript": "5.6.2",
+    "tsx": "4.19.1",
+    "vitest": "2.1.2",
+    "@types/node": "22.7.5"
+  }
+}
+
+Ruta completa: services/support-bot/tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  }
+}
+
+Migraciones
+Ruta completa: services/support-bot/migrations/001_init.sql
+create extension if not exists "uuid-ossp";
+
+create table conv (
+  id uuid primary key default uuid_generate_v4(),
+  user_id text,                -- DID (no PII)
+  status text not null default 'open',  -- open|handoff|closed
+  created_at timestamptz default now()
+);
+
+create table msg (
+  id bigserial primary key,
+  conv_id uuid references conv(id) on delete cascade,
+  role text not null,        -- user|bot|agent|system
+  content text not null,
+  citations jsonb default '[]'::jsonb,
+  sensitive boolean default false,
+  ts timestamptz default now()
+);
+
+create table handoff (
+  id uuid primary key default uuid_generate_v4(),
+  conv_id uuid references conv(id) on delete cascade,
+  reason text,
+  assigned_to text,          -- email/agent id
+  status text not null default 'pending', -- pending|accepted|resolved
+  ts timestamptz default now()
+);
+
+create table ratings (
+  id bigserial primary key,
+  conv_id uuid references conv(id) on delete cascade,
+  score int check (score between 1 and 5),
+  comment text,
+  ts timestamptz default now()
+);
+
+ENV/Infra
+Ruta completa: services/support-bot/src/env.ts
+export const env = {
+  PORT: Number(process.env.PORT || 8095),
+  DATABASE_URL: process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/gnew",
+  REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
+  HELP_INDEX_PATH: process.env.HELP_INDEX_PATH || "../apps/web/content/help-index.json",
+  VERIFY_BASE_URL: process.env.VERIFY_BASE_URL || "http://identity:8081", // N56
+  OTEL_ENABLE: process.env.OTEL_ENABLE === "1"
+};
+
+Ruta completa: services/support-bot/src/db.ts
+import pg from "pg"; import { env } from "./env";
+export const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 10 });
+
+Ruta completa: services/support-bot/src/redis.ts
+import Redis from "ioredis"; import { env } from "./env";
+export const redis = new Redis(env.REDIS_URL);
+export async function hit(key: string, ttl=60){ const n=await redis.incr(key); if(n===1) await redis.expire(key,ttl); return n; }
+
+Ruta completa: services/support-bot/src/otel.ts
+import { env } from "./env";
+export function initOtel(){ if(!env.OTEL_ENABLE) return; /* init SDK Node OTel aquí (omitido por brevedad) */ }
+
+Ruta completa: services/support-bot/src/metrics.ts
+import client from "prom-client";
+export const m = {
+  msgs: new client.Counter({ name: "supportbot_messages_total", help: "Mensajes por rol", labelNames: ["role"] }),
+  esc:  new client.Counter({ name: "supportbot_escalations_total", help: "Escalados a humano", labelNames: ["reason"] }),
+  l0ok: new client.Counter({ name: "supportbot_resolutions_l0_total", help: "Conversaciones resueltas en L0" }),
+};
+export function setupMetrics(){ client.collectDefaultMetrics({ prefix: "gnew_sbot_" }); return client; }
+
+RAG
+Ruta completa: services/support-bot/src/rag/retriever.ts
+import fs from "node:fs/promises"; import path from "node:path"; import { env } from "../env";
+
+export type Doc = { slug: string; title: string; section: string; tags: string[]; vec: number[] };
+export type Hit = Doc & { score: number };
+
+let INDEX:{ items: Doc[] } | null = null;
+
+export async function loadIndex(){
+  if (INDEX) return INDEX;
+  const p = path.resolve(__dirname, "..", "..", env.HELP_INDEX_PATH);
+  INDEX = JSON.parse(await fs.readFile(p, "utf8"));
+  return INDEX!;
+}
+
+const dot=(a:number[],b:number[])=>a.reduce((s,v,i)=>s+v*(b[i]||0),0);
+const norm=(a:number[])=>Math.sqrt(dot(a,a))||1;
+
+export async function search(q: string, k=5): Promise<Hit[]> {
+  const idx = await loadIndex();
+  // Fallback textual simple si no hay vector de query
+  const ql = q.trim().toLowerCase();
+  const byText = idx.items
+    .filter(it => (it.title + " " + (it.tags||[]).join(" ")).toLowerCase().includes(ql))
+    .map(it => ({ ...it, score: 0.5 }));
+  // Sin encoder en servidor por simplicidad; N58 ya generó embeddings de documentos
+  return byText.sort((a,b)=>b.score-a.score).slice(0,k);
+}
+
+Ruta completa: services/support-bot/src/rag/rerank.ts
+import type { Hit } from "./retriever";
+export function rerank(hits: Hit[], audience?: string) {
+  return hits.map(h => {
+    let bonus = 0;
+    if (audience && h.tags?.includes(audience)) bonus += 0.2;
+    if (h.section === "inicio") bonus += 0.1;
+    return { ...h, score: h.score + bonus };
+  }).sort((a,b)=>b.score-a.score);
+}
+
+Ruta completa: services/support-bot/src/llm/provider.ts
+import type { Hit } from "../rag/retriever";
+
+/** Interfaz de proveedor LLM. Por defecto, modo local templado (no llama a externos). */
+export async function answerLocalTemplate(q: string, hits: Hit[], ctx: any) {
+  const top = hits.slice(0,3);
+  const intro = `He encontrado información relevante en la base de conocimiento.`;
+  const body = top.map((h,i)=>`(${i+1}) ${h.title} — /help/${h.slug}`).join("\n");
+  const guidance = `Pasos sugeridos (si aplica): 1) Sigue el artículo (1); 2) Si falla, abre un ticket desde el artículo; 3) Puedo escalarte ahora si lo prefieres.`;
+  const content = `${intro}\n\n${body}\n\n${guidance}`;
+  return { content, citations: top.map((h)=>({ slug: h.slug, title: h.title })) };
+}
+
+Ruta completa: services/support-bot/src/guardrails/filters.ts
+export type GuardResult = { ok: boolean; reason?: string; safeResponse?: string };
+
+const RE_SEEDS = /(seed\s*phrase|frase\s*semilla|private\s*key|clave\s*privada)/i;
+const RE_PIIS = /(dni|número\s*de\s*tarjeta|cvv|passport|pasaporte|ssn)/i;
+
+export function guardInput(text: string): GuardResult {
+  if (RE_SEEDS.test(text)) {
+    return { ok: false, reason: "sensitive_keys", safeResponse: "Por tu seguridad, nunca compartas frases semilla o claves privadas. Puedo guiarte a recuperar acceso sin exponer datos sensibles." };
+  }
+  if (RE_PIIS.test(text)) {
+    return { ok: false, reason: "pii", safeResponse: "No compartas PII. Si necesitas verificación de identidad, iniciaré un proceso seguro." };
+  }
+  return { ok: true };
+}
+
+Ruta completa: services/support-bot/src/guardrails/tools.ts
+/** Whitelist de acciones que el bot puede SUGERIR (no ejecutar). */
+export const ALLOWED_ACTIONS = new Set([
+  "open_help_article",
+  "create_ticket",
+  "start_verification",
+  "view_status"
+]);
+export function canSuggest(action: string){ return ALLOWED_ACTIONS.has(action); }
+
+Contexto & Verificación
+Ruta completa: services/support-bot/src/context/buildContext.ts
+import { pool } from "../db";
+/** Devuelve contexto mínimo: rol, tickets abiertos, últimas acciones. */
+export async function buildContext(userId: string | null){
+  const role = "member"; // TODO: consultar a servicio de identidad/roles si aplica.
+  const openTickets = userId ? (await pool.query("select count(*)::int c from tickets where user_anon_id=$1 and status!='closed'", [userId])).rows?.[0]?.c || 0 : 0;
+  return { user: { id: userId, role }, support: { openTickets } };
+}
+
+Ruta completa: services/support-bot/src/context/verify.ts
+/** Flujos de verificación (puente con N56). Mock mínimo: generar challenge uuid y validarlo. */
+const pending = new Map<string, string>();
+export function createChallenge(userId: string){ const c = crypto.randomUUID(); pending.set(c, userId); return { challenge: c, method: "did" }; }
+export function verifyChallenge(challenge: string, userId: string){ const ok = pending.get(challenge) === userId; if (ok) pending.delete(challenge); return ok; }
+
+Cadena RAG
+Ruta completa: services/support-bot/src/rag/chain.ts
+import { search } from "./retriever";
+import { rerank } from "./rerank";
+import { answerLocalTemplate } from "../llm/provider";
+import { guardInput } from "../guardrails/filters";
+import type { Hit } from "./retriever";
+
+export type ChainResult = { content: string; citations: Array<{slug:string; title:string}>; handoff?: boolean; reason?: string };
+
+export async function runChain({ question, audience, ctx }:{
+  question: string; audience?: string; ctx: any;
+}): Promise<ChainResult> {
+  const g = guardInput(question);
+  if (!g.ok) return { content: g.safeResponse!, citations: [], handoff: false, reason: g.reason };
+
+  const hits = await search(question, 5);
+  const ranked: Hit[] = rerank(hits, audience);
+  // Si no hay resultados, recomendar handoff
+  if (!ranked.length) return {
+    content: "No encontré artículos relevantes. ¿Autorizas que te escale con Soporte humano ahora?",
+    citations: [], handoff: true, reason: "no_results"
+  };
+  return answerLocalTemplate(question, ranked, ctx);
+}
+
+Rutas HTTP
+Ruta completa: services/support-bot/src/routes/chat.ts
+import { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { pool } from "../db";
+import { runChain } from "../rag/chain";
+import { buildContext } from "../context/buildContext";
+import { m } from "../metrics";
+import { hit } from "../redis";
+
+export default async function routes(app: FastifyInstance){
+  app.post("/v1/chat", async (req, reply) => {
+    const { userId, convId, message, audience } = z.object({
+      userId: z.string().nullable().optional(),
+      convId: z.string().uuid().nullable().optional(),
+      message: z.string().min(1),
+      audience: z.string().optional()
+    }).parse(req.body);
+
+    // rate-limit
+    const rl = await hit(`rl:${userId||"anon"}`, 30);
+    if (rl > 20) return reply.code(429).send({ error: "rate_limited" });
+
+    let conv = convId;
+    if (!conv) {
+      const r = await pool.query("insert into conv(user_id) values ($1) returning id", [userId||null]);
+      conv = r.rows[0].id;
+    }
+    await pool.query("insert into msg(conv_id, role, content) values ($1,'user',$2)", [conv, message]);
+    m.msgs.inc({ role: "user" });
+
+    const ctx = await buildContext(userId||null);
+    const res = await runChain({ question: message, audience, ctx });
+
+    await pool.query("insert into msg(conv_id, role, content, citations, sensitive) values ($1,'bot',$2,$3,$4)", [conv, res.content, JSON.stringify(res.citations||[]), false]);
+    m.msgs.inc({ role: "bot" });
+
+    if (res.handoff) {
+      await pool.query("insert into handoff(conv_id, reason) values ($1,$2)", [conv, res.reason||"manual"]);
+      m.esc.inc({ reason: res.reason || "manual" });
+      await pool.query("update conv set status='handoff' where id=$1", [conv]);
+    }
+
+    reply.send({ convId: conv, reply: res.content, citations: res.citations||[], handoff: !!res.handoff });
+  });
+
+  app.post("/v1/chat/rate", async (req, reply) => {
+    const { convId, score, comment } = z.object({ convId: z.string().uuid(), score: z.number().int().min(1).max(5), comment: z.string().optional() }).parse(req.body);
+    await pool.query("insert into ratings(conv_id, score, comment) values ($1,$2,$3)", [convId, score, comment||null]);
+    if (score >= 4) { /* heurística L0 ok */  }
+    reply.send({ ok: true });
+  });
+}
+
+Ruta completa: services/support-bot/src/routes/handoff.ts
+import { FastifyInstance } from "fastify";
+import { pool } from "../db";
+import { z } from "zod";
+
+export default async function routes(app: FastifyInstance){
+  // Panel agentes: lista de conversaciones escaladas
+  app.get("/v1/handoff/pending", async (_req, reply) => {
+    const { rows } = await pool.query(`
+      select h.id as handoff_id, c.id as conv_id, c.user_id, h.reason, h.status,
+             (select content from msg where conv_id=c.id order by ts desc limit 1) last_msg
+      from handoff h join conv c on c.id=h.conv_id where h.status='pending' order by h.ts asc
+    `);
+    reply.send(rows);
+  });
+
+  app.post("/v1/handoff/accept", async (req, reply) => {
+    const { handoffId, agent } = z.object({ handoffId: z.string().uuid(), agent: z.string().email() }).parse(req.body);
+    await pool.query("update handoff set status='accepted', assigned_to=$2 where id=$1", [handoffId, agent]);
+    reply.send({ ok: true });
+  });
+
+  app.post("/v1/handoff/respond", async (req, reply) => {
+    const { convId, agent, message } = z.object({ convId: z.string().uuid(), agent: z.string().email(), message: z.string().min(1) }).parse(req.body);
+    await pool.query("insert into msg(conv_id, role, content) values ($1,'agent',$2)", [convId, message]);
+    reply.send({ ok: true });
+  });
+
+  app.post("/v1/handoff/close", async (req, reply) => {
+    const { convId } = z.object({ convId: z.string().uuid() }).parse(req.body);
+    await pool.query("update conv set status='closed' where id=$1", [convId]);
+    await pool.query("update handoff set status='resolved' where conv_id=$1 and status!='resolved'", [convId]);
+    reply.send({ ok: true });
+  });
+}
+
+Ruta completa: services/support-bot/src/routes/verify.ts
+import { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { createChallenge, verifyChallenge } from "../context/verify";
+
+export default async function routes(app: FastifyInstance){
+  app.post("/v1/verify/challenge", async (req, reply) => {
+    const { userId } = z.object({ userId: z.string() }).parse(req.body);
+    reply.send(createChallenge(userId));
+  });
+  app.post("/v1/verify/confirm", async (req, reply) => {
+    const { userId, challenge } = z.object({ userId: z.string(), challenge: z.string().uuid() }).parse(req.body);
+    const ok = verifyChallenge(challenge, userId);
+    reply.send({ ok });
+  });
+}
+
+Ruta completa: services/support-bot/src/index.ts
+import Fastify from "fastify"; import helmet from "@fastify/helmet"; import cors from "@fastify/cors";
+import pino from "pino"; import { env } from "./env"; import { setupMetrics } from "./metrics";
+import chat from "./routes/chat"; import handoff from "./routes/handoff"; import verify from "./routes/verify";
+import client from "prom-client";
+
+const app = Fastify({ logger: pino({ level: "info" }) });
+app.register(helmet); app.register(cors, { origin: true });
+
+const prom = setupMetrics();
+app.get("/metrics", async (_req, rep)=>{ rep.header("Content-Type", prom.register.contentType); return prom.register.metrics(); });
+
+app.register(chat);
+app.register(handoff);
+app.register(verify);
+
+app.get("/healthz", async()=>({ok:true}));
+app.listen({ port: env.PORT, host: "0.0.0.0" }).then(()=> app.log.info(`support-bot up :${env.PORT}`));
+
+ 
+2) Web (chat embebido + citaciones + handoff)
+apps/web/src/modules/support-bot/
+  api.ts
+  useChat.ts
+  components/
+    ChatWidget.tsx
+    ChatPanel.tsx
+    Bubble.tsx
+    Citations.tsx
+    HandoffStatus.tsx
+  pages/AgentHandoffPanel.tsx
+
+Ruta completa: apps/web/src/modules/support-bot/api.ts
+import axios from "axios";
+export const sbApi = axios.create({ baseURL: "/api/support" });
+
+export async function sendMessage(body:{ userId?:string|null, convId?:string|null, message:string, audience?:string }) {
+  const { data } = await sbApi.post("/v1/chat", body);
+  return data as { convId: string; reply: string; citations: Array<{slug:string;title:string}>; handoff: boolean };
+}
+export async function listHandoffs(){ const { data } = await sbApi.get("/v1/handoff/pending"); return data as any[]; }
+export async function acceptHandoff(handoffId:string, agent:string){ await sbApi.post("/v1/handoff/accept",{ handoffId, agent }); }
+export async function respond(convId:string, agent:string, message:string){ await sbApi.post("/v1/handoff/respond",{ convId, agent, message }); }
+export async function close(convId:string){ await sbApi.post("/v1/handoff/close",{ convId }); }
+
+Ruta completa: apps/web/src/modules/support-bot/useChat.ts
+import { useState } from "react";
+import { sendMessage } from "./api";
+export function useChat(userId: string | null) {
+  const [convId, setConvId] = useState<string|undefined>();
+  const [history, setHistory] = useState<Array<{ role:"user"|"bot", content:string, citations?:any[] }>>([]);
+  const [loading, setLoading] = useState(false);
+  async function ask(message: string) {
+    setLoading(true);
+    setHistory(h => [...h, { role:"user", content: message }]);
+    try {
+      const res = await sendMessage({ userId, convId: convId||null, message });
+      setConvId(res.convId);
+      setHistory(h => [...h, { role:"bot", content: res.reply, citations: res.citations }]);
+      return res;
+    } finally { setLoading(false); }
+  }
+  return { convId, history, ask, loading };
+}
+
+Ruta completa: apps/web/src/modules/support-bot/components/Bubble.tsx
+import React from "react";
+export default function Bubble({ role, children }:{ role:"user"|"bot"|"agent", children: React.ReactNode }) {
+  const align = role==="user" ? "flex-end" : "flex-start";
+  const bg = role==="user" ? "var(--bg-elevated)" : "var(--bg-subtle)";
+  return <div style={{ display:"flex", justifyContent: align }}>
+    <div className="card" style={{ background:bg, maxWidth: 640 }}>{children}</div>
+  </div>;
+}
+
+Ruta completa: apps/web/src/modules/support-bot/components/Citations.tsx
+import React from "react"; import { Link } from "react-router-dom";
+export default function Citations({ items }:{ items: Array<{slug:string; title:string}>|undefined }) {
+  if (!items?.length) return null;
+  return (
+    <div style={{ marginTop: 6, fontSize: 12 }}>
+      Fuentes:{" "}
+      {items.map((c,i)=>(<span key={c.slug}>
+        <Link to={`/help/${c.slug}`}>{c.title}</Link>{i<items.length-1?", ":""}
+      </span>))}
+    </div>
+  );
+}
+
+Ruta completa: apps/web/src/modules/support-bot/components/ChatPanel.tsx
+import React, { useState } from "react";
+import Bubble from "./Bubble"; import Citations from "./Citations";
+import { useChat } from "../useChat";
+
+export default function ChatPanel({ userId }:{ userId: string | null }) {
+  const { history, ask, loading } = useChat(userId);
+  const [msg, setMsg] = useState("");
+  return (
+    <div className="card" role="region" aria-label="Chat de soporte" style={{ display:"grid", gap: 8 }}>
+      <div style={{ display:"grid", gap: 8, maxHeight: 380, overflow:"auto" }}>
+        {history.map((m,i)=>(
+          <Bubble key={i} role={m.role}><div>{m.content}</div><Citations items={m.citations as any}/></Bubble>
+        ))}
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <input value={msg} onChange={(e)=>setMsg(e.target.value)} onKeyDown={(e)=>{ if (e.key==="Enter") ask(msg).then(()=>setMsg("")); }} placeholder="Escribe tu pregunta…" aria-label="Mensaje" />
+        <button className="button" disabled={loading||!msg.trim()} onClick={()=>ask(msg).then(()=>setMsg(""))}>{loading?"Enviando…":"Enviar"}</button>
+      </div>
+    </div>
+  );
+}
+
+Ruta completa: apps/web/src/modules/support-bot/components/ChatWidget.tsx
+import React, { useState } from "react";
+import ChatPanel from "./ChatPanel";
+
+export default function ChatWidget({ userId }:{ userId: string | null }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position:"fixed", right:16, bottom:16, zIndex:50 }}>
+      {open && <div style={{ width: 360, maxWidth: "90vw" }}><ChatPanel userId={userId}/></div>}
+      <button className="button" onClick={()=>setOpen(!open)} aria-expanded={open} aria-controls="support-chat">
+        {open ? "Cerrar chat" : "Ayuda"}
+      </button>
+    </div>
+  );
+}
+
+Ruta completa: apps/web/src/pages/AgentHandoffPanel.tsx
+import React, { useEffect, useState } from "react";
+import { listHandoffs, acceptHandoff, respond, close } from "@modules/support-bot/api";
+
+export default function AgentHandoffPanel({ agent }:{ agent: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [reply, setReply] = useState("");
+  async function load(){ setItems(await listHandoffs()); }
+  useEffect(()=>{ load(); }, []);
+  return (
+    <div className="container" style={{ display:"grid", gap: 12 }}>
+      <h2>Handoff pendientes</h2>
+      {items.map(i=>(
+        <div key={i.handoff_id} className="card" style={{ display:"grid", gap: 6 }}>
+          <div><strong>Conv:</strong> {i.conv_id} · <strong>Motivo:</strong> {i.reason} · <strong>Último:</strong> {i.last_msg}</div>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="button" onClick={async()=>{ await acceptHandoff(i.handoff_id, agent); await load(); }}>Aceptar</button>
+            <input placeholder="Respuesta" value={reply} onChange={e=>setReply(e.target.value)} />
+            <button className="button" onClick={async()=>{ await respond(i.conv_id, agent, reply); setReply(""); }}>Responder</button>
+            <button className="button" onClick={async()=>{ await close(i.conv_id); await load(); }}>Cerrar</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+Integración en layout web: monta <ChatWidget userId={did||null} /> en todas las pantallas; ruta protegida /agent/handoff para agentes.
+ 
+3) Móvil (React Native + Expo)
+Ruta completa: apps/mobile/src/screens/SupportChatScreen.tsx
+import React, { useState } from "react";
+import { View, Text, TextInput, Button, ScrollView } from "react-native";
+import { sendMessage } from "@mobile/modules/support-bot/api";
+
+export default function SupportChatScreen({ userId }:{ userId: string | null }) {
+  const [convId, setConvId] = useState<string|undefined>();
+  const [history, setHistory] = useState<Array<{ role:"user"|"bot", content:string }>>([]);
+  const [msg, setMsg] = useState("");
+  async function ask() {
+    setHistory(h=>[...h, { role:"user", content: msg }]); setMsg("");
+    const res = await sendMessage({ userId, convId: convId||null, message: msg });
+    setConvId(res.convId); setHistory(h=>[...h, { role:"bot", content: res.reply }]);
+  }
+  return (
+    <View style={{ flex:1, padding:12 }}>
+      <ScrollView style={{ flex:1 }}>{history.map((m,i)=><Text key={i}>{m.role==="user"?"> ":""}{m.content}</Text>)}</ScrollView>
+      <TextInput value={msg} onChangeText={setMsg} placeholder="Pregunta…" />
+      <Button title="Enviar" onPress={ask} disabled={!msg.trim()} />
+    </View>
+  );
+}
+
+ 
+4) Flujos de verificación antes de acciones sensibles
+●	Regla: Antes de sugerir reset de credenciales, revocación de claves o cambios de seguridad:
+
+1.	Bot explica el riesgo y ofrece iniciar verificación.
+
+2.	Llama POST /v1/verify/challenge → muestra challenge; el cliente firma (N56) o confirma vía canal seguro.
+
+3.	POST /v1/verify/confirm → si ok, entonces el bot recién sugiere el runbook o abre ticket L2.
+
+●	Nunca solicita ni almacena frases semilla ni PII.
+
+●	Herramientas acotadas por guardrails/tools.ts (solo sugerencias).
+
+ 
+5) Observabilidad & KPIs
+●	Métricas Prometheus:
+
+○	supportbot_messages_total{role}.
+
+○	supportbot_escalations_total{reason}.
+
+○	supportbot_resolutions_l0_total.
+
+●	Panel Grafana: CSAT (media de ratings), tasa L0 (conversaciones cerradas sin handoff / total), tiempo a primera respuesta.
+
+ 
+6) CI/CD
+Ruta completa: services/support-bot/.github/workflows/support-bot-ci.yml
+name: Support Bot CI
+on:
+  pull_request:
+    paths: ["services/support-bot/**", ".github/workflows/support-bot-ci.yml"]
+  push:
+    branches: [main]
+    paths: ["services/support-bot/**"]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: gnew }
+        ports: ["5432:5432"]
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install
+        working-directory: services/support-bot
+        run: npm ci
+      - name: Migrate
+        working-directory: services/support-bot
+        env: { DATABASE_URL: postgres://postgres:postgres@localhost:5432/gnew }
+        run: npm run migrate
+      - name: Test
+        working-directory: services/support-bot
+        run: npm test
+      - name: Build
+        working-directory: services/support-bot
+        run: npm run build
+
+Ruta completa: services/support-bot/Dockerfile
+FROM node:20-alpine as base
+WORKDIR /app
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+RUN npm ci --ignore-scripts
+COPY tsconfig.json ./tsconfig.json
+COPY src ./src
+RUN npm run build
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/dist ./dist
+EXPOSE 8095
+CMD ["node","dist/index.js"]
+
+ 
+7) Pruebas / DoD
+●	CSAT ≥ 4/5 (promedio ratings en 4 semanas).
+
+●	Tasa de resolución L0 ≥ Y% (definir Y con Soporte/Data).
+
+●	Citas obligatorias en ≥ 95% de respuestas no triviales (top 3 hits).
+
+●	Guardrails activos: 0 incidentes por solicitud de semilla/PII; tests regex y casos adversariales.
+
+●	Verificación: flujos sensibles bloquean sugerencias hasta verify.ok.
+
+●	Latencia: p95 /v1/chat < 400 ms (sin streaming).
+
+●	Observabilidad: métricas expuestas y panel Grafana operativo.
+
+●	Demo reproducible con KB de N58 y compose local.
+
+ 
+8) Riesgos & Controles
+●	Alucinaciones → citaciones obligatorias, respuesta plantillada si score bajo, fallback humano (handoff).
+
+●	Privacidad → contexto mínimo (DID, estado), no PII; logs seudónimos.
+
+●	Escalado tardío → umbral de confianza + botones “hablar con humano”.
+
+●	Abuso/spam → rate limit Redis, bloqueo tras N errores.
+
+●	Acciones peligrosas → verificación previa y solo sugerencias (no ejecución).
+
+ 
+9) Pasos clave
+1.	Conectar KB (N58) → montar HELP_INDEX_PATH en el servicio.
+
+2.	Definir macros de Soporte y motivos de handoff (catálogo).
+
+3.	Afinar umbrales de confianza/score para L0 vs handoff.
+
+4.	Integrar verificación (puente N56) para acciones sensibles.
+
+5.	Instrumentar CSAT (encuesta post chat) y tasa L0.
+
+6.	Entrenar/ajustar prompts (si se integra LLM externo en el futuro) manteniendo guardrails.
+
+ 
+10) Notas de integración con N51–N58
+●	N51 Web: renderizar <ChatWidget/> global.
+
+●	N52 Móvil: SupportChatScreen con mismo API.
+
+●	N53 Onboarding / N54 Learning: bot sugiere artículos/ tutoriales pertinentes y abre ticket si falla.
+
+●	N55 Gamificación: opcional, dar puntos por resolver L0 sin escalar (evento help_resolved).
+
+●	N56 DID: userId = sub (DID) en chat; verificación reforzada cuando aplique.
+
+●	N57 Personalización: pasar audience para re rank (novice|dev|validator|creator).
+
+●	N58 Help Center: RAG se alimenta de help-index.json, citando slugs.
+
+ 
+¿Te añado un docker compose con support-bot + helpdesk + postgres + redis y un dashboard Grafana JSON con CSAT/L0/latencia para importar?
+preograma a nivel de detalle y entrega para GNEW N60 6.10 Encuestas de satisfacción (Prompt 60) Objetivo: Cerrar el loop de feedback. Roles: Producto, Data, Frontend. Stack: Microsurveys in-app, NPS, análisis de texto. Entregables: Survey builder, dashboards, webhooks. Pasos: Segmentación por evento (post-onboarding, post-votación). Programa de mejoras priorizadas por impacto. Pruebas / DoD: Tasa de respuesta ≥ X%, backlog alimentado. Riesgos & Controles: Fatiga → frecuencia adaptativa.
+ChatGPT Plus
+Aquí tienes el programa a nivel de detalle y entrega para GNEW N60 – 6.10 Encuestas de satisfacción:
+ 
+📌 Objetivo
+Cerrar el loop de feedback de los usuarios, midiendo satisfacción, NPS y comentarios textuales, y priorizando mejoras según impacto.
+ 
+👥 Roles responsables
+●	Producto: Definir momentos de encuesta, preguntas y criterios de éxito.
+
+●	Data: Análisis cuantitativo/cualitativo, NPS, clustering de texto.
+
+●	Frontend: Implementación de microsurveys in-app accesibles y responsivos.
+
+ 
+🛠️ Stack & convenciones
+●	Microsurveys in-app (React hooks + UI de packages/ui).
+
+●	NPS & CSAT con escalas configurables.
+
+●	Análisis de texto: embeddings (OpenAI/transformer libre) + tagging automático.
+
+●	Dashboards: Grafana/Metabase con métricas y segmentación.
+
+●	Webhooks: eventos de respuesta hacia services/feedback para procesar en tiempo real.
+
+●	A11y/i18n: accesibilidad WCAG AA y soporte multilenguaje desde el inicio.
+
+ 
+📦 Entregables
+1.	Survey Builder UI:
+
+○	Componente para definir encuestas (preguntas, tipo, escala).
+
+○	Guardado en services/feedback.
+
+2.	Microsurveys in-app:
+
+○	Hook useSurveyTrigger(event) que lanza encuesta al detectar post-onboarding, post-votación, etc.
+
+○	Persistencia de estado para no repetir encuestas al mismo usuario en poco tiempo.
+
+3.	Dashboards:
+
+○	Tasa de respuesta por evento.
+
+○	Distribución NPS/CSAT.
+
+○	Wordcloud + temas emergentes en texto.
+
+○	Tendencias temporales.
+
+4.	Webhooks:
+
+○	Endpoint /feedback/response para que terceros reciban notificaciones (CRM, Slack, etc.).
+
+ 
+🔑 Pasos clave
+1.	Diseño de esquema de encuestas (Survey con id, trigger, preguntas, frecuencia).
+
+2.	Segmentación: definir reglas post-evento (onboarding completado, voto emitido).
+
+3.	Integración UI en packages/ui (modal ligero, ≤3 preguntas, opción "skip").
+
+4.	Backend:
+
+○	Guardar respuestas en feedback_responses.
+
+○	Procesar NPS (promotores – detractores).
+
+○	Análisis de texto con embeddings + clustering semanal.
+
+5.	Programa de mejoras: generar backlog automático con issues priorizados por impacto y recurrencia.
+
+6.	Dashboards expuestos en Grafana/Metabase con alertas (ej. caída repentina de NPS).
+
+ 
+✅ Pruebas / DoD
+●	Tasa de respuesta ≥ 30% en pilotos iniciales.
+
+●	Todas las respuestas llegan a feedback_responses y se reflejan en dashboards.
+
+●	NPS calculado correctamente en distintos segmentos.
+
+●	Backlog de mejoras actualizado automáticamente cada semana.
+
+●	Encuestas cumplen WCAG AA (accesibilidad validada con axe-core).
+
+●	i18n validado en 2 idiomas mínimo (EN/ES).
+
+ 
+⚠️ Riesgos & Controles
+●	Fatiga de usuarios → algoritmo de frecuencia adaptativa (máx. 1 encuesta/30 días por usuario).
+
+●	Sesgo de muestra → segmentación equilibrada y muestreo aleatorio parcial.
+
+●	Privacidad/GDPR → anonimizar respuestas, consentimiento explícito, seudonimización en dashboards.
+
+ 
+¿Quieres que te prepare también el código inicial del SurveyBuilder y del hook useSurveyTrigger dentro de packages/ui, listo para integrarse con tu monorepo GNEW?
+Tú dijiste:
+crea los programas para ello
+ChatGPT Plus
+Pensó durante 11s

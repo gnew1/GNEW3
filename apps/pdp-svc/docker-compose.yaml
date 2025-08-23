@@ -1,0 +1,84 @@
+version: "3.9" 
+services: 
+  pdp: 
+    build: . 
+    ports: [ "8090:8090" ] 
+    environment: 
+      PDP_API: http://pdp:8090 
+      OPA_URL: http://opa:8181 
+      POLICY_REGISTRY_URL: http://registry:8089 
+      POLICY_VERSION: v1.0.0 
+  opa: 
+    image: openpolicyagent/opa:0.66.0-rootless 
+    command: ["run","--server","--config-file=/config/config.yaml"] 
+    volumes: 
+      - ./opa/config.yaml:/config/config.yaml:ro 
+  registry: 
+    build: ../policy-registry-svc 
+    ports: [ "8089:8089" ] 
+    environment: 
+      BUNDLES_DIR: /bundles 
+    volumes: 
+      - ../../bundles:/bundles:ro 
+ 
+ 
+Observabilidad y evidencia 
+● Decision logs OPA → stdout/HTTP (configurable en config.yaml). 
+ 
+● PDP traza (traceMiddleware) con atributos: policy_path, allow, reason, sin PII. 
+ 
+● Auditoría: opcional, hash del input/decision en ScreeningRun/ConsentEvent si 
+aplica a procesos críticos (p. ej. pagos > X). 
+ 
+ 
+Playbooks 
+1. Desarrollo de políticas 
+ 
+○ Editar rego + data.json. 
+ 
+○ opa test policies/n135 -v → todo verde. 
+ 
+○ PR con revisión de Seguridad. 
+ 
+2. Versionado 
+ 
+○ Crear tag v1.1.0 → CI publica bundles n135-access y n135-payments. 
+○ Actualizar POLICY_VERSION en despliegue (o usar discovery bundle para 
+auto‑update). 
+3. Rollback 
+○ Cambiar POLICY_VERSION al tag anterior. 
+○ Verificar /healthz del PDP y métricas de tasa de decisión. 
+4. Compatibilidad 
+○ Contratos (JSON Schema) viven en policy-contracts. Cualquier cambio 
+breaking ⇒ nueva major. 
+DoD (Definition of Done) 
+● OPA en producción como sidecar (o daemon) y PDP sirviendo 
+/v1/policy/access:decide y /v1/policy/payments:decide. 
+● Tests de políticas (opa test) cubren caminos de allow/deny/obligations (mín. 80% 
+reglas). 
+● Versionado SemVer: bundles construidos en releases, consumidos por OPA via 
+config.yaml. 
+● PEP activos en api-gw y payments-svc bloquean según decisión OPA. 
+● Listas y hechos (sanciones/PEP) alimentan el input desde servicios N134; no 
+llamadas externas desde Rego en runtime. 
+● Logs de decisiones habilitados y sin PII; trazabilidad disponible. 
+Variables de entorno 
+PDP_API=http://pdp-svc.internal 
+OPA_URL=http://localhost:8181 
+POLICY_REGISTRY_URL=https://policy-registry.internal 
+POLICY_VERSION=v1.0.0 
+Si quieres, en la siguiente iteración agrego discovery bundles (actualización dinámica por 
+etiqueta), pruebas de rendimiento de decisiones (P95 < 5 ms en OPA local) y un panel de 
+métricas (decisiones/seg, ratio allow/deny, razones top). 
+Tú dijiste: 
+programa a nivel de detalle para gnew N136 14.6 Motor de jurisdicción (Prompt 136) Objetivo: 
+Reglas por país (impuestos, KYC, límites). Roles: Legal, Back. DoD: cobertura de países 
+objetivo. 
+ChatGPT Plus 
+Pensó durante 1m 6s 
+/apps/jurisdiction-svc — GNEW N136 · 14.6 Motor de jurisdicción (impuestos, KYC, límites; 
+cobertura por país) 
+A continuación tienes el programa a nivel de detalle con arquitectura, DSL en YAML, 
+esquemas, API y código listo para pegar (TypeScript/Prisma/YAML/JSON), tests de 
+políticas, versionado y CI/CD. Coherente con N130–N135 (hashes, anclaje, OpenTelemetry, 
+OPA/PEP, seudonimización). 

@@ -1,0 +1,21 @@
+
+methods {
+    vote(address voter, bytes32 proposalId, bool support);
+    proposalPassed(bytes32 proposalId) returns bool;
+}
+
+invariants {
+    // No votos sin poder
+    noVoteWithoutPower:
+        forall (address voter, bytes32 prop in all) {
+            pre(votingPower[voter] == 0) => (votesFor[prop] + votesAgainst[prop] == votesFor[prop] + votesAgainst[prop]);
+        }
+
+    // Votos no negativos
+    nonNegativeVotes:
+        forall (bytes32 prop in all) {
+            votesFor[prop] >= 0 && votesAgainst[prop] >= 0
+        }
+}
+
+

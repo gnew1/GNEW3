@@ -1,0 +1,49 @@
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8"/>
+    <title>GNEW · Panel de Cobros</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <style>
+      body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:24px}
+      .row{display:flex;gap:16px;flex-wrap:wrap}
+      .card{border:1px solid #ddd;border-radius:12px;padding:16px;flex:1 1 360px}
+      input,button{padding:8px;border-radius:8px;border:1px solid #ccc}
+      button{background:#111;color:#fff;border:0}
+      table{width:100%;border-collapse:collapse}
+      th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+      code{background:#f5f5f8;padding:2px 6px;border-radius:6px}
+    </style>
+  </head>
+  <body>
+    <h2>Panel de Cobros</h2>
+    <div class="row">
+      <div class="card">
+        <h3>Métricas</h3>
+        <button onclick="loadMetrics()">Actualizar</button>
+        <pre id="metrics"></pre>
+      </div>
+      <div class="card">
+        <h3>Forzar cobro</h3>
+        <input id="subId" placeholder="subId" />
+        <button onclick="force()">Cobrar</button>
+        <pre id="out"></pre>
+      </div>
+    </div>
+    <script>
+      const base = location.origin;
+      async function loadMetrics(){
+        const r = await fetch(base + "/metrics"); document.getElementById("metrics").textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      async function force(){
+        const id = document.getElementById("subId").value.trim();
+        const r = await fetch(base + "/charge/" + id, { method: "POST" });
+        document.getElementById("out").textContent = JSON.stringify(await r.json(), null, 2);
+      }
+      loadMetrics();
+    </script>
+  </body>
+</html>
+
+

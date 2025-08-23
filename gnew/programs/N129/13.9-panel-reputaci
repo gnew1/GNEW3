@@ -1,0 +1,11 @@
+ on-personal.md 
+N129 — 13.9 Panel de reputación personal (GNEW) 
+Objetivo: Transparencia y explicación del score (N124), con herramientas de corrección de 
+errores y appeals. 
+Roles: Front, Data. 
+DoD: 
+● Explicación legible: qué factores suman/restan, decay temporal, y multiplicadores 
+anti‑gaming. 
+● Verificación: prueba Merkle (N124) mostrada y validada localmente. 
+● Appeal con estados (recibido→en revisión→resuelto), adjuntos y trazabilidad. 
+● Accesibilidad y UX sin fricción (mobile/desktop). 

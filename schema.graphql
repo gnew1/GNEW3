@@ -1,0 +1,21 @@
+# 
+⚠
+ Ajusta network/addresses según tu despliegue 
+(ethereum/goerli/gnosis/etc.) 
+dataSources: 
+  - kind: ethereum 
+    name: GnosisSafeTreasury 
+    network: gnosis 
+    source: 
+      address: "0xSAFE_TREASURY_ADDRESS" # Safe (Operativo) 
+      abi: GnosisSafe 
+      startBlock: 0 
+    mapping: 
+      kind: ethereum/events 
+      apiVersion: 0.0.7 
+      language: wasm/assemblyscript 
+      entities: 
+        - Movement 
+        - Safe 
+      abis: 
+        - name: GnosisSafe 

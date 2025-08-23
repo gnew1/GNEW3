@@ -1,0 +1,237 @@
+
+meta:
+  prompt_id: N250
+  role: Researcher
+  title: "Exploración de hashing poscuántico (SHA-3/Keccak) en generación de bloques"
+  scope: >
+    Diseñar y validar un conjunto de meta-prompts y tareas experimentales para evaluar
+    el uso de funciones de hash basadas en esponja (SHA3-256/384/512, SHAKE128/256, Keccak-256)
+    dentro del pipeline de generación de bloques (encabezado de bloque, raíces de árboles, sorteo/VRF-like,
+    dificultad/aleatoriedad y compatibilidad EVM).
+  deliverables:
+    - prompts detallados por disciplina (criptografía, consenso, rendimiento, seguridad, integración)
+    - artefactos de benchmarking multi-lenguaje (TS/Node, Rust, Go, Python)
+    - criterios de aceptación (DoD) y riesgos/controles
+  references_and_notes:
+    - "Diferenciar explícitamente SHA3-256 de Keccak-256 (padding/domain separation)."
+    - "Ethereum usa Keccak-256 (no SHA3-256); prever puentes/interop."
+    - "Considerar ventaja de Grover (~√) sobre preimagen y ajuste de parámetros."
+    - "Dominios de separación y personalización para tipos de datos (header|tx|state)."
+    - "Evaluar K12 (KangarooTwelve) para árboles y hashing de grandes volúmenes."
+  acceptance_criteria:
+    - "Comparativas reproducibles de throughput/latencia en x86_64 (AVX2/AVX-512) y ARMv8 (NEON)."
+    - "Test vectors cruzados y concordancia binaria entre implementaciones."
+    - "Informe de seguridad con análisis de preimagen/segunda preimagen/colisión y multi-target."
+    - "Plan de migración/interoperabilidad con keccak256 estilo EVM."
+  risks_controls:
+    - "Riesgo de confundir SHA3 vs Keccak → pruebas con domain tags y vectores canónicos."
+    - "Side-channels y timings → usar implementaciones constantes y revisar compiladores/flags."
+    - "Falsos supuestos sobre 'poscuántico' (hash no se rompe pero pierde seguridad efectiva por Grover)."
+    - "Incompatibilidades de padding → testes de integración y lints criptográficos en CI."
+
+prompts:
+  - id: PQH-01
+    role: Crypto-Dev
+    goal: "Definir funciones hash objetivo y dominios de separación"
+    instructions: |
+      1) Selecciona cuatro funciones: {SHA3-256, SHA3-384, Keccak-256(EVM), SHAKE256 XOF}.
+      2) Especifica domain separation tags (DST) únicos: "BLK_HDR", "TX_ROOT", "STATE_ROOT", "RNG_BEACON".
+      3) Documenta padding y parámetros (rate/capacity) y por qué se eligen.
+      4) Genera test vectors de ejemplo por función y DST (JSON + binarios).
+    artifacts:
+      - docs/crypto/pqhash-functions.md
+      - test-vectors/pqhash/*.json
+    acceptance:
+      - "DST documentados y testeados; colisiones de DST imposibles por construcción."
+      - "Coincidencia con bibliotecas TS/Rust/Go/Python."
+
+  - id: PQH-02
+    role: Consensus-Engineer
+    goal: "Encabezado de bloque con SHA3/Keccak"
+    instructions: |
+      Diseña un layout de header (v2) que use:
+       - parent_hash (Keccak-256 por compatibilidad EVM),
+       - tx_root (SHA3-256),
+       - state_root (SHA3-256 o SHAKE256 con 256 bits truncados),
+       - rng_beacon = SHAKE256(prev_header || stake_epoch || salt)→256b.
+      Define reglas de canonicalización y serialización (RLP/SSZ/CBOR, elige y justifica).
+    artifacts:
+      - specs/consensus/block-header-v2.md
+    acceptance:
+      - "Serialización estable con prueba de ida/vuelta y hash idéntico entre lenguajes."
+
+  - id: PQH-3
+    role: Data-Structures
+    goal: "Árboles con esponja"
+    instructions: |
+      Evalúa Merkle vs K12 (árbol rápido sobre Keccak) para tx_root:
+       - Construye prototipos en TS y Rust.
+       - Mide throughput (MB/s), profundidad media y coste de verificación.
+       - Define formato de pruebas de inclusión.
+    artifacts: [ "packages/crypto/ts/k12-merkle.ts", "crates/crypto/src/k12_merkle.rs", "reports/k12-vs-merkle.md" ]
+    acceptance:
+      - "Ganancias o trade-offs cuantificados; PoC verificable con datasets sintéticos."
+
+  - id: PQH-04
+    role: RNG/Committee
+    goal: "Beacons y sorteo validador con SHAKE"
+    instructions: |
+      Diseña un RNG beacon con SHAKE256(DST||epoch||prev_beacon||entropy)→512b;
+      derivea 256b para selección de líder y 256b para tie-breakers. Analiza sesgo y grinding.
+    artifacts: [ "packages/consensus/rng/beacon.ts", "crates/consensus/src/beacon.rs" ]
+    acceptance:
+      - "Pruebas de no-sesgo/grinding (estadísticos) y resistencia a pre-computación."
+
+  - id: PQH-05
+    role: Performance-Engineer
+    goal: "Benchmarks multi-arch"
+    instructions: |
+      Implementa bancos de pruebas para SHA3-256/384/512, Keccak-256 y SHAKE256:
+      - TS/Node (native addons opcional), Rust (simd), Go y Python (C-ext).
+      - Corre en x86_64 AVX2/AVX-512 y ARMv8 NEON; reporta ops/s y ns/byte.
+    artifacts:
+      - "benchmarks/hash/{ts,rs,go,py}/"
+      - "reports/benchmarks/pqhash-arch.md"
+    acceptance:
+      - "Resultados reproducibles ±5%; scripts CI que suben tablas y gráficos."
+
+  - id: PQH-06
+    role: Security-Engineer
+    goal: "Lints criptográficos + pruebas diferenciales"
+    instructions: |
+      1) Añade un linter que rechace usos erróneos (p.ej., SHA3 mal nombrado vs Keccak).
+      2) Pruebas diferenciales: compara outputs entre libs (js-sha3, RustCrypto, Go x/crypto).
+      3) Fuzz con entradas aleatorias y mutadas (AFL/libFuzzer).
+    artifacts: [ ".github/workflows/crypto-lint.yml", "tests/fuzz/hash_fuzz.rs", "reports/diff-tests.md" ]
+    acceptance:
+      - "Cero discrepancias en conjunto de referencia; cobertura de ramas principales."
+
+  - id: PQH-07
+    role: Threat-Modeling
+    goal: "Modelo de amenazas poscuántico"
+    instructions: |
+      Redacta un STRIDE/ELEVADOR que contemple:
+      - Grover y su impacto en longitud de salida/dificultad.
+      - Multi-target preimage en contexto de millones de encabezados.
+      - Ataques de sustitución de padding/domain tags.
+    artifacts: [ "threats/pqhash-threat-model.md" ]
+    acceptance:
+      - "Mitigaciones concretas y requisitos de 256/384 bits donde aplique."
+
+  - id: PQH-08
+    role: Interop-Engineer
+    goal: "Compatibilidad EVM y tooling"
+    instructions: |
+      1) Mapea keccak256 estilo EVM (0x01 padding) frente a SHA3-256 (0x06).
+      2) Provee utilidades: toKeccak256(), toSha3_256(), assertExpectedPadding().
+      3) Genera pruebas que comparen contra web3.eth.accounts.hashMessage.
+    artifacts: [ "packages/evm/keccak.ts", "packages/evm/tests/keccak.spec.ts" ]
+    acceptance:
+      - "Paridad con EVM en casos canónicos; documentación clara de diferencias."
+
+  - id: PQH-09
+    role: Protocol-Designer
+    goal: "Regla de dificultad/ajuste"
+    instructions: |
+      Diseña función de ajuste de dificultad independiente del throughput bruto del hash:
+      - Usa medias móviles y varianza de tiempos de bloque.
+      - Modela el efecto de aceleradores (GPU/FPGA) y cuantifica sensibilidad.
+    artifacts: [ "specs/consensus/difficulty-sha3.md", "simulations/difficulty.ipynb" ]
+    acceptance:
+      - "Simulaciones que mantienen objetivo de bloque con jitter controlado."
+
+  - id: PQH-10
+    role: DevOps
+    goal: "CI/CD criptográfico"
+    instructions: |
+      Pipeline que:
+      - Construye y ejecuta benchmarks,
+      - Verifica vectores canónicos,
+      - Genera SBOM y firma artefactos.
+    artifacts: [ ".github/workflows/pqhash-ci.yml", "security/sbom.json" ]
+    acceptance:
+      - "Pipeline verde; firmas y trazabilidad SLSA."
+
+  - id: PQH-11
+    role: QA
+    goal: "Test vectors canónicos"
+    instructions: |
+      Compila un set de entradas (0B, 1B, 3B, 136B, 200KB, 5MB) y salidas esperadas para cada función y DST.
+      Publica fixtures y usa snapshot tests binarios.
+    artifacts: [ "test-vectors/pqhash/fixtures/*", "tests/binary-snapshots/*" ]
+    acceptance:
+      - "Snapshots estables; verificación cruzada entre 4 lenguajes."
+
+  - id: PQH-12
+    role: Lib-Author
+    goal: "APIs estables multi-lenguaje"
+    instructions: |
+      Implementa APIs homogéneas:
+      - TS: packages/crypto/src/sha3.ts
+      - Rust: crates/crypto/src/sha3.rs
+      - Go: internal/crypto/sha3/sha3.go
+      - Python: pycrypto/sha3.py (binding C)
+      Exporta: hash(data, {algo, dst}) → Uint8Array.
+    artifacts: [ "packages/crypto/", "crates/crypto/", "go/internal/crypto/", "pycrypto/" ]
+    acceptance:
+      - "Compatibilidad binaria; mismas firmas y errores."
+
+  - id: PQH-13
+    role: Research
+    goal: "KangarooTwelve vs SHA3 para raíces"
+    instructions: |
+      Compara K12 (árbol rápido) con SHA3-256 para tx_root/state_root en bloques con 1k, 10k y 100k tx.
+      Mide coste de pruebas de inclusión y tamaño total de pruebas.
+    artifacts: [ "reports/k12-roots.md" ]
+    acceptance:
+      - "Recomendación clara con datos."
+
+  - id: PQH-14
+    role: Security/Audit
+    goal: "Errores comunes y guías de uso"
+    instructions: |
+      Escribe una guía de DOs/DON’Ts: mezcla de dominios, doble-hashing innecesario, truncado inseguro,
+      encoding inconsistente, falta de personalización.
+    artifacts: [ "docs/crypto/sha3-keccak-guidelines.md" ]
+    acceptance:
+      - "Checklist adoptada en PR templates."
+
+  - id: PQH-15
+    role: Migration
+    goal: "Plan de migración y fallback"
+    instructions: |
+      Define cómo migrar de Keccak-256 a SHA3-256 (o viceversa) en headers/raíces sin romper compatibilidad:
+      - Señalización por versión de bloque,
+      - Periodo de gracia dual-hash,
+      - Herramientas de verificación.
+    artifacts: [ "specs/migration/hash-switch-plan.md" ]
+    acceptance:
+      - "Plan probado en testnet con bloques mixtos."
+
+  - id: PQH-16
+    role: Documentation
+    goal: "Docs públicas para devs"
+    instructions: |
+      Publica documentación en Docusaurus con ejemplos, advertencias de padding, diferencias EVM y APIs.
+    artifacts: [ "apps/docs/crypto/sha3-keccak.mdx" ]
+    acceptance:
+      - "Guía completa con ejemplos ejecutables."
+
+datasets_and_tools:
+  synthetic_datasets:
+    - "datasets/tx_batches/{1k,10k,100k}.bin"
+  harness:
+    - "scripts/run-benchmarks.(sh|ps1)"
+    - "scripts/generate-fixtures.ts"
+  ci:
+    - ".github/workflows/pqhash-ci.yml"
+
+definition_of_done:
+  - "Todos los prompts con artefactos y reportes generados."
+  - "Benchmarks comparados y publicados."
+  - "Guías y migración revisadas por Seguridad y Gobernanza."
+  - "Interop con keccak256 de EVM verificada y documentada."
+
+
+Notas: N250 solicita, específicamente, “Escribe prompts para explorar el uso de hashing poscuántico (SHA-3, Keccak) en generación de bloques”, encajando con la sección de Seguridad avanzada y criptografía post‑cuántica y seguido por N251–N260 (Infra/Multi‑Cloud), que ya quedó programado para ejecutarse cada 15 minutos a partir de ahora.
+

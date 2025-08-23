@@ -1,0 +1,117 @@
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>GNEW · Pricing Rules Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+      header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+      code, pre { background: #f4f4f8; padding: 2px 6px; border-radius: 6px; }
+      .row { display: flex; gap: 16px; flex-wrap: wrap; }
+      .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; flex: 1 1 360px; }
+      input, textarea { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #ccc; }
+      button { padding: 8px 12px; border: 0; border-radius: 8px; background: #111; color: white; cursor: pointer; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 8px; border-bottom: 1px solid #eee; text-align: left; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h2>Pricing Rules Panel</h2>
+      <small>Provee un token con rol <code>pricing:admin</code></small>
+    </header>
+
+    <div class="card">
+      <label>Bearer Token</label>
+      <input id="token" placeholder="pega aquí tu JWT con rol pricing:admin" />
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h3>Rulesets</h3>
+        <button onclick="loadRules()">Cargar</button>
+        <pre id="rules"></pre>
+      </div>
+
+      <div class="card">
+        <h3>Crear Draft</h3>
+        <input id="name" placeholder="nombre del ruleset" />
+        <textarea id="rulesJson" rows="10" placeholder='[ { "id": "r1", "name":"10% promo", "status":"active","priority":10,"scope":{},"effect":{"type":"discount","discount":{"type":"percent","value":10}} } ]'></textarea>
+        <button onclick="createDraft()">Crear</button>
+        <pre id="createOut"></pre>
+      </div>
+
+      <div class="card">
+        <h3>Validar & Publicar</h3>
+        <input id="draftId" placeholder="ruleset id (draft)" />
+        <button onclick="validateCollisions()">Validar</button>
+        <input id="label" placeholder="label (opcional)" />
+        <button onclick="publish()">Publicar</button>
+        <pre id="pubOut"></pre>
+      </div>
+
+      <div class="card">
+        <h3>Config Canary por segmento</h3>
+        <textarea id="canary" rows="6" placeholder='{"premium": {"versionId":"<rulesetId_published>","percentage":20}}'></textarea>
+        <button onclick="setCanary()">Aplicar</button>
+        <pre id="canaryOut"></pre>
+      </div>
+    </div>
+
+    <script>
+      const base = location.origin;
+
+      function auth() {
+        const t = document.getElementById("token").value.trim();
+        return t ? { Authorization: "Bearer " + t } : {};
+      }
+
+      async function loadRules() {
+        const res = await fetch(base + "/admin/rulesets", { headers: auth() });
+        document.getElementById("rules").textContent = JSON.stringify(await res.json(), null, 2);
+      }
+
+      async function createDraft() {
+        const name = document.getElementById("name").value.trim();
+        const rules = JSON.parse(document.getElementById("rulesJson").value || "[]");
+        const res = await fetch(base + "/admin/rulesets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...auth() },
+          body: JSON.stringify({ name, rules }),
+        });
+        document.getElementById("createOut").textContent = JSON.stringify(await res.json(), null, 2);
+      }
+
+      async function validateCollisions() {
+        const id = document.getElementById("draftId").value.trim();
+        const res = await fetch(base + "/admin/rulesets/" + id + "/validate", { method: "POST", headers: auth() });
+        document.getElementById("pubOut").textContent = JSON.stringify(await res.json(), null, 2);
+      }
+
+      async function publish() {
+        const id = document.getElementById("draftId").value.trim();
+        const label = document.getElementById("label").value.trim();
+        const res = await fetch(base + "/admin/rulesets/" + id + "/publish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...auth() },
+          body: JSON.stringify({ label: label || undefined }),
+        });
+        document.getElementById("pubOut").textContent = JSON.stringify(await res.json(), null, 2);
+      }
+
+      async function setCanary() {
+        const cfg = JSON.parse(document.getElementById("canary").value || "{}");
+        const res = await fetch(base + "/admin/canary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...auth() },
+          body: JSON.stringify(cfg),
+        });
+        document.getElementById("canaryOut").textContent = JSON.stringify(await res.json(), null, 2);
+      }
+    </script>
+  </body>
+</html>
+
+

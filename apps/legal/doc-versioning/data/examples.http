@@ -1,0 +1,43 @@
+
+### Crear documento inicial (texto directo)
+POST http://localhost:8098/documents
+Content-Type: application/json
+
+{
+  "title": "Política de Privacidad",
+  "type": "policy",
+  "content": { "type": "text", "data": "Versión 1 de la política.\nIncluye secciones A, B y C." },
+  "mime": "text/markdown"
+}
+
+### Añadir versión con cambios
+POST http://localhost:8098/documents/{{docId}}/versions
+Content-Type: application/json
+
+{
+  "content": { "type": "text", "data": "Versión 2 de la política.\nSección B actualizada.\nNueva sección D." },
+  "mime": "text/markdown"
+}
+
+### Diff entre v2 y v1
+GET http://localhost:8098/documents/{{docId}}/versions/2/diff
+
+### Adjuntar firma Ed25519 sobre el contenido
+POST http://localhost:8098/documents/{{docId}}/versions/2/signatures
+Content-Type: application/json
+
+{
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n",
+  "scheme": "ed25519",
+  "signatureBase64": "MEUCIQ...", 
+  "over": "content",
+  "signer": "legal@example.com"
+}
+
+### Registrar on-chain (requiere env CHAIN_RPC_URL, REGISTRY_ADDRESS, REGISTRY_PRIVATE_KEY)
+POST http://localhost:8098/documents/{{docId}}/versions/2/register
+
+### Verificar integridad contra on-chain
+GET http://localhost:8098/verify/{{docId}}/2
+
+

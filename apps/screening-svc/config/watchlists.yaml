@@ -1,0 +1,47 @@
+version: v1-2025-08 
+refresh_every_minutes: 240 
+sources: 
+  - key: ofac_sdn 
+    kind: http 
+    format: csv 
+    url: https://www.treasury.gov/ofac/downloads/sdn.csv 
+    etag_header: ETag 
+    hash: sha256 
+    entity_type_hint: person_org_wallet 
+  - key: eu_consolidated 
+    kind: http 
+    format: xml 
+    url: 
+https://webgate.ec.europa.eu/europeaid/fsd/fsf/public/files/xmlFullSan
+ ctionsList_1_1/content?token=... 
+    hash: sha256 
+  - key: un_consolidated 
+    kind: http 
+    format: xml 
+    url: https://scsanctions.un.org/resources/xml/en/consolidated.xml 
+    hash: sha256 
+  - key: uk_hmt 
+    kind: http 
+    format: csv 
+    url: 
+https://ofsistorage.blob.core.windows.net/publishlive/ConList.csv 
+    hash: sha256 
+  - key: seco_ch 
+    kind: http 
+    format: csv 
+    url: https://seco.admin.ch/.../sanctions.csv 
+    hash: sha256 
+  - key: pep_open 
+    kind: http 
+    format: json 
+    url: https://example.org/pep.json # sustituir por catálogo 
+interno/comercial 
+    hash: sha256 
+  - key: ofac_wallets 
+    kind: http 
+    format: csv 
+    url: https://www.treasury.gov/ofac/downloads/additional/crypto.csv 
+    hash: sha256 
+ 
+ 
+Esquema de datos (Prisma) 

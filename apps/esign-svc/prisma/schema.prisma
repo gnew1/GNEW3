@@ -1,0 +1,101 @@
+generator client { provider = "prisma-client-js" } 
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") } 
+model LegalTemplate { 
+id            
+String   @id @default(cuid()) 
+key           
+title         
+String   @unique   // ej. msa, dpa, nda_bilateral 
+String 
+jurisdiction  String?  // ES|EU|US|... 
+purpose       
+String?  // MSA|DPA|Terms|PO 
+currentVer    
+isActive      
+createdAt     
+updatedAt     
+versions      
+} 
+String 
+Boolean  @default(true) 
+DateTime @default(now()) 
+DateTime @updatedAt 
+TemplateVersion[] 
+model TemplateVersion { 
+id            
+String   @id @default(cuid()) 
+  templateId    String 
+  semver        String   // v1.2.3 
+  checksum      String   // sha256 de metadata+html 
+  fieldsSchema  Json     // JSON Schema de variables requeridas 
+  html          String   // HTML base (con anchors de firma) 
+  locale        String   // es-ES, en-GB... 
+  effectiveAt   DateTime @default(now()) 
+  createdAt     DateTime @default(now()) 
+  LegalTemplate LegalTemplate @relation(fields: [templateId], 
+references: [id]) 
+  @@unique([templateId, semver, locale]) 
+} 
+ 
+model Envelope { 
+  id            String   @id @default(cuid()) 
+  templateKey   String 
+  templateVer   String 
+  locale        String 
+  status        String   // 
+draft|ready|sent|partially_signed|completed|voided|expired 
+  data          Json     // payload de merge (sin PII sensible: 
+seudónimos) 
+  createdBy     String   // subjectId del creador 
+  pdfPath       String? 
+  pdfSha256     String? 
+  certPath      String?  // certificado de finalización PDF 
+  manifest      Json? 
+  prevHash      String? 
+  eventHash     String   @unique 
+  batchId       String? 
+  txHash        String? 
+  createdAt     DateTime @default(now()) 
+  updatedAt     DateTime @updatedAt 
+  signers       Signer[] 
+  events        AuditEvent[] 
+  @@index([templateKey, status, createdAt]) 
+} 
+ 
+model Signer { 
+  id           String   @id @default(cuid()) 
+  envelopeId   String 
+  role         String   // company|counterparty|dpo|notary 
+  subjectId    String?  // si autenticado dentro de GNEW 
+  email        String?  // si externo 
+  name         String 
+  order        Int      @default(1) 
+  status       String   @default("pending") // 
+pending|viewed|signed|declined 
+  authMethod   String   @default("email_otp") // email_otp|none 
+  otpHash      String?  // hash del OTP si aplica 
+  signedAt     DateTime? 
+  ip           String? 
+  userAgent    String? 
+  signatureImg String?  // base64 opcional para estampar 
+  createdAt    DateTime @default(now()) 
+  Envelope     Envelope @relation(fields: [envelopeId], references: 
+[id]) 
+  @@index([envelopeId, order]) 
+} 
+ 
+model AuditEvent { 
+  id         String   @id @default(cuid()) 
+  envelopeId String 
+  type       String   // 
+envelope.created|signer.viewed|signer.signed|envelope.completed|envelo
+ pe.voided 
+  payload    Json 
+  at         DateTime @default(now()) 
+  prevHash   String? 
+  eventHash  String   @unique 
+  Envelope   Envelope @relation(fields: [envelopeId], references: 
+[id]) 
+  @@index([envelopeId, at]) 
+} 
+ 

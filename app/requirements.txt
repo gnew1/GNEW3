@@ -1,0 +1,7 @@
+COPY services/common /app/services/common 
+COPY services/metrics /app/services/metrics 
+EXPOSE 8000 
+CMD ["uvicorn", "services.metrics.main:app", "--host", "0.0.0.0", 
+"--port", "8000"] 
+ 
+ 

@@ -1,0 +1,9 @@
+strategies: 
+  - id: 0 
+    label: "USDC->DAI DCA hourly" 
+    enabled: true 
+  - id: 1 
+    label: "DAI->wETH DCA daily" 
+    enabled: false 
+ 
+ 

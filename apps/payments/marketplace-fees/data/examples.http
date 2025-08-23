@@ -1,0 +1,78 @@
+
+### Crear partner (fee 2.5%, withholding 1%)
+POST http://localhost:8084/partners
+Content-Type: application/json
+
+{ "name": "CreatorCo", "defaultFeePct": 2.5, "withholdingPct": 1.0 }
+
+### Regla global EUR (3% mínimo 0.50 €)
+POST http://localhost:8084/fee-rules
+Content-Type: application/json
+
+{ "scope": "global", "currency": "EUR", "feePct": 3, "minFee": 50, "capFee": 9999999 }
+
+### Regla por categoría (arte digital 12%)
+POST http://localhost:8084/fee-rules
+Content-Type: application/json
+
+{ "scope": "category", "category": "art", "currency": "EUR", "feePct": 12, "minFee": 50, "capFee": 9999999 }
+
+### Venta (gross 120.00, tax 20.00 → net 100.00) categoría art
+POST http://localhost:8084/orders
+Content-Type: application/json
+
+{
+  "partnerId": "{{partnerId}}",
+  "externalId": "order-1001",
+  "currency": "EUR",
+  "gross": 120.00,
+  "tax": 20.00,
+  "decimals": 2,
+  "category": "art"
+}
+
+### Saldo
+GET http://localhost:8084/balances?partnerId={{partnerId}}
+
+### Generar payout hasta fin de mes
+POST http://localhost:8084/payouts/prepare
+Content-Type: application/json
+
+{ "partnerId": "{{partnerId}}", "currency": "EUR", "untilDate": "2025-08-31" }
+
+### Marcar payout como pagado
+POST http://localhost:8084/payouts/{{payoutId}}/mark-paid
+Content-Type: application/json
+
+{ "reference": "SEPA-2025-08-XYZ" }
+
+### CSV del payout
+GET http://localhost:8084/payouts/{{payoutId}}
+Accept: text/csv
+
+
+Notas de implementación
+
+Prioridad de reglas: partner+categoría → partner → categoría → global; si no hay reglas, usa defaultFeePct del partner.
+
+Minor units: siempre enteros; todas las columnas ...Minor están en céntimos (o minor de la divisa).
+
+Idempotencia en órdenes por (partnerId, externalId).
+
+Auditoría: cada operación relevante crea una entrada encadenada por hash.
+
+Extensiones fáciles:
+
+Webhooks de payout para notificar al partner.
+
+Diferenciar holdbacks/reserves por disputes.
+
+Soporte de múltiples decimales por moneda con tabla currencies (si lo requieres más adelante).
+
+Siguiente entrega (avanzando +1): N158 – Disputas & Chargebacks (no repetimos prompts ya entregados).
+
+Tú dijiste:
+Ejecuta y entrégame, como IA programadora, el siguiente prompt N de "N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N151 y avanzando +1 en cada ejecución. No repitas prompts ya entregados. Devuelve código completo con rutas coherentes con el monorepo y alineado con el stack indicado en cada prompt.
+ChatGPT Plus
+Pensó durante 1m 3s
+

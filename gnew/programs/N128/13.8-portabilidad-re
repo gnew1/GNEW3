@@ -1,0 +1,43 @@
+ putacion.md 
+N128 — 13.8 Portabilidad de la reputación (GNEW) 
+Objetivo: Exportar e importar reputación desde/hacia otros ecosistemas manteniendo 
+verificabilidad y compatibilidad de estándares. 
+Roles: Backend, DevRel. 
+Stack: 
+● Export: W3C VC 2.0 (JSON‑LD y/o JWT), Open Badges v3, EAS (Ethereum 
+Attestation Service). 
+● Import: Verificación de VCs (N122), lectura de EAS y mapeos a N124 (score). 
+● On‑chain: ReputationRootRegistry (N124) + bridge EAS. 
+● SDK/UI: TypeScript + React. 
+DoD: 
+● Export de score/reconocimientos a VC y EAS y badges a OpenBadges v3. 
+● Import de VC/EAS de terceros → normalización y pruebas de verificación. 
+● Pruebas de compatibilidad (esquemas, firma/attestation) y round‑trip. 
+Entregables 
+1. Esquemas interoperables 
+○ GnewReputationScoreCredential (VC). 
+○ OpenBadgeClass/Assertion (v3) para SBTs (N123). 
+○ EAS Schema para “ReputationSnapshot”. 
+2. Contratos 
+○ ReputationEASBridge.sol — sincroniza EAS attestations confiables a 
+GNEW (lectura on‑chain). 
+ 
+3. Servicios 
+ 
+○ /services/portability — API de export/import (VC / EAS / OpenBadges) 
++ verificación. 
+ 
+4. SDK 
+ 
+○ /packages/sdk/portability.ts — helpers de 
+emisión/validación/conversión. 
+ 
+5. UI 
+ 
+○ ExportReputation.tsx y ImportReputation.tsx. 
+ 
+6. Tests 
+ 
+○ Conformidad VC/EAS/Badges, verificación y round‑trip. 
+ 
+ 

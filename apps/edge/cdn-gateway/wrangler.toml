@@ -1,0 +1,16 @@
+
+name = "gnew-cdn-gateway"
+main = "dist/worker.js"
+compatibility_date = "2024-05-12"
+
+[vars]
+ORIGIN_URL = "https://example-origin.invalid"
+REQUIRE_SIGNED = "0"
+SIGNING_KEYS_JSON = "{\"kid1\":\"dGVzdGtleTE\"}" # base64url(hmac key)
+ADMIN_TOKEN = "change-me"
+
+[[kv_namespaces]]
+binding = "CDN_META"
+id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+

@@ -1,0 +1,28 @@
+ ges.md 
+N123 — 13.3 Soulbound badges (GNEW) 
+Objetivo: Reconocimiento no transferible (logros/roles visuales) emitido por la DAO y guilds. 
+Roles: Smart Contracts (SC), Producto. 
+Stack: Solidity (OZ 5.x), ERC‑721 + EIP‑5192 (Soulbound), Hardhat/Foundry, Node/TS SDK, 
+React (Next.js) UI. 
+DoD: 
+● Mint no transferible (sin transfer, sin approve) con interfaz EIP‑5192 y eventos. 
+● UI de logros en la app: cuadrícula filtrable, estados bloqueado/obtenido, detalles, 
+enlace a VC (N122). 
+● Pruebas: intentos de transferencia/approve revertidos, mint/burn/claim, metadata, 
+locked(tokenId)=true. 
+Alcance 
+● Contrato GnewSoulboundBadges (ERC‑721 SBT): 
+○ Mint (DAO/guilds con MINTER_ROLE) y claim por firma (EIP‑712 voucher 
+opcional). 
+○ No transferible: transferFrom, safeTransferFrom, approve, 
+setApprovalForAll → revert. 
+○ EIP‑5192: locked(tokenId)=true; Locked(tokenId) al mint. 
+○ Metadata: tokenURI (IPFS/CID); tipos de badge (badgeTypeId) con nombre, 
+icono, puntos, rareza. 
+○ Privacidad: opt‑out burn por el holder si el tipo lo permite 
+(revocableByOwner). 
+○ Emisor: guarda issuerDid (N121) y vcHash (N122) opcional. 
+● Claimer opcional GnewSBTClaimer: mint via voucher firmado por un 
+ISSUER_SIGNER (permite gasless N120). 
+● SDK + UI: lectura de badges por address, filtrado por tipo/rareza, tarjeta y vista de 
+progreso. 

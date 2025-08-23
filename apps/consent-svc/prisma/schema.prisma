@@ -1,0 +1,98 @@
+generator client { provider = "prisma-client-js" } 
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") } 
+ 
+model Purpose { 
+  id           String   @id @default(cuid()) 
+  key          String   @unique 
+  title        String 
+  baseLegal    String   // consent | legitimate_interest | contract | 
+legal_obligation | vital_interest 
+  region       String?  // e.g., EU, US-CA, BR, ALL 
+  version      String 
+  isActive     Boolean  @default(true) 
+  createdAt    DateTime @default(now()) 
+  updatedAt    DateTime @updatedAt 
+  PolicyMatrix PolicyMatrix[] 
+} 
+ 
+model DataCategory { 
+  id        String   @id @default(cuid()) 
+  key       String   @unique // email, wallet_id, ip, device_id, 
+onchain_activity_bucket 
+  title     String 
+  isActive  Boolean  @default(true) 
+  createdAt DateTime @default(now()) 
+  updatedAt DateTime @updatedAt 
+  PolicyMatrix PolicyMatrix[] 
+} 
+ 
+model ProcessingUse { 
+  id        String   @id @default(cuid()) 
+  key       String   @unique // analytics, personalization, marketing, 
+research, notifications, security_antiabuse, strictly_necessary 
+  title     String 
+  isActive  Boolean  @default(true) 
+  createdAt DateTime @default(now()) 
+  updatedAt DateTime @updatedAt 
+  PolicyMatrix PolicyMatrix[] 
+} 
+ 
+model PolicyMatrix { 
+  id              String   @id @default(cuid()) 
+  purposeKey      String 
+  dataCategoryKey String 
+  processingUseKey String 
+  allowed         Boolean  @default(true) 
+  policyVersion   String 
+  isActive        Boolean  @default(true) 
+  Purpose         Purpose  @relation(fields: [purposeKey], references: 
+[key]) 
+  DataCategory    DataCategory @relation(fields: [dataCategoryKey], 
+references: [key]) 
+  ProcessingUse   ProcessingUse @relation(fields: [processingUseKey], 
+references: [key]) 
+ 
+  @@unique([purposeKey, dataCategoryKey, processingUseKey, 
+policyVersion]) 
+} 
+ 
+model ConsentRecord { 
+  id              String   @id @default(cuid()) 
+  subjectId       String   // seudónimo 
+  purposeKey      String 
+  dataCategoryKey String 
+  processingUseKey String 
+  state           String   // granted | denied | limited | withdrawn 
+  policyVersion   String 
+  expiresAt       DateTime? 
+  createdAt       DateTime @default(now()) 
+  updatedAt       DateTime @updatedAt 
+ 
+  @@unique([subjectId, purposeKey, dataCategoryKey, processingUseKey]) 
+} 
+ 
+model ConsentEvent { 
+  id         String   @id @default(cuid()) 
+  subjectId  String 
+  recordId   String? 
+  payload    Json 
+  eventHash  String   @unique 
+  prevHash   String? 
+  batchId    String?  // anchor batch 
+  txHash     String? 
+  createdAt  DateTime @default(now()) 
+ 
+  @@index([subjectId, createdAt]) 
+} 
+ 
+model GPCSignal { 
+  id         String   @id @default(cuid()) 
+  subjectId  String? 
+  userAgent  String 
+  honored    Boolean  @default(true) 
+  meta       Json 
+  createdAt  DateTime @default(now()) 
+} 
+ 
+ 
+Job de anclaje auditable (Merkle + on‑chain) 

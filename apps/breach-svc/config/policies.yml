@@ -1,0 +1,96 @@
+# Reglas normativas y SLA — versionado SemVer (editable por Legal) 
+version: v1.0.0-2025-08 
+defaults: 
+  timezone: "Europe/Amsterdam" 
+  working_hours: { start: "09:00", end: "18:00", business_days_only: 
+true } 
+  retry_policy: { max_attempts: 5, base_delay_ms: 30000, jitter_ms: 
+5000 } 
+jurisdictions: 
+  EU: 
+    base: GDPR 
+    authority_notify_hours: 72          # Arts. 33/34 GDPR 
+(configurable) 
+    subjects_notify_if_risk: high       # high|any|never → si high → 
+notificar sin dilación indebida 
+    authority_templates: [gdpr_authority] 
+    subject_templates: [gdpr_subjects] 
+    authority_directory: 
+      - key: ES-AEPD 
+        name: AEPD 
+        country: ES 
+        channel: https 
+        url: 
+https://sedeagpd.gob.es/sede-electronica-web/vistas/formNuevaReclamaci
+ onBrecha.jsf 
+      - key: FR-CNIL 
+        name: CNIL 
+        country: FR 
+        channel: https 
+        url: https://notifications.cnil.fr/ 
+  US: 
+    base: US_STATE_BREACH 
+    authority_notify_hours: 96          # placeholder; se ajusta por 
+estado en versiones futuras 
+    subjects_notify_if_risk: any 
+    authority_templates: [us_agency] 
+    subject_templates: [us_subjects] 
+  BR: 
+    base: LGPD 
+    authority_notify_hours: 48 
+    subjects_notify_if_risk: high 
+    authority_templates: [lgpd_authority] 
+    subject_templates: [lgpd_subjects] 
+checklists: 
+  baseline: 
+    - { key: contain_threat, title: "Contener amenaza", description: 
+"Aislar sistemas afectados, revocar credenciales." } 
+    - { key: preserve_evidence, title: "Preservar evidencia", 
+description: "Snapshots/forense, hashes, cadena de custodia." } 
+    - { key: assess_scope, title: "Evaluar alcance", description: 
+"Categorías de datos y volumen afectado." } 
+    - { key: risk_assessment, title: "Análisis de riesgo a 
+individuos", description: "Determinar riesgo bajo/alto." } 
+    - { key: consult_legal, title: "Consulta Legal", description: 
+"Validar obligaciones y jurisdicciones." } 
+    - { key: draft_notifications, title: "Borradores de notificación", 
+description: "Autoridad/individuos/partners." } 
+    - { key: schedule_notifications, title: "Programar cronograma", 
+description: "Fechas límite por jurisdicción." } 
+    - { key: dsar_hotline, title: "Habilitar canal DSAR", description: 
+"Refuerzo de atención a titulares." } 
+    - { key: postmortem, title: "Post‑mortem", description: "Lecciones 
+y acciones de mejora." } 
+  EU: 
+    - { key: gdpr_assess_risk, title: "Evaluación GDPR art. 34", 
+description: "¿Alto riesgo para derechos y libertades?" } 
+    - { key: notify_dpa, title: "Notificar a DPA (≤72h)", description: 
+"Usar plantilla gdpr_authority." } 
+    - { key: notify_subjects, title: "Notificar a afectados", 
+description: "Sin dilación indebida si riesgo alto." } 
+  US: 
+    - { key: us_state_map, title: "Mapa estatal", description: 
+"Determinar estados aplicables." } 
+  BR: 
+    - { key: lgpd_notify, title: "Notificar ANPD (48h)", description: 
+"Usar plantilla lgpd_authority." } 
+templates: 
+  gdpr_authority: 
+    channel: https 
+    content_md: templates/gdpr_authority.md 
+  gdpr_subjects: 
+    channel: email 
+    content_md: templates/gdpr_subjects.md 
+  us_agency: 
+    channel: https 
+    content_md: templates/us_agency.md 
+  us_subjects: 
+    channel: email 
+    content_md: templates/us_subjects.md 
+  lgpd_authority: 
+    channel: https 
+    content_md: templates/lgpd_authority.md 
+  lgpd_subjects: 
+    channel: email 
+    content_md: templates/lgpd_subjects.md 
+ 

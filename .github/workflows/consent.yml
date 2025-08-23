@@ -1,0 +1,46 @@
+name: consent-svc 
+on: 
+  push: { paths: ["apps/consent-svc/**", 
+"packages/schemas/openapi/consent.yml", "contracts/**"] } 
+  pull_request: 
+    branches: [ main ] 
+jobs: 
+  build-test: 
+    runs-on: ubuntu-latest 
+    strategy: 
+      matrix: 
+        node: [20.x] 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-node@v4 
+        with: { node-version: ${{ matrix.node }} } 
+      - name: Install 
+        run: npm ci 
+      - name: Lint 
+        run: npm run lint --workspaces 
+      - name: Test 
+        run: npm test --workspaces 
+      - name: Generate SBOM 
+        run: syft packages dir:. -o spdx-json=sbom-consent.json || 
+true 
+      - name: Build 
+        run: npm run build -w apps/consent-svc 
+      - name: OpenAPI Check 
+        run: npx swagger-cli validate 
+packages/schemas/openapi/consent.yml 
+  deploy: 
+    needs: build-test 
+    if: github.ref == 'refs/heads/main' 
+    runs-on: ubuntu-latest 
+    permissions: 
+      id-token: write 
+      contents: read 
+    steps: 
+      - uses: actions/checkout@v4 
+      - name: Auth to Cloud via OIDC 
+        run: echo "OIDC auth here" 
+      - name: Deploy 
+        run: ./infra/deploy-consent.sh 
+ 
+ 
+Tests (unit) 

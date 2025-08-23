@@ -1,0 +1,30 @@
+# 
+ 
+ 
+ Pruebas legales (aceptación) — N133 
+jurisdiction: EU 
+cases: 
+  - id: EU-01 
+    name: Bloqueo previo a consentimiento 
+    steps: 
+      - visit: "/" 
+      - assert_banner_visible: true 
+      - fetch: "/_script/analytics.js" 
+        expect_status: 204 
+  - id: EU-02 
+    name: Opt-in explícito por canal 
+    steps: 
+      - toggle: { card: "Analítica (web)", on: true } 
+      - toggle: { card: "Marketing (email)", on: false } 
+      - click: "Guardar selección" 
+      - request: { path: "/v1/consent/{subjectId}", expect: { 
+records_contains: { processingUseKey: "analytics", channelKey: "web", 
+state: "granted" } } } 
+  - id: EU-03 
+    name: Baja por enlace (email) 
+    steps: 
+      - open_unsubscribe_token: "{valid_token}" 
+      - request: { path: "/v1/consent/{subjectId}", expect: { 
+records_contains: { processingUseKey: "marketing", channelKey: 
+"email", state: "denied" } } } 
+ 

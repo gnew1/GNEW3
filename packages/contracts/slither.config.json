@@ -1,0 +1,10 @@
+{ 
+"exclude_paths": ["node_modules", "lib", "out", "artifacts/test", 
+"artifacts/mocks"], 
+"detectors_to_exclude": [ 
+"solc-version",            
+// controlado por toolchain 
+"naming-convention"        
+], 
+"legacy_ast": false 
+} 

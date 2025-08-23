@@ -1,0 +1,23 @@
+
+{
+  "name": "@gnew/legaltech",
+  "version": "1.0.0",
+  "main": "src/dsar.ts",
+  "scripts": {
+    "dev": "ts-node src/dsar.ts",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "express": "^4.19.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.12",
+    "supertest": "^6.4.2",
+    "@types/supertest": "^2.0.16"
+  }
+}
+
+

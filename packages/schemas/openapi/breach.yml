@@ -1,0 +1,27 @@
+openapi: 3.1.0 
+info: { title: GNEW Breach Notification API, version: 1.0.0 } 
+paths: 
+  /v1/incidents: 
+    get: { summary: Listar incidentes } 
+    post: { summary: Crear incidente } 
+  /v1/incidents/{id}: 
+    get: { summary: Ver incidente con checklist/tareas/timeline } 
+  /v1/incidents/{id}/assess: 
+    post: { summary: Evaluar severidad, riesgo y categorías } 
+  /v1/incidents/{id}/schedule: 
+    post: { summary: Generar cronograma de notificaciones 
+(jurisdicciones) } 
+  /v1/incidents/{id}/close: 
+    post: { summary: Cerrar incidente y anclar timeline } 
+  /v1/tasks/{taskId}/send: 
+    post: { summary: Enviar tarea de notificación } 
+  /v1/tasks/{taskId}/retry: 
+    post: { summary: Reintentar entrega } 
+  /v1/tasks/incident/{incidentId}: 
+    get: { summary: Ver tareas por incidente } 
+  /v1/checklist/{incidentId}/{itemId}/toggle: 
+    post: { summary: Marcar/Desmarcar ítem } 
+  /v1/timeline/{incidentId}: 
+    get: { summary: Ver timeline } 
+    post: { summary: Añadir entrada al timeline } 
+ 

@@ -1,0 +1,32 @@
+name: retention-svc 
+on: 
+  push: { paths: ["apps/retention-svc/**", "packages/retention-*/**", 
+"apps/retention-svc/config/retention.policies.yaml"] } 
+  pull_request: { branches: [ main ] } 
+jobs: 
+  build-test: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-node@v4 
+        with: { node-version: 20 } 
+      - run: npm ci 
+      - run: npm run lint --workspaces 
+      - run: npm test --workspaces 
+      - run: syft packages dir:. -o spdx-json=sbom-retention.json || 
+true 
+      - run: npm run build -w apps/retention-svc 
+  deploy: 
+    needs: build-test 
+    if: github.ref == 'refs/heads/main' 
+    runs-on: ubuntu-latest 
+    permissions: { id-token: write, contents: read } 
+    steps: 
+      - uses: actions/checkout@v4 
+      - name: Auth OIDC 
+        run: echo "auth" 
+      - name: Deploy 
+        run: ./infra/deploy-retention.sh 
+ 
+ 
+Pruebas (unit) 

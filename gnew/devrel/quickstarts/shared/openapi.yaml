@@ -1,0 +1,65 @@
+```yaml
+openapi: 3.0.3
+info:
+  title: GNEW Public API (Quickstart Subset)
+  version: 0.1.0
+servers:
+  - url: https://api.gnew.example.com
+paths:
+  /auth/api-key/verify:
+    get:
+      summary: Verifica API Key
+      security: [{ ApiKeyAuth: [] }]
+      responses:
+        '200': { description: OK }
+  /v1/projects:
+    get:
+      summary: Lista proyectos visibles para el usuario
+      security: [{ ApiKeyAuth: [] }]
+      responses:
+        '200':
+          description: OK
+  /v1/tokens/balance:
+    get:
+      summary: Balance de tokens del usuario
+      security: [{ ApiKeyAuth: [] }]
+      responses:
+        '200': { description: OK }
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-GNEW-API-KEY
+
+ 
+3) Variables de entorno comunes
+/gnew/devrel/quickstarts/shared/.env.example
+# Copia como .env en cada quickstart si se usa localmente
+GNEW_API_URL=https://api.gnew.example.com
+GNEW_API_KEY=REEMPLAZA_CON_TU_API_KEY
+GNEW_WEBHOOK_SECRET=replace_me_for_signature_verification
+
+ 
+4) Quick start Node.js (TypeScript)
+/gnew/devrel/quickstarts/node-basic/README.md
+# GNEW Quickstart — Node.js (TypeScript)
+
+## Requisitos
+- Docker o Node.js ≥ 18 (recomendado: usar Docker para entorno limpio)
+
+## Uso con Docker (recomendado)
+```bash
+docker build -t gnew-node-qs .
+docker run --rm --env-file ../shared/.env.example gnew-node-qs
+
+Uso local
+cp ../shared/.env.example .env
+npm i
+npm run build
+npm start
+
+Pruebas
+npm test
+
+

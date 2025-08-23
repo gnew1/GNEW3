@@ -1,0 +1,35 @@
+name: jurisdiction-svc 
+on: 
+  push: 
+    paths: 
+      - "apps/jurisdiction-svc/**" 
+      - "apps/jurisdiction-svc/config/jx.rules.yaml" 
+      - "packages/schemas/openapi/jx.yml" 
+      - "packages/jx-*/**" 
+  pull_request: { branches: [ main ] } 
+jobs: 
+  test-build: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-node@v4 
+        with: { node-version: 20 } 
+      - run: npm ci 
+      - name: Lint & Test 
+        run: | 
+          npm run lint --workspaces 
+          npm test --workspaces 
+      - name: Validate OpenAPI 
+        run: npx swagger-cli validate packages/schemas/openapi/jx.yml 
+      - name: Build 
+        run: npm run build -w apps/jurisdiction-svc 
+  deploy: 
+    needs: test-build 
+    if: github.ref == 'refs/heads/main' 
+    runs-on: ubuntu-latest 
+    permissions: { id-token: write, contents: read } 
+    steps: 
+      - uses: actions/checkout@v4 
+      - name: Deploy 
+        run: ./infra/deploy-jx.sh 
+ 

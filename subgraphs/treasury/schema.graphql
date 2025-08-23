@@ -1,0 +1,26 @@
+type Safe @entity { 
+  id: ID!                  # address lowercase 
+txCount: BigInt! 
+} 
+enum MovementType { 
+OUTFLOW 
+FAILED 
+} 
+type Movement @entity { 
+id: ID!                  
+safe: Safe! 
+to: Bytes! 
+value: BigInt!           
+token: Bytes             
+ExecutionSuccess) 
+tokenAmount: BigInt 
+type: MovementType! 
+txHash: Bytes! 
+blockNumber: BigInt! 
+timestamp: BigInt! 
+nonce: BigInt 
+memo: String 
+} 
+# txHash 
+# valor nativo (wei) 
+# si fue un token (no disponible con solo 

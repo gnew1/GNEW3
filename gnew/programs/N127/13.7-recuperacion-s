@@ -1,0 +1,24 @@
+ ocial.md 
+N127 — 13.7 Recuperación social por guardians (GNEW) 
+Objetivo: Recuperar la cuenta de un usuario mediante consenso N‑of‑M de guardians con 
+tiempos de espera (timelocks) y cancelación segura. 
+Roles: Backend, Identidad. 
+Stack: Solidity (OZ 5.x), ECDSA/EIP‑712, opcional EIP‑1271 (smart guardians), TS/Node 
+(servicio/SDK), React (UI), IPFS (evidencias), Paymaster (N120). 
+DoD: 
+● Soporta N‑of‑M con timelock y cancelación. 
+● Dos vías de aprobación: on‑chain (una por guardian) u off‑chain (EIP‑712 firmas 
+agregadas). 
+● Pruebas: finales felices, cancelación, expiración, rotación de guardianes, reentradas. 
+● Integración identidad: opcional binding a DID/VC (N121–N122). 
+Entregables 
+1. Contratos: GuardianManager.sol + SocialRecoveryController.sol (+ 
+interfaz IRecoverable.sol). 
+2. Servicio /services/recovery (TS/Node): generación EIP‑712, acopio de firmas, 
+envío finalize. 
+3. SDK /packages/sdk/recovery.ts: helpers (typedData, 
+propose/approve/finalize/cancel). 
+4. UI (React): RecoveryFlow (lista de guardians, progreso, contador de timelock). 
+5. Tests (Hardhat): consenso N‑of‑M, timelock, cancel/expire, rotación segura. 
+6. Runbooks: alta/baja guardians, thresholds, respuesta a incidentes. 
+7. Helm de servicio. 

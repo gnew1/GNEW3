@@ -1,0 +1,25 @@
+services: 
+registry: 
+url: ${POLICY_REGISTRY_URL:https://policy-registry.internal} 
+bundles: 
+access: 
+    service: registry 
+    resource: bundles/n135-access/${POLICY_VERSION:1.0.0}.tar.gz 
+    polling: 
+      min_delay_seconds: 60 
+      max_delay_seconds: 120 
+  payments: 
+    service: registry 
+    resource: bundles/n135-payments/${POLICY_VERSION:1.0.0}.tar.gz 
+    polling: 
+      min_delay_seconds: 60 
+      max_delay_seconds: 120 
+decision_logs: 
+  console: true 
+  # opcional: subir a un endpoint interno 
+  # service: registry 
+  # reporting: 
+  #   min_delay_seconds: 10 
+ 
+ 
+Contratos (JSON Schema) 

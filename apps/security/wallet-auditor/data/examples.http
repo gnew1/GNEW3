@@ -1,0 +1,58 @@
+
+### Ingesta de transacción (aumenta velocidad y añade contraparte)
+POST http://localhost:8092/ingest
+Content-Type: application/json
+
+{
+  "address": "0xabc123",
+  "kind": "tx",
+  "payload": { "counterparty": "0xrisky", "counterpartyRisk": 80, "txHash": "0x..." }
+}
+
+### Poner en denylist
+POST http://localhost:8092/lists/upsert
+Content-Type: application/json
+
+{ "list": "deny", "address": "0xdenied", "note": "flag manual" }
+
+### Revocar wallet (credencial)
+POST http://localhost:8092/revocations
+Content-Type: application/json
+
+{ "address": "0xrevoked", "reason": "compromised key" }
+
+### Puntuar (assessment)
+POST http://localhost:8092/assess
+Content-Type: application/json
+
+{
+  "address": "0xabc123",
+  "signals": { "txVelocity1h": 12, "amountMinorRecent": 25000000 }
+}
+
+### Consultar wallet
+GET http://localhost:8092/wallets/0xabc123
+
+### Política (bajar umbral de warn a 0.25)
+POST http://localhost:8092/policy
+Content-Type: application/json
+
+{ "warnThreshold": 0.25 }
+
+### Export SIEM (JSONL)
+GET http://localhost:8092/export/siem?since=2025-08-01&until=2025-08-31&format=jsonl
+
+Notas de cumplimiento del prompt
+
+Listas bloqueadas (deny/allow/sanctions) + revocación implementadas con endpoints dedicados.
+
+Heurísticas: edad de wallet, velocidad de tx/h, monto reciente, contrapartes y flags de listas → score y decisión.
+
+MTTD bajo: ingesta /ingest genera contadores y datos para recomputar; POST /assess crea evento de assessment inmediato.
+
+Logs append‑only con auditoría (hash‑chain) y export a SIEM (JSONL/CSV).
+
+Política configurable (warnThreshold, blockThreshold) para ajustar sensibilidad.
+
+Próximo N: N161 – Pinning y persistencia distribuida (IPFS/Filecoin/Arweave).
+

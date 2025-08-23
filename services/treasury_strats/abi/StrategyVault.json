@@ -1,0 +1,36 @@
+[ 
+  
+{"type":"function","name":"getStrategy","stateMutability":"view","inpu
+ ts":[{"name":"id","type":"uint256"}],"outputs":[ 
+    {"name":"tokenIn","type":"address"}, 
+    {"name":"tokenOut","type":"address"}, 
+    {"name":"router","type":"address"}, 
+    {"name":"interval","type":"uint32"}, 
+    {"name":"maxSlippageBps","type":"uint16"}, 
+    {"name":"minOutBpsOfOracle","type":"uint16"}, 
+    {"name":"startAt","type":"uint32"}, 
+    {"name":"endAt","type":"uint32"}, 
+    {"name":"amountPerExec","type":"uint128"}, 
+    {"name":"status","type":"uint8"}, 
+    {"name":"nextExecAt","type":"uint32"}, 
+    {"name":"lastExecAt","type":"uint32"}, 
+    {"name":"totalExecutedIn","type":"uint128"}, 
+    {"name":"totalExecutedOut","type":"uint128"}, 
+    {"name":"oracles_feedIn","type":"address"}, 
+    {"name":"oracles_feedOut","type":"address"}, 
+    {"name":"oracles_maxMoveBps","type":"uint16"} 
+  ]}, 
+  
+{"type":"function","name":"executeDCA","stateMutability":"nonpayable",
+ "inputs":[{"name":"id","type":"uint256"},{"name":"minAmountOutHint","t
+ ype":"uint256"}],"outputs":[]}, 
+  
+{"type":"function","name":"depositToChest","stateMutability":"nonpayab
+ le","inputs":[{"name":"id","type":"uint256"},{"name":"amount","type":"
+ uint256"}],"outputs":[]}, 
+  
+{"type":"function","name":"strategiesCount","stateMutability":"view","
+ inputs":[],"outputs":[{"type":"uint256"}]}, 
+{"type":"function","name":"pauseStrategy","stateMutability":"nonpayabl
+ e","inputs":[{"name":"id","type":"uint256"}],"outputs":[]} 
+] 

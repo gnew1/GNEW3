@@ -1,0 +1,560 @@
+ tributos.md 
+N126 — 13.6 Privacidad: ZK para atributos (GNEW) 
+Objetivo: Permitir que un usuario pruebe atributos sin revelar datos (p.ej., “soy mayor de 18” 
+y “no estoy sancionado”), con verificaciones locales y/o on‑chain. 
+Roles: Cripto/zk, Backend. 
+Stack: Circom 2 + snarkjs (Groth16/PLONK), circomlib/circomlibjs (Poseidon, Merkle/SMT), 
+Solidity (verifiers + ZK gate), Node/TS SDK, React (demos), IPFS (artefactos), anclaje de 
+raíces on‑chain. 
+DoD: 
+● Demo 1 — Mayoría de edad (≥18): Prueba ZK de pertenencia a un árbol de atributos 
+emitido por un issuer + comparación de fecha sin revelar la fecha de nacimiento. 
+● Demo 2 — No sancionado: Prueba ZK de no‑pertenencia a un árbol Sparse Merkle 
+de sancionados, sin revelar la dirección/DID en claro. 
+● Verificación local (snarkjs) y verificación on‑chain (verifier + gate). 
+● Runbooks de setup confiable, rotación de raíces y auditoría de parámetros. 
+1) Diseño (visión general) 
+● Compromisos y raíces ancladas: 
+○ Mayoría de edad: el issuer publica un árbol Merkle de compromisos de 
+atributos leaf = Poseidon(did, Y, M, D) y ancla su root en cadena. El 
+usuario prueba: “conozco (did, Y, M, D) incluido en root y (Y,M,D) ≤ 
+(Y18,M18,D18)”. 
+○ No sancionado: seguridad gestiona un Sparse Merkle Tree (SMT) de índices 
+index = Poseidon(address) con valor 0 para no listados. La prueba ZK 
+demuestra que para index el valor es 0 en root (prueba de no‑membresía en 
+SMT). 
+● Entradas públicas (ejemplos de los circuitos): 
+○ Edad: root_age, Y18, M18, D18 (fecha umbral pública calculada por el 
+verificador), y opcional didCommit. 
+○ Sanciones: root_sanctions, addrCommit = Poseidon(address) (o 
+didCommit). 
+● Entradas privadas: (did, Y, M, D, path) para edad; (address, 
+siblings/pathBits) para sanciones. 
+● Verificación: local (snarkjs) o on‑chain (verifiers + ZKAttributesGate.sol). 
+2) Entregables 
+1. Circuitos Circom 
+○ /circuits/age_gte18.circom — inclusión Merkle + comparación 
+lexicográfica fecha ≤ umbral. 
+○ /circuits/sanction_free_smt.circom — SMT no‑membresía (valor 0) 
+para addrCommit. 
+2. Generados (build): WASM, zkey, verificadores Solidity (VerifierAge.sol, 
+VerifierSanction.sol). 
+3. Contratos 
+○ /contracts/zk/ZKAttributesGate.sol (almacena raíces y coordina 
+verificaciones). 
+4. Servicio zk /services/zk-attrs (TS/Node): endpoints de prueba/verify, 
+empaquetado de señales públicas. 
+5. SDK /packages/sdk/src/zkattrs.ts (generar/validar pruebas en 
+cliente/servidor). 
+6. UI demos (React/Next): 
+○ AgeCheckWidget (“Verificar 18+”). 
+○ SanctionFreeWidget (“Verificar no sancionado”). 
+7. Infra/Runbooks: scripts de setup (Powers of Tau), rotación de raíces, publicación IPFS 
+de artefactos. 
+8. Tests: unitarios de circuitos, e2e de demos, verificación on‑chain. 
+ 
+ 
+3) Circuitos 
+3.1 /gnew/circuits/age_gte18.circom 
+pragma circom 2.1.6; 
+ 
+include "circomlib/circuits/poseidon.circom"; 
+include "circomlib/circuits/bitify.circom"; 
+include "circomlib/circuits/merkle.circom"; 
+ 
+// Compara fecha (Y,M,D) <= (Yt,Mt,Dt) lexicográficamente 
+template DateLE() { 
+    signal input Y; signal input M; signal input D;          // 
+privados 
+    signal input Yt; signal input Mt; signal input Dt;       // 
+públicos 
+    // Rangos básicos 
+    component ybits = Num2Bits(16); ybits.in <== Y; 
+    component mbits = Num2Bits(5);  mbits.in <== M;  // <=31 
+    component dbits = Num2Bits(5);  dbits.in <== D;  // <=31 
+    // Check month/day bounds (suave: <=12, <=31) 
+    M * (M-1) * (M-2) * (M-3) * (M-4) * (M-5) * (M-6) * (M-7) * (M-8) 
+* (M-9) * (M-10) * (M-11) * (M-12) === 0; // M in [1..12] 
+    D * (D-1) * (D-2) * (D-3) * (D-4) * (D-5) * (D-6) * (D-7) * (D-8) 
+* (D-9) * (D-10) * (D-11) * (D-12) * (D-13) * (D-14) * (D-15) * (D-16) 
+* (D-17) * (D-18) * (D-19) * (D-20) * (D-21) * (D-22) * (D-23) * 
+(D-24) * (D-25) * (D-26) * (D-27) * (D-28) * (D-29) * (D-30) * (D-31) 
+=== 0; 
+ 
+    signal yOK, mOK, dOK; // Y<Yt OR (Y==Yt & M<Mt) OR (== & D<=Dt) 
+    yOK <== (Yt - Y) >= 1;                    // Y < Yt 
+    signal yEq; yEq <== Y - Yt === 0; 
+    mOK <== yEq * ((Mt - M) >= 1); 
+    signal ymEq; ymEq <== yEq * (M - Mt === 0); 
+    dOK <== ymEq * ((Dt - D) >= 0); 
+    signal le; le <== yOK + mOK + dOK;       // al menos una condición 
+satisfecha 
+    le === 1;                                // obliga que una de 
+ellas sea verdadera 
+} 
+ 
+// Árbol Merkle binario con Poseidon 
+template AgeGTE18(depth) { 
+    // Públicos 
+    signal input rootAge; 
+    signal input Y18; signal input M18; signal input D18; 
+    // Privados 
+    signal input did;  // DID commit field (puede ser Poseidon del DID 
+string) 
+    signal input Y; signal input M; signal input D; 
+    signal input pathElements[depth]; 
+    signal input pathIndex[depth]; // 0/1 
+ 
+    // 1) leaf = Poseidon(did, Y, M, D) 
+    component h = Poseidon(4); 
+    h.inputs[0] <== did; 
+    h.inputs[1] <== Y; 
+    h.inputs[2] <== M; 
+    h.inputs[3] <== D; 
+ 
+    // 2) Verificar inclusión contra rootAge 
+    component mi = MerkleTreeInclusionProof(depth); 
+    for (var i=0; i<depth; i++){ 
+        mi.pathElements[i] <== pathElements[i]; 
+        mi.pathIndex[i] <== pathIndex[i]; 
+    } 
+    mi.leaf <== h.out; 
+    rootAge === mi.root; 
+ 
+    // 3) Comparar fecha <= umbral (18+ ya calculado externamente) 
+    component cmp = DateLE(); 
+    cmp.Y <== Y;  cmp.M <== M;  cmp.D <== D; 
+    cmp.Yt <== Y18; cmp.Mt <== M18; cmp.Dt <== D18; 
+ 
+    // Señales públicas finales: rootAge, Y18, M18, D18 (ya forzadas); 
+opcional export didCommit 
+} 
+ 
+Nota: DateLE usa comparaciones aritméticas simples; para escenarios 
+productivos, conviene un gadget de comparación seguro y límites de calendario 
+más estrictos. 
+ 
+3.2 /gnew/circuits/sanction_free_smt.circom 
+Opción SMT con circomlib (sparse Merkle; index = Poseidon(address)): 
+pragma circom 2.1.6; 
+ 
+include "circomlib/circuits/poseidon.circom"; 
+include "circomlib/circuits/smt/smtverifier.circom"; 
+ 
+// Prueba que en un SMT con root = rootSanctions, el índice hAddr 
+tiene valor 0 (no sancionado) 
+template SanctionFreeSMT(nLevels) { 
+    // Públicos 
+    signal input rootSanctions; 
+    signal input hAddr; // Poseidon(address) público (no revela 
+address) 
+    // Privados 
+    signal input address; // field, opcional (para ligar identidad); 
+si no se usa, setear = 0 
+    signal input siblings[nLevels]; 
+    signal input oldRoot; // no usado, compat con plantilla 
+    signal input oldKey;  // = hAddr 
+    signal input oldValue;// = 0 
+    signal input isOld0;  // = 1 
+    signal input fnc;     // = 0 (update) 
+    signal input newKey;  // = hAddr 
+    signal input newValue;// = 0 
+    signal input isNew0;  // = 1 
+ 
+    // Comprobar que hAddr corresponde a address (si se liga a 
+wallet/DID) 
+    component hp = Poseidon(1); 
+    hp.inputs[0] <== address; 
+    hAddr === hp.out; 
+ 
+    // Verificador SMT: prueba de "update" trivial 0->0 en hAddr 
+(demuestra no-membresía previa) 
+    component v = SMTVerifier(nLevels); 
+    // Mapear señales 
+    v.enabled <== 1; 
+    v.fnc <== fnc; // 0 
+    v.isOld0 <== isOld0; v.isNew0 <== isNew0; 
+    v.oldKey <== oldKey; v.newKey <== newKey; // = hAddr 
+    v.oldValue <== oldValue; v.newValue <== newValue; // = 0 
+    for (var i=0; i<nLevels; i++) v.siblings[i] <== siblings[i]; 
+    // oldRoot no se usa; imponemos resultado root final == 
+rootSanctions 
+    rootSanctions === v.root; 
+} 
+ 
+Nota: La variante SMT evita “probar que NO estás en una lista” mediante una 
+no‑membresía compacta (valor 0). Alternativamente, usar RSA acumuladores; 
+SMT es más simple de integrar con circuitos Groth16. 
+ 
+4) Contratos 
+4.1 /gnew/contracts/zk/ZKAttributesGate.sol 
+// SPDX-License-Identifier: MIT 
+pragma solidity ^0.8.24; 
+ 
+/** 
+ * ZKAttributesGate 
+ * - Guarda raíces (edad / sanciones) y verifica pruebas via verifiers 
+generados. 
+ * - Expone modifiers para puertas de acceso en apps GNEW. 
+ * 
+ * NOTA: VerifierAge y VerifierSanction son contratos autogenerados 
+por snarkjs. 
+ */ 
+interface IVerifier { 
+    function verifyProof( 
+        uint256[2] calldata a, 
+        uint256[2][2] calldata b, 
+        uint256[2] calldata c, 
+        uint256[] calldata publicInputs 
+    ) external view returns (bool); 
+} 
+ 
+contract ZKAttributesGate { 
+    address public admin; 
+    IVerifier public verifierAge; 
+    IVerifier public verifierSanction; 
+ 
+    // Raíces vigentes (pueden versionarse por epoch) 
+    bytes32 public rootAge; 
+    bytes32 public rootSanctions; 
+ 
+    event RootsUpdated(bytes32 rootAge, bytes32 rootSanctions); 
+ 
+    constructor(address _verifierAge, address _verifierSanction) { 
+        admin = msg.sender; 
+        verifierAge = IVerifier(_verifierAge); 
+        verifierSanction = IVerifier(_verifierSanction); 
+    } 
+ 
+    function setRoots(bytes32 _rootAge, bytes32 _rootSanctions) 
+external { 
+        require(msg.sender == admin, "only admin"); 
+        rootAge = _rootAge; rootSanctions = _rootSanctions; 
+        emit RootsUpdated(rootAge, rootSanctions); 
+    } 
+ 
+    // ---- Verificaciones ---- 
+ 
+    /// @notice Verifica prueba de 18+; Y18/M18/D18 se calculan 
+off-chain y pasan como públicos. 
+    function isAdult( 
+        uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] 
+calldata c, 
+        uint256[] calldata pub 
+    ) public view returns (bool) { 
+        // pub = [rootAge, Y18, M18, D18] 
+        require(bytes32(pub[0]) == rootAge, "rootAge mismatch"); 
+        return verifierAge.verifyProof(a,b,c,pub); 
+    } 
+ 
+    /// @notice Verifica que hAddr no está sancionado. 
+    function isNotSanctioned( 
+        uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] 
+calldata c, 
+        uint256[] calldata pub 
+    ) public view returns (bool) { 
+        // pub = [rootSanctions, hAddr] 
+        require(bytes32(pub[0]) == rootSanctions, "rootSanctions 
+mismatch"); 
+        return verifierSanction.verifyProof(a,b,c,pub); 
+    } 
+ 
+    // ---- Modifiers de ejemplo ---- 
+    modifier gateAdult( 
+        uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] 
+calldata c, 
+        uint256[] calldata pub 
+    ) { 
+        require(isAdult(a,b,c,pub), "ZK:adult"); 
+        _; 
+    } 
+ 
+    modifier gateNoSanction( 
+        uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] 
+calldata c, 
+        uint256[] calldata pub 
+    ) { 
+        require(isNotSanctioned(a,b,c,pub), "ZK:sanction"); 
+        _; 
+    } 
+} 
+ 
+Tip: si usas PLONK (single proof input), adapta las firmas a verifyProof(bytes 
+calldata proof, uint256[] calldata pub). 
+ 
+5) Servicio ZK y SDK 
+5.1 /gnew/services/zk-attrs/src/server.ts 
+import express from "express"; 
+import rateLimit from "express-rate-limit"; 
+import { execFile } from "child_process"; 
+import path from "path"; 
+import { promisify } from "util"; 
+ 
+const run = promisify(execFile); 
+const app = express(); 
+app.use(express.json({ limit: "1mb" })); 
+app.use(rateLimit({ windowMs: 60_000, max: 60 })); 
+ 
+const CIRCUITS = process.env.CIRCUITS_DIR || "/app/circuits"; 
+const BUILD = process.env.BUILD_DIR || "/app/build"; 
+ 
+// ---- AGE (18+) ---- 
+app.post("/v1/age/prove", async (req, res) => { 
+  try { 
+    const { didCommit, Y, M, D, merklePath, Y18, M18, D18 } = 
+req.body; // pathIndex + siblings 
+    const input = { did: didCommit, Y, M, D, pathElements: 
+merklePath.siblings, pathIndex: merklePath.indices, Y18, M18, D18, 
+rootAge: req.body.rootAge }; 
+    const inputPath = path.join("/tmp", `age_${Date.now()}.json`); 
+    const outPath = inputPath.replace(".json", ".proof.json"); 
+    const pubPath = inputPath.replace(".json", ".public.json"); 
+ 
+    await fsPromises.writeFile(inputPath, JSON.stringify(input)); 
+    await run("snarkjs", ["groth16", "prove", 
+`${BUILD}/age_gte18.zkey`, `${CIRCUITS}/age_gte18_js/age_gte18.wasm`, 
+inputPath, outPath, pubPath]); 
+    const proof = JSON.parse(await fsPromises.readFile(outPath, 
+"utf8")); 
+    const pub = JSON.parse(await fsPromises.readFile(pubPath, 
+"utf8")); 
+    res.json({ proof, publicSignals: pub }); 
+  } catch (e:any) { res.status(500).json({ error: e.message }); } 
+}); 
+ 
+// ---- SANCTION-FREE ---- 
+app.post("/v1/sanction/prove", async (req, res) => { 
+  try { 
+    const { address, hAddr, siblings, rootSanctions } = req.body; 
+    const nLevels = Number(process.env.SMT_LEVELS || 256); 
+    const input = { 
+      rootSanctions, 
+      hAddr, 
+      address, 
+      siblings, 
+      oldRoot: 0, oldKey: hAddr, oldValue: 0, isOld0: 1, 
+      fnc: 0, newKey: hAddr, newValue: 0, isNew0: 1 
+    }; 
+    const inputPath = path.join("/tmp", `smt_${Date.now()}.json`); 
+    const outPath = inputPath.replace(".json", ".proof.json"); 
+    const pubPath = inputPath.replace(".json", ".public.json"); 
+    await fsPromises.writeFile(inputPath, JSON.stringify(input)); 
+    await run("snarkjs", ["groth16", "prove", 
+`${BUILD}/sanction_free_smt.zkey`, 
+`${CIRCUITS}/sanction_free_smt_js/sanction_free_smt.wasm`, inputPath, 
+outPath, pubPath]); 
+const proof = JSON.parse(await fsPromises.readFile(outPath, 
+"utf8")); 
+const pub = JSON.parse(await fsPromises.readFile(pubPath, 
+"utf8")); 
+res.json({ proof, publicSignals: pub }); 
+} catch (e:any) { res.status(500).json({ error: e.message }); } 
+}); 
+const PORT = parseInt(process.env.PORT || "8090", 10); 
+app.listen(PORT, ()=>console.log(`zk-attrs on :${PORT}`)); 
+5.2 /gnew/packages/sdk/src/zkattrs.ts 
+// Cliente ligero: preparar públicos y verificar local con snarkjs 
+(opcional) 
+export function computeAdultThreshold(today: Date): { Y18:number; 
+M18:number; D18:number } { 
+const y = today.getUTCFullYear() - 18; 
+const m = today.getUTCMonth()+1; const d = today.getUTCDate(); 
+return { Y18: y, M18: m, D18: d }; 
+} 
+export function poseidonHashAddress(addr: string): string { 
+// Usa circomlibjs.poseidon para computar hAddr off-chain 
+return "0xPOSEIDON(addr)"; // placeholder 
+} 
+6) UI Demos (React) 
+6.1 /gnew/apps/web/components/zk/AgeCheckWidget.tsx 
+import React, { useState } from "react"; 
+import { computeAdultThreshold } from "@gnew/sdk/zkattrs"; 
+export default function AgeCheckWidget({ rootAge }:{ rootAge: string 
+}) { 
+  const [ok,setOk] = useState<boolean|null>(null); 
+  const [loading, setLoading] = useState(false); 
+ 
+  async function onProve() { 
+    setLoading(true); 
+    try { 
+      // En demo: el usuario introduce DOB localmente (no se envía). 
+Aquí simulamos datos ya procesados. 
+      const { Y18, M18, D18 } = computeAdultThreshold(new Date()); 
+      // Llamar a /v1/age/prove con input (didCommit, Y,M,D, 
+merklePath...) 
+      const r = await fetch("/api/zk/age/prove", { method:"POST", 
+body: JSON.stringify({ rootAge, Y18, M18, D18 }) }); 
+      const { proof, publicSignals } = await r.json(); 
+      // Verificación local opcional o pasar a contrato 
+      setOk(true); 
+    } catch { setOk(false); } finally { setLoading(false); } 
+  } 
+ 
+  return ( 
+    <div className="rounded-2xl border p-5 shadow-sm"> 
+      <div className="font-semibold mb-2">Demo: Verificar 18+</div> 
+      <button className="px-4 py-2 rounded-xl bg-black text-white" 
+onClick={onProve} disabled={loading}> 
+        {loading ? "Generando prueba..." : "Probar 18+"} 
+      </button> 
+      {ok!==null && <div className={`mt-3 text-sm 
+${ok?"text-emerald-600":"text-rose-600"}`}>{ok?"Verificado":"Fallo"}</
+ div>} 
+    </div> 
+  ); 
+} 
+ 
+6.2 /gnew/apps/web/components/zk/SanctionFreeWidget.tsx 
+import React, { useState } from "react"; 
+ 
+export default function SanctionFreeWidget({ rootSanctions }:{ 
+rootSanctions: string }) { 
+  const [ok,setOk] = useState<boolean|null>(null); 
+  const [loading, setLoading] = useState(false); 
+ 
+  async function onProve() { 
+    setLoading(true); 
+    try { 
+      // Preparar hAddr y siblings (del proveedor de pruebas) 
+      const r = await fetch("/api/zk/sanction/prove", { method:"POST", 
+body: JSON.stringify({ rootSanctions }) }); 
+      const { proof, publicSignals } = await r.json(); 
+      setOk(true); 
+    } catch { setOk(false); } finally { setLoading(false); } 
+  } 
+ 
+  return ( 
+    <div className="rounded-2xl border p-5 shadow-sm"> 
+      <div className="font-semibold mb-2">Demo: Verificar no 
+sancionado</div> 
+      <button className="px-4 py-2 rounded-xl bg-black text-white" 
+onClick={onProve} disabled={loading}> 
+        {loading ? "Generando prueba..." : "Probar no sancionado"} 
+      </button> 
+      {ok!==null && <div className={`mt-3 text-sm 
+${ok?"text-emerald-600":"text-rose-600"}`}>{ok?"Verificado":"Fallo"}</
+ div>} 
+    </div> 
+  ); 
+} 
+ 
+ 
+7) Scripts de build y despliegue 
+7.1 /gnew/scripts/zk/build.sh 
+#!/usr/bin/env bash 
+set -euo pipefail 
+CIR=./gnew/circuits 
+OUT=./gnew/build 
+POT=./gnew/build/pot.ptau  # Powers of Tau 
+mkdir -p $OUT 
+# Powers of Tau (reutilizable). En prod: ceremonia multi-participante. 
+if [ ! -f "$POT" ]; then 
+snarkjs powersoftau new bn128 14 $POT -v 
+snarkjs powersoftau contribute $POT $OUT/pot1.ptau --name="contrib1" -v 
+mv $OUT/pot1.ptau $POT 
+fi 
+# AGE 
+circom $CIR/age_gte18.circom --wasm --r1cs -o $OUT 
+snarkjs groth16 setup $OUT/age_gte18.r1cs $POT $OUT/age_gte18.zkey 
+snarkjs zkey export verificationkey $OUT/age_gte18.zkey 
+$OUT/age_gte18.vkey.json 
+snarkjs zkey export solidityverifier $OUT/age_gte18.zkey 
+$OUT/VerifierAge.sol 
+# SANCTIONS 
+circom $CIR/sanction_free_smt.circom --wasm --r1cs -o $OUT 
+snarkjs groth16 setup $OUT/sanction_free_smt.r1cs $POT 
+$OUT/sanction_free_smt.zkey 
+snarkjs zkey export verificationkey $OUT/sanction_free_smt.zkey 
+$OUT/sanction_free_smt.vkey.json 
+snarkjs zkey export solidityverifier $OUT/sanction_free_smt.zkey 
+$OUT/VerifierSanction.sol 
+7.2 /gnew/scripts/zk/deploy_gate.ts 
+import { ethers } from "hardhat"; 
+async function main() { 
+const [deployer] = await ethers.getSigners(); 
+const VerifierAge = await ethers.getContractFactory("VerifierAge"); 
+const va = await VerifierAge.deploy(); await va.waitForDeployment(); 
+const VerifierSanction = await 
+ethers.getContractFactory("VerifierSanction"); 
+const vs = await VerifierSanction.deploy(); await 
+vs.waitForDeployment(); 
+const Gate = await ethers.getContractFactory("ZKAttributesGate"); 
+const gate = await Gate.deploy(await va.getAddress(), await 
+vs.getAddress()); 
+await gate.waitForDeployment(); 
+console.log("Gate:", await gate.getAddress()); 
+} 
+main().catch((e)=>{ console.error(e); process.exit(1); }); 
+8) Gestión de raíces y gobierno 
+● rootAge: emitida por Identidad/Legal a partir del set de compromisos (holders con VC 
+válida de fecha de nacimiento). 
+● rootSanctions (SMT): mantenida por Seguridad, derivada de listas externas 
+(OFAC/UE) + criterios internos; anclada en contrato (o reusando un RootRegistry). 
+● Rotación: publicar nueva raíz con validez/epoch; UI y servicio seleccionan la raíz 
+vigente vía ZKAttributesGate.setRoots. 
+● Auditoría: publicar a IPFS roots.json (root, fecha, fuente, script hash). 
+9) Pruebas y DoD 
+9.1 Unit & e2e 
+● Circuito edad: 
+○ Casos válidos: (Y,M,D) = (2000,05,01) vs umbral (2007,08,19) ⇒ 
+válido. 
+○ Casos inválidos: (2008,01,01) ⇒ falla. 
+○ Verificación on‑chain con VerifierAge. 
+● Circuito sanciones: 
+○ address no presente en SMT ⇒ prueba 0‑leaf válida. 
+○ Dirección sancionada ⇒ no existe prueba 0‑leaf válida. 
+○ Verificación on‑chain con VerifierSanction. 
+● SDK/UI: genera prueba, valida localmente (snarkjs) y envía a ZKAttributesGate. 
+9.2 DoD — checklist 
+● Demo 18+ funcional (local + on‑chain). 
+● Demo no sancionado (SMT no‑membresía) funcional. 
+● Raíces gestionadas y actualizables. 
+● Runbooks de ceremonia y rotación. 
+● Auditoría: artefactos (vkeys, zkeys, scripts) con hashes. 
+10) Runbooks (extracto) 
+● Ceremonia (Groth16): ejecutar build.sh con ≥2 contribuciones; almacenar zkey 
+firmado; publicar vkey.json en IPFS. 
+● Actualizar rootAge: recomputar Merkle de compromisos, anclar root y llamar 
+setRoots(newRootAge, rootSanctions). 
+● Actualizar rootSanctions: recomputar SMT desde fuentes; anclar y 
+setRoots(rootAge, newRootSanctions). 
+● Incidente: revocar zkey → reconstruir circuito (versión +1), desplegar nuevos 
+verificadores y gate. 
+11) Seguridad y privacidad 
+● No filtraciones: entradas privadas nunca salen del cliente/servicio; solo proof + 
+publicSignals. 
+● Binding de identidad: did/address se introducen como compromisos Poseidon, 
+evitando exponerlos. 
+● SMT vs RSA: SMT permite no‑membresía simple y eficiente; RSA acumuladores 
+opcional para listas grandes con auditores externos. 
+● Cripto madura: usa circomlibjs para poseidon y gadgets estándar; evita aritmética 
+casera. 
+● Gas: preferir PLONK si reduce tamaño de prueba con coste aceptable; Groth16 si 
+prioriza gas bajo. 
+12) Integraciones GNEW 
+● N121 (DID): did/controller en commitments de edad; extraction de claves issuer. 
+● N122 (VC): emitir VC de fecha de nacimiento o prueba de humanidad; generator de 
+compromisos proviene del VC. 
+● N123 (SBT): opcionalmente badge “18+ verificado” con vcHash (sin revelar DOB). 
+● N125 (Sybil): no sancionado y 18+ como pruebas de step‑up en el gate de riesgo. 
+13) Ejemplos de entradas públicas 
+● Edad (18+): 
+publicSignals = [ rootAge, Y18, M18, D18 ] 
+con Y18,M18,D18 = hoy - 18 años (calculado fuera del circuito). 
+● No sancionado: 
+publicSignals = [ rootSanctions, hAddr ] donde hAddr = 
+Poseidon(address). 
+14) Roadmap 
+● v0.1 (MVP): Groth16, Merkle/SMT, demos 18+ y no sancionado, gate on‑chain. 
+● v0.2: PLONK, pruebas agregadas (age + sanction en una), generación en navegador 
+(wasm bundling). 
+● v0.3: Revocable AnonCred (BBS+/SD‑JWT + ZK binding), zk‑KYC con proveedores 
+externos, benchmark gas/latencia. 
+Listo. Incluye circuitos, contratos, servicio, SDK y UI de demo; con esto se cumplen las demos 
+solicitadas (18+ y no sancionado), verificación local/on‑chain y guías de operación y auditoría. 
+Tú dijiste: 
+programa a detalle para gnew N127 13.7 Recuperación social (Prompt 127) Objetivo: 
+Recuperación de cuenta por guardians. Roles: Back, Identidad. DoD: consenso N-of-M; 
+tiempos de espera. 
+ChatGPT Plus 
+Pensó durante 1m 28s 

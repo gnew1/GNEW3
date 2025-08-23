@@ -1,0 +1,18 @@
+{ 
+  "gnew": { 
+    "embargo_countries": ["CU", "IR", "KP", "SY", "RU"], 
+    "roles": { 
+      "viewer": ["read"], 
+      "editor": ["read", "write"], 
+      "admin": ["read", "write", "manage"] 
+    }, 
+    "payments": { 
+      "risk_threshold_allow": 0.70, 
+      "risk_threshold_review": 0.85, 
+      "soft_limit_eur": 1000, 
+      "hard_limit_eur": 5000, 
+      "daily_sender_limit_eur": 2000 
+    } 
+  } 
+} 
+ 

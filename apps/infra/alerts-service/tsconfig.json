@@ -1,0 +1,27 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "commonjs",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  }
+}
+
+Prompt N384 — Alerts Service
+
+Stack: Node.js + Express + TypeScript.
+
+Servicio backend encargado de gestionar alertas internas de GNEW.
+
+Endpoints:
+
+POST /api/alerts → crear alerta {type, message, level}.
+
+GET /api/alerts → listar todas las alertas.
+
+Base para futuras integraciones con el sistema de monitoreo y notificaciones internas.
+

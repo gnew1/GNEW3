@@ -1,0 +1,79 @@
+```toml
+[project]
+name = "gnew-quickstart"
+version = "0.1.0"
+dependencies = ["httpx>=0.27.0","python-dotenv>=1.0.1"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+/gnew/devrel/quickstarts/python-basic/src/gnew_quickstart/client.py
+import httpx
+from os import getenv
+
+class GnewClient:
+    def __init__(self, api_url: str, api_key: str):
+        self._c = httpx.Client(base_url=api_url, headers={"X-GNEW-API-KEY": api_key}, timeout=20)
+
+    def verify_key(self) -> bool:
+        self._c.get("/auth/api-key/verify").raise_for_status()
+        return True
+
+    def list_projects(self):
+        r = self._c.get("/v1/projects"); r.raise_for_status()
+        return r.json()
+
+    def token_balance(self):
+        r = self._c.get("/v1/tokens/balance"); r.raise_for_status()
+        return r.json()
+
+def default_client():
+    api_url = getenv("GNEW_API_URL")
+    api_key = getenv("GNEW_API_KEY")
+    if not api_url or not api_key:
+        raise RuntimeError("Faltan GNEW_API_URL/GNEW_API_KEY")
+    return GnewClient(api_url, api_key)
+
+/gnew/devrel/quickstarts/python-basic/src/gnew_quickstart/main.py
+from .client import default_client
+
+def run():
+    c = default_client()
+    print("Verificando API Key...")
+    assert c.verify_key()
+    print("Proyectos:", c.list_projects())
+    print("Balance:", c.token_balance())
+    print("✅ Quickstart Python OK")
+
+if __name__ == "__main__":
+    run()
+
+/gnew/devrel/quickstarts/python-basic/tests/test_smoke.py
+from gnew_quickstart.client import default_client
+
+def test_smoke():
+    c = default_client()
+    assert c.verify_key()
+    assert isinstance(c.list_projects(), list)
+
+/gnew/devrel/quickstarts/python-basic/Dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY pyproject.toml .
+RUN pip install --upgrade pip && pip install -e .
+COPY src ./src
+COPY tests ./tests
+CMD ["python","-m","gnew_quickstart.main"]
+
+ 
+6) Quick start React (frontend)
+/gnew/devrel/quickstarts/react-basic/README.md
+# GNEW Quickstart — React + Vite
+
+## Docker
+```bash
+docker build -t gnew-react-qs .
+docker run --rm -p 5173:5173 --env-file ../shared/.env.example gnew-react-qs
+# Abrir http://localhost:5173
+
+

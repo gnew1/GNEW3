@@ -1,0 +1,62 @@
+ ss.md 
+N120 — 12.10 Egresos GAS‑less para usuarios 
+Objetivo: Patrocinar el gas en acciones críticas sin fricción, con límites y controles de abuso. 
+Roles: Backend, Smart Contracts (SC), DevOps. 
+Stack: ERC‑4337 (EntryPoint v0.6) + Paymaster verificante, Bundler, servicio de firma 
+(“sponsor”), fallback EIP‑2771 (OpenGSN), Redis rate‑limit, Prometheus/Grafana, 
+Hardhat/Foundry, Node.js/TypeScript. 
+1) Alcance y principios 
+● Acciones patrocinadas (críticas): 
+○ Onboarding (crear AA wallet / vincular DID). 
+○ Votaciones/encuestas on‑chain y firma de snapshots. 
+○ Reclamos/retiros de recompensas de bajo importe. 
+○ Operaciones internas de governance (crear/proponer si cumple política). 
+● Acciones NO patrocinadas (por defecto): transferencias externas de alto monto, 
+interacciones arbitrarias con DEX/DeFi (salvo lista blanca específica de la DAO). 
+● Criterios de UX: 0 prompts sobre gas y 0 firmas extra (aparte de la firma normal del 
+userOp). 
+● Límites y seguridad: cuotas por usuario/acción, presupuestos por guild/proyecto, 
+allowlist de contratos/métodos, velocity limit, antibot (proofs ligeras), pausas de 
+emergencia. 
+● Multi‑red: L2s priorizadas (Base, Arbitrum, Polygon). En redes sin 4337 estable → 
+fallback EIP‑2771 (OpenGSN). 
+2) Entregables 
+1. SC Paymaster (ERC‑4337) con políticas: allowlist de métodos/contratos, límites por 
+importe, verificación de “sponsorship ticket” firmado off‑chain. 
+2. Servicio Sponsor (TS/Node) que aplica reglas, firma tickets de patrocinio y publica 
+métricas. 
+3. SDK cliente (TS) para usar gasless de forma transparente (4337 primero; GSN 
+fallback). 
+4. Infra: Helm charts, configuración de Bundler(s), Redis, Postgres (políticas), 
+Prometheus/Grafana. 
+5. Dashboards y alertas: gasto por día/proyecto, rechazos por política, latencias P95, 
+depósitos/“stake”. 
+6. Runbooks: reaprovisionar depósito, rotar claves, activar kill‑switch, subir/quitar 
+contratos de la allowlist. 
+7. Pruebas y DoD (ver §6). 
+3) Arquitectura (resumen) 
+● Flujo 4337: 
+1. App pide al Sponsor un ticket para una acción concreta 
+(contrato+selector+params hashed, tope de gas y vencimiento). 
+2. Sponsor valida políticas/cuotas y firma el SponsorshipTicket. 
+3. Cliente crea UserOperation y lo envía a un Bundler incluyendo 
+paymasterAndData = paymasterAddr | ticket | sponsorSig. 
+4. Paymaster on‑chain valida el ticket, límites y saldos; si OK, cubre el gas desde 
+su depósito en EntryPoint. 
+● Fallback GSN: Si no hay bundler fiable, la dApp reintenta vía OpenGSN con 
+Paymaster GSN. 
+4) Especificación de políticas (capas) 
+● Capas de control: 
+○ Contrato: allowlist (direcciones), método (4‑bytes selector) y cap por acción. 
+○ Usuario (AA o EOA enlazado a DID): cuota diaria/semanal/mensual, límite por tx. 
+○ Contexto: tiempo (ventanas), versión de política, cadena, nonce de política. 
+○ Presupuestos: por proyecto/guild con alertas de umbrales 50/80/100%. 
+● Evidencias anti‑abuso: 
+○ Proofs ligeras (p.ej. “humano” vía verifiable credential firmada por la DAO), 
+detector de patrones (demasiadas tx pequeñas, “farming” de gas). 
+○ Rate limit Redis (IP/device heurísticas cuando sea off‑chain) y por address AA 
+en on‑chain. 
+● Gobernanza: cambios de allowlist, caps y presupuestos con timelock y multisig de 
+Seguridad+Gobernanza. 
+5) Implementación (código clave) 
+5.1 Paymaster ERC‑4337 (Solidity) 

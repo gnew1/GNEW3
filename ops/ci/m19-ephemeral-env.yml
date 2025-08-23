@@ -1,0 +1,55 @@
+
+name: M19 Ephemeral Envs PR
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "apps/**"
+      - "services/**"
+      - "contracts/**"
+
+jobs:
+  ephemeral:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login en Registry GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construir imágenes de PR
+        run: |
+          docker build -t ghcr.io/gnew/app-pr:${{ github.event.pull_request.number }} ./apps/dao-web
+          docker push ghcr.io/gnew/app-pr:${{ github.event.pull_request.number }}
+
+      - name: Desplegar en cluster temporal (k3s)
+        run: |
+          helm upgrade --install pr-${{ github.event.pull_request.number }} ./ops/helm/ephemeral \
+            --set image.tag=${{ github.event.pull_request.number }} \
+            --set ingress.host=pr-${{ github.event.pull_request.number }}.gnew.dev
+
+      - name: Publicar comentario con URL
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: ephemeral
+          message: |
+            🚀 Entorno efímero desplegado:
+            https://pr-${{ github.event.pull_request.number }}.gnew.dev
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Borrar despliegue efímero
+        run: |
+          helm uninstall pr-${{ github.event.pull_request.number }} || true
+
+

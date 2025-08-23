@@ -1,0 +1,23 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "commonjs",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  }
+}
+
+Prompt N380 — Analytics Service (API de métricas)
+
+Stack: Node.js + Express + TypeScript.
+
+Expone endpoint /api/metrics con métricas simuladas de la comunidad (usuarios activos, propuestas, recompensas distribuidas).
+
+Preparado para integrarse con el Metrics Dashboard (N379).
+
+👉 Con este servicio backend, el dashboard del prompt anterior puede consumir métricas reales desde la API de la comunidad.
+

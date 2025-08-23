@@ -1,0 +1,100 @@
+{ 
+  "title": "GNEW — Contratos (Eventos & Fallos)", 
+  "uid": "gnew-core", 
+  "timezone": "browser", 
+  "schemaVersion": 39, 
+  "version": 1, 
+  "refresh": "10s", 
+  "time": { "from": "now-6h", "to": "now" }, 
+  "templating": { 
+    "list": [ 
+      { 
+        "name": "contract", 
+        "type": "query", 
+        "datasource": "Prometheus", 
+        "refresh": 2, 
+        "query": "label_values(gnew_tx_total, contract)", 
+        "includeAll": false, 
+        "multi": false 
+      }, 
+      { 
+        "name": "event", 
+        "type": "query", 
+        "datasource": "Prometheus", 
+        "refresh": 2, 
+        "query": 
+"label_values(gnew_events_total{contract=\"$contract\"}, event)", 
+        "includeAll": true, 
+        "multi": true 
+      } 
+    ] 
+  }, 
+  "panels": [ 
+    { 
+      "type": "stat", 
+      "title": "Failure rate (5m)", 
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 }, 
+      "targets": [ 
+        { "expr": "gnew_tx_failure_rate{contract=\"$contract\"}", 
+"refId": "A" } 
+      ], 
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, 
+"colorMode": "value" }, 
+      "fieldConfig": { 
+        "defaults": { 
+          "unit": "percentunit", 
+          "thresholds": { 
+            "mode": "absolute", 
+            "steps": [ 
+              { "color": "green", "value": null }, 
+              { "color": "yellow", "value": 0.01 }, 
+              { "color": "red", "value": 0.05 } 
+            ] 
+          } 
+        }, 
+        "overrides": [] 
+      } 
+    }, 
+    { 
+      "type": "timeseries", 
+      "title": "TX total vs fallidas", 
+      "gridPos": { "x": 6, "y": 0, "w": 18, "h": 8 }, 
+      "targets": [ 
+        { "expr": 
+"sum(rate(gnew_tx_total{contract=\"$contract\"}[5m]))", "refId": "A", 
+"legendFormat": "tx/s" }, 
+        { "expr": 
+"sum(rate(gnew_tx_failures_total{contract=\"$contract\"}[5m]))", 
+"refId": "B", "legendFormat": "fails/s" } 
+      ], 
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] 
+} 
+    }, 
+    { 
+      "type": "timeseries", 
+      "title": "Eventos por minuto (filtrable por tipo)", 
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 }, 
+      "targets": [ 
+        { 
+          "expr": 
+"sum(gnew_events_per_minute{contract=\"$contract\",event=~\"$event\"})
+ ", 
+          "refId": "A", 
+          "legendFormat": "{{event}}" 
+        } 
+      ], 
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] 
+} 
+    }, 
+    { 
+      "type": "timeseries", 
+      "title": "Indexer lag (bloques)", 
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 }, 
+      "targets": [{ "expr": "gnew_indexer_lag_blocks", "refId": "A" 
+}], 
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] 
+} 
+    } 
+  ] 
+} 
+ 

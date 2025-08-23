@@ -1,0 +1,22 @@
+
+{
+  "type": "in-toto Layout",
+  "steps": [
+    {
+      "name": "install-dependencies",
+      "expected_materials": [],
+      "expected_products": ["MATCH * WITH PRODUCTS FROM install-dependencies"],
+      "pubkeys": ["<PUBKEY_ID>"],
+      "threshold": 1
+    },
+    {
+      "name": "build",
+      "expected_materials": ["MATCH * WITH PRODUCTS FROM install-dependencies"],
+      "expected_products": ["CREATE *"],
+      "pubkeys": ["<PUBKEY_ID>"],
+      "threshold": 1
+    }
+  ]
+}
+
+

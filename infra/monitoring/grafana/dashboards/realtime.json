@@ -1,0 +1,24 @@
+{ 
+  "title": "Realtime", 
+  "panels": [ 
+    { 
+      "type": "timeseries", 
+      "title": "Broadcast latency p95", 
+      "targets": [ 
+        { 
+          "expr": "histogram_quantile(0.95, 
+sum(rate(rt_broadcast_latency_seconds_bucket[5m])) by (le))" 
+        } 
+      ] 
+    }, 
+    { "type": "timeseries", "title": "Active connections", "targets": 
+[{ "expr": "rt_connections" }]}, 
+    { "type": "timeseries", "title": "Dropped messages", "targets": [{ 
+"expr": "rate(rt_dropped_messages_total[5m])" }]}, 
+    { "type": "bargauge", "title": "Room members", "targets": [{ 
+"expr": "rt_room_members" }]} 
+  ], 
+  "schemaVersion": 39 
+} 
+ 
+ 

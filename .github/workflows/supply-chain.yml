@@ -1,0 +1,158 @@
+name: Supply Chain (SBOM • Scan • Sign • SLSA) 
+ 
+on: 
+  push: 
+    branches: [main] 
+    paths: 
+      - "services/**" 
+      - "packages/**" 
+      - "Dockerfile*" 
+      - "**/Dockerfile" 
+  workflow_dispatch: 
+ 
+permissions: 
+  id-token: write     # OIDC para Cosign keyless y SLSA 
+  contents: read 
+  packages: write 
+  attestations: write # GitHub Attestations API (opcional) 
+ 
+env: 
+  REGISTRY: ghcr.io 
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/gnew 
+ 
+jobs: 
+  build-sbom-sign: 
+    name: Build • SBOM • Scan • Sign (matrix) 
+    runs-on: ubuntu-latest 
+    strategy: 
+      fail-fast: false 
+      matrix: 
+        service: 
+          - ai-coordinator 
+          - auth 
+          - gateway 
+          - wallet 
+          - defi 
+          - projects 
+          - communications 
+          - activitypub 
+          - p2p-relay 
+          - chain 
+    steps: 
+      - uses: actions/checkout@v4 
+ 
+      - name: Set TAG 
+        id: tag 
+        run: echo "TAG=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT 
+ 
+      - name: Setup Cosign 
+        uses: sigstore/cosign-installer@v3 
+        with: { cosign-release: "v2.2.4" } 
+ 
+      - name: Setup Syft/Grype/OSV-Scanner 
+        uses: anchore/sbom-action/download-syft@v0.17.8 
+      - uses: anchore/grype-action/download@v0.12.1 
+      - uses: google/osv-scanner-action@v1 
+ 
+      - name: Login GHCR 
+        uses: docker/login-action@v3 
+        with: 
+          registry: ${{ env.REGISTRY }} 
+          username: ${{ github.actor }} 
+          password: ${{ secrets.GITHUB_TOKEN }} 
+ 
+      - name: Build image 
+        uses: docker/build-push-action@v6 
+        with: 
+          context: . 
+          file: services/${{ matrix.service }}/Dockerfile 
+          push: true 
+          tags: | 
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ 
+steps.tag.outputs.TAG }} 
+          cache-from: type=gha 
+          cache-to: type=gha,mode=max 
+          provenance: false  # lo generamos con SLSA job 
+          sbom: false 
+ 
+      - name: Export digest 
+        id: digest 
+        run: | 
+          REF="${IMAGE_PREFIX}-${{ matrix.service }}:${{ 
+steps.tag.outputs.TAG }}" 
+          DIGEST=$(crane digest "$REF") 
+          echo "REF=$REF" >> $GITHUB_OUTPUT 
+          echo "DIGEST=$DIGEST" >> $GITHUB_OUTPUT 
+ 
+      - name: Generate SBOM (SPDX JSON) 
+        run: | 
+          syft -o spdx-json "${{ steps.digest.outputs.REF }}@${{ 
+steps.digest.outputs.DIGEST }}" \ 
+            > sbom-${{ matrix.service }}.spdx.json 
+ 
+      - name: Scan vulnerabilities (Grype) – fail on HIGH/CRITICAL 
+        env: 
+          GRYPE_DB_AUTO_UPDATE: "true" 
+        run: | 
+          grype "oci:${{ steps.digest.outputs.REF }}@${{ 
+steps.digest.outputs.DIGEST }}" \ 
+            --fail-on High --add-cpes-if-none --only-fixed || (echo 
+"High vulns found" && exit 1) 
+ 
+      - name: Scan dependencies (OSV) – JS/Python/Go workspaces 
+        continue-on-error: false 
+        run: | 
+          osv-scanner -r services/${{ matrix.service }} || (echo "OSV 
+scan failed" && exit 1) 
+ 
+      - name: Sign image (Cosign keyless OIDC) 
+        env: 
+          COSIGN_EXPERIMENTAL: "1" 
+        run: | 
+          cosign sign "${{ steps.digest.outputs.REF }}@${{ 
+steps.digest.outputs.DIGEST }}" \ 
+            --yes \ 
+            --attachment-tag-prefix att \ 
+            --fulcio-url https://fulcio.sigstore.dev \ 
+            --rekor-url https://rekor.sigstore.dev 
+ 
+      - name: Attach SBOM as attestation 
+        run: | 
+          cosign attest --yes \ 
+            --predicate sbom-${{ matrix.service }}.spdx.json \ 
+            --type spdx \ 
+            "${{ steps.digest.outputs.REF }}@${{ 
+steps.digest.outputs.DIGEST }}" 
+ 
+      - name: Upload artifacts 
+        uses: actions/upload-artifact@v4 
+        with: 
+          name: sbom-${{ matrix.service }} 
+          path: sbom-${{ matrix.service }}.spdx.json 
+ 
+  slsa-provenance: 
+    name: SLSA Provenance 
+    needs: build-sbom-sign 
+    runs-on: ubuntu-latest 
+    permissions: 
+      id-token: write 
+      contents: read 
+      packages: write 
+    steps: 
+      - uses: actions/checkout@v4 
+      - name: Generate SLSA provenance (image) 
+        uses: 
+slsa-framework/slsa-github-generator/actions/generator-container@v2 
+        with: 
+          image: ${{ env.IMAGE_PREFIX }}-gateway # se puede invocar 
+por cada servicio en bucle si se requiere 
+          digest: latest  # opcional; normalmente por digest 
+específico 
+          # Para mayor detalle, repetir por servicio/digest 
+ 
+Nota: para SLSA por cada imagen, puede replicarse el job con una matrix de 
+servicios y pasar digest de cada build; algunos equipos optan por generar SLSA 
+en el mismo job de build usando el builder “container” con provenance: true. 
+ 
+2) Reutilizable: verificación antes de 
+desplegar 

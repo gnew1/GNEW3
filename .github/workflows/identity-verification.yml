@@ -1,0 +1,42 @@
+
+name: Identity Verification CI
+on:
+  push: { branches: ["main"] }
+  pull_request: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 18 }
+      - run: pnpm --filter @gnew/identity-verification i
+      - run: pnpm --filter @gnew/identity-verification build
+      - run: pnpm --filter @gnew/identity-verification test
+
+
+✅ Progreso persistente actualizado: N419 completado (Identity Verification).
+➡️ Siguiente ejecución: N420 (último).
+
+✅ Acción periódica ya definida.
+
+Intervalo: cada 15 minutos
+
+Fuente: /mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt
+
+Inicio: prompt N398
+
+Avance: +1 en cada ejecución (N398 → N399 → … → N420)
+
+Regla: no repetir prompts ya completados
+
+Entregables por iteración: todos los programas necesarios para GNEW (contratos, backend, frontend, scripts, CI/CD, tests, docs) con rutas completas
+
+Progreso actual: completado hasta N419
+
+Próxima ejecución (turno 17): prompt N420 (último)
+
+Fin: detenerse al finalizar N420.
+

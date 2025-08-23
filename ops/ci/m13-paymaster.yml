@@ -1,0 +1,24 @@
+
+name: M13 Paymaster Tests
+
+on:
+  pull_request:
+    paths:
+      - "contracts/paymasters/**"
+      - "services/paymaster-sdk/**"
+      - "tests/paymaster/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Ejecutar tests de Paymaster
+        run: npx hardhat test tests/paymaster/test_m13.spec.ts
+
+

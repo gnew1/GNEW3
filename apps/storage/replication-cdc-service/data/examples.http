@@ -1,0 +1,43 @@
+
+### Ingesta de CDC (PUT)
+POST http://localhost:8111/events/ingest
+Content-Type: application/json
+
+{
+  "events": [
+    { "op": "PUT", "key": "demo/hello.txt", "etag": "abc123", "size": 11, "contentType": "text/plain", "srcRegion": "primary", "dstRegion": "secondary", "ts": 1724130000000 }
+  ]
+}
+
+### Ejecutar replayer
+POST http://localhost:8111/replay/run
+Content-Type: application/json
+
+{ "limit": 25 }
+
+### Métricas
+GET http://localhost:8111/metrics
+
+### Listado de errores
+GET http://localhost:8111/events?status=error&limit=50
+
+### Reencolar todos los errores
+POST http://localhost:8111/events/requeue
+Content-Type: application/json
+
+{ "allErrors": true }
+
+### Backfill por claves
+POST http://localhost:8111/backfill/keys
+Content-Type: application/json
+
+{ "keys": ["logs/2025-08-20/a.gz", "logs/2025-08-20/b.gz"], "srcRegion": "primary", "dstRegion": "secondary" }
+
+Notas de cumplimiento del prompt
+
+N170 implementa CDC + Replaying para la replicación de objetos multi‑región, encadenando con N169.
+
+Código completo, coherente con el monorepo (apps/storage/*), TypeScript + Express + SQLite, y helpers S3 (AWS SDK v3).
+
+Idempotencia, leasing, DLQ, backfill y métricas incluidas.
+

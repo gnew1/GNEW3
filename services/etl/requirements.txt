@@ -1,0 +1,167 @@
+apache-airflow==2.10.3 
+psycopg2-binary==2.9.10 
+requests==2.32.3 
+gql[requests]==3.5.0 
+python-dateutil==2.9.0.post0 
+pandas==2.2.3 
+web3==6.20.3 
+pyyaml==6.0.2 
+lxml==5.3.0 
+Ruta completa: ./services/etl/sql/001_schema.sql -- Esquema contable y subledger 
+create table if not exists accounts ( 
+code text primary key, 
+name text not null, 
+type text not null check (type in 
+('ASSET','LIABILITY','EQUITY','INCOME','EXPENSE')) 
+); 
+create table if not exists counterparties ( 
+id serial primary key, 
+address text unique, 
+name text 
+); 
+create table if not exists subgraph_movements ( 
+tx_hash bytea primary key, 
+safe_address text not null, 
+to_address text, 
+  value_wei numeric not null, 
+  token_address text, 
+  token_amount numeric, 
+  block_number bigint not null, 
+  ts timestamptz not null, 
+  raw jsonb 
+); 
+ 
+create index if not exists idx_subgraph_movements_safe on 
+subgraph_movements (safe_address); 
+create index if not exists idx_subgraph_movements_ts on 
+subgraph_movements (ts); 
+ 
+create table if not exists rpc_movements ( 
+  tx_hash bytea primary key, 
+  safe_address text not null, 
+  to_address text, 
+  value_wei numeric not null, 
+  block_number bigint not null, 
+  ts timestamptz not null, 
+  raw jsonb 
+); 
+ 
+create table if not exists ledger_entries ( 
+  id bigserial primary key, 
+  entry_date date not null, 
+  account_code text not null references accounts(code), 
+  counterparty_id int references counterparties(id), 
+  amount numeric(38, 8) not null, 
+  currency text not null default 'GNEW', 
+  direction text not null check (direction in ('DEBIT','CREDIT')), 
+  description text, 
+  tx_hash bytea not null, 
+  chain_id int not null, 
+  safe_address text not null, 
+  created_at timestamptz not null default now() 
+); 
+ 
+create unique index if not exists idx_ledger_unique_tx on 
+ledger_entries (tx_hash, account_code, direction); 
+ -- Cierres y controles 
+create table if not exists closes ( 
+  id serial primary key, 
+  period_start date not null, 
+  period_end date not null, 
+  state text not null check (state in ('PENDING','FINAL')), 
+  snapshot_hash text, 
+  created_at timestamptz not null default now() 
+); 
+ 
+create table if not exists close_approvals ( 
+  id serial primary key, 
+  close_id int not null references closes(id) on delete cascade, 
+  approver text not null, 
+  role text not null check (role in ('FINANCE','AUDITOR')), 
+  created_at timestamptz not null default now(), 
+  unique (close_id, role) -- doble firma por rol 
+); 
+ -- Inmutabilidad: bloquear modificaciones anteriores a un cierre FINAL 
+create or replace function forbid_mutation_on_closed_period() 
+returns trigger as $$ 
+declare 
+  affected_date date; 
+  closed_count int; 
+begin 
+  if TG_TABLE_NAME = 'ledger_entries' then 
+    affected_date := coalesce(new.entry_date, old.entry_date); 
+  elsif TG_TABLE_NAME = 'subgraph_movements' then 
+    affected_date := (coalesce(new.ts, old.ts))::date; 
+  elsif TG_TABLE_NAME = 'rpc_movements' then 
+    affected_date := (coalesce(new.ts, old.ts))::date; 
+  else 
+    return new; 
+  end if; 
+select count(*) into closed_count from closes 
+where state='FINAL' 
+and affected_date between period_start and period_end; 
+if closed_count > 0 then 
+raise exception 'Periodo cerrado es inmutable'; 
+end if; 
+return new; 
+end; 
+$$ language plpgsql; 
+drop trigger if exists t_immut_ledger on ledger_entries; 
+create trigger t_immut_ledger before insert or update or delete on 
+ledger_entries 
+for each row execute function forbid_mutation_on_closed_period(); 
+drop trigger if exists t_immut_subgraph on subgraph_movements; 
+create trigger t_immut_subgraph before insert or update or delete on 
+subgraph_movements 
+for each row execute function forbid_mutation_on_closed_period(); 
+drop trigger if exists t_immut_rpc on rpc_movements; 
+create trigger t_immut_rpc before insert or update or delete on 
+rpc_movements 
+for each row execute function forbid_mutation_on_closed_period(); -- Finalización de cierre: requiere FINANCE + AUDITOR 
+create or replace function finalize_close(p_close_id int) 
+returns void as $$ 
+declare 
+cnt int; 
+begin 
+select count(distinct role) into cnt from close_approvals where 
+close_id = p_close_id; 
+if cnt < 2 then 
+raise exception 'Se requieren dos firmas (FINANCE y AUDITOR)'; 
+end if; 
+update closes set state='FINAL' where id=p_close_id and 
+state='PENDING'; 
+end; 
+$$ language plpgsql; 
+Ruta completa: ./services/etl/sql/002_views.sql -- Vista de sumarias por mes para export 
+create or replace view v_monthly_trial_balance as 
+select 
+date_trunc('month', entry_date)::date as period, 
+account_code, 
+sum(case when direction='DEBIT' then amount else 0 end) as debit, 
+sum(case when direction='CREDIT' then amount else 0 end) as credit, 
+sum(case when direction='DEBIT' then amount else -amount end) as 
+balance 
+from ledger_entries 
+group by 1,2 
+order by 1,2; -- Diferencias subgraph vs rpc por día/SAFE 
+create or replace view v_recon_diffs as 
+with s as ( 
+select date_trunc('day', ts)::date d, safe_address, sum(value_wei) 
+swei 
+from subgraph_movements where value_wei is not null and value_wei <> 
+0 group by 1,2 
+), 
+r as ( 
+select date_trunc('day', ts)::date d, safe_address, sum(value_wei) 
+rwei 
+from rpc_movements where value_wei is not null and value_wei <> 0 
+group by 1,2 
+) 
+select coalesce(s.d, r.d) as day, coalesce(s.safe_address, 
+r.safe_address) as safe, 
+       coalesce(s.swei,0) swei, coalesce(r.rwei,0) rwei, 
+       coalesce(s.swei,0) - coalesce(r.rwei,0) as diff 
+from s full join r on s.d=r.d and s.safe_address=r.safe_address 
+where coalesce(s.swei,0) <> coalesce(r.rwei,0); 
+ 
+ 

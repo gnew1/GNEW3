@@ -1,0 +1,25 @@
+
+name: M15 Telemetry Tests
+
+on:
+  pull_request:
+    paths:
+      - "services/telemetry/**"
+      - "apps/dao-web/hooks/useTelemetry.ts"
+      - "apps/dao-web/pages/api/telemetry.ts"
+      - "tests/telemetry/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Ejecutar tests M15
+        run: npx hardhat test tests/telemetry/test_m15.spec.ts || npx mocha tests/telemetry/test_m15.spec.ts
+
+

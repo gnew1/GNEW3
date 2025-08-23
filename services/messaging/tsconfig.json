@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2020",
+    "outDir": "dist",
+    "strict": true,
+    "moduleResolution": "Bundler",
+    "esModuleInterop": true
+  },
+  "include": ["src"]
+}
+

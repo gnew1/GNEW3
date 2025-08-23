@@ -1,0 +1,43 @@
+groups: 
+  - name: gnew-alerts 
+    rules: 
+      # Condición mínima DoD: error-rate >= 1% durante 5m 
+      - alert: ContractTxFailureRateHigh 
+        expr: gnew_tx_failure_rate > 0.01 
+        for: 5m 
+        labels: 
+          severity: warning 
+        annotations: 
+          summary: "Alta tasa de fallos de TX en {{ $labels.contract 
+}}" 
+          description: "Failure rate > 1% (5m). Verifica RPC, oráculo, 
+slashing o bugs." 
+      # Umbral adaptativo (reduce falsos positivos) 
+      - alert: ContractTxFailureRateAnomalous 
+        expr: | 
+          gnew_tx_failure_rate 
+          > 
+          clamp_max( 
+            gnew_failure_rate_baseline_1h + 3 * 
+gnew_failure_rate_stddev_1h, 
+            0.25 
+          ) 
+        for: 10m 
+        labels: 
+          severity: critical 
+        annotations: 
+          summary: "Anomalía en tasa de fallos ({{ $labels.contract 
+}})" 
+          description: "Supera media+3σ de la última hora (máx clamp 
+25%). Investiga posibles incidentes." 
+      # Indexer lag 
+      - alert: IndexerLagHigh 
+        expr: gnew_indexer_lag_blocks > 30 
+        for: 10m 
+        labels: 
+          severity: warning 
+        annotations: 
+          summary: "Indexer lag alto" 
+          description: "El exportador está {{ $value }} bloques por 
+detrás." 
+ 

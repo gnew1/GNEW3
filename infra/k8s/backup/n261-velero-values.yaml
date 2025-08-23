@@ -1,0 +1,175 @@
+
+# =============================================================================
+# GNEW • N261 — Backups y DR Multi‑cloud con Velero (Helm values)
+# Compatible con AWS S3 o GCP GCS (seleccionable por .provider.type).
+# Requisitos previos:
+#  - Namespace: backup (o ajustar .namespace)
+#  - Secrets con credenciales: velero-credentials (key: cloud)
+#  - Buckets existentes con versionado activado.
+#  - Opcional: claves KMS para cifrado del bucket/objeto.
+# Despliegue:
+#  helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
+#  helm upgrade --install velero vmware-tanzu/velero -n backup -f n261-velero-values.yaml
+# =============================================================================
+
+namespace: backup
+
+labels:
+  project: GNEW
+  component: backup
+  environment: prod
+  managed-by: helm
+
+# ---- Selección de proveedor: "aws" | "gcp"
+provider:
+  type: "aws"
+
+# ---- Parámetros comunes
+common:
+  bucket: "gnew-prod-backups"          # nombre del bucket S3 o GCS
+  prefix: "k8s/cluster-1"              # prefijo dentro del bucket
+  region: "eu-west-1"                  # AWS: region, GCP: ubicación del bucket
+  snapshots: false                     # usar snapshots de volumen si hay soporte CSI
+  defaultTTL: "720h"                   # 30 días
+  schedules:
+    nightly: "0 3 * * *"               # 03:00 UTC
+    hourly: "0 * * * *"                # cada hora (retención corta)
+
+# ---- Imagen/recursos
+image:
+  repository: velero/velero
+  tag: v1.14.2
+  pullPolicy: IfNotPresent
+
+initContainers:
+  # Plugins oficiales de Velero
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.9.1
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+  - name: velero-plugin-for-gcp
+    image: velero/velero-plugin-for-gcp:v1.7.0
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+# ---- Recursos y seguridad
+resources:
+  requests: { cpu: "100m", memory: "256Mi" }
+  limits:   { cpu: "500m", memory: "512Mi" }
+
+securityContext:
+  fsGroup: 1337
+  runAsNonRoot: true
+  runAsUser: 1001
+
+podAnnotations:
+  seccomp.security.alpha.kubernetes.io/pod: "runtime/default"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8085"
+  prometheus.io/path: "/metrics"
+
+# ---- Credenciales (secret preexistente con clave 'cloud')
+credentials:
+  useSecret: true
+  existingSecret: velero-credentials
+  secretContents: {} # no se usa cuando existingSecret está definido
+
+# ---- Configuración por proveedor
+configuration:
+  backupStorageLocation:
+    - name: default
+      bucket: "{{ .Values.common.bucket }}"
+      prefix: "{{ .Values.common.prefix }}"
+      default: true
+      provider: "{{ ternary "aws" "gcp" (eq .Values.provider.type "aws") | quote }}"
+      accessMode: ReadWrite
+      config:
+        {{- if eq .Values.provider.type "aws" }}
+        region: "{{ .Values.common.region }}"
+        s3Url: ""                # opcional: endpoint S3 compatible (MinIO/ceph)
+        s3ForcePathStyle: "true" # recomendado si se usa endpoint custom
+        {{- else }}
+        # GCP no requiere params adicionales si usa el SDK por defecto
+        {{- end }}
+      credential:
+        name: velero-credentials
+        key: cloud
+
+  volumeSnapshotLocation:
+    - name: default
+      provider: "{{ ternary "aws" "gcp" (eq .Values.provider.type "aws") | quote }}"
+      config:
+        {{- if eq .Values.provider.type "aws" }}
+        region: "{{ .Values.common.region }}"
+        {{- else }}
+        # En GCP, ubicación del snapshot usa la región/zona de los discos
+        {{- end }}
+
+  features: EnableCSI
+  defaultBackupTTL: "{{ .Values.common.defaultTTL }}"
+
+# ---- Restic/Node Agent (file‑level backups)
+snapshotsEnabled: "{{ .Values.common.snapshots }}"
+deployNodeAgent: true
+initRestic: false
+
+# ---- ServiceAccount y anotaciones de identidad (IRSA/WIF)
+serviceAccount:
+  server:
+    create: true
+    name: velero
+    annotations:
+      # AWS IRSA (opcional)
+      eks.amazonaws.com/role-arn: "" # arn:aws:iam::<account>:role/gnew-velero
+      # GKE Workload Identity (opcional)
+      iam.gke.io/gcp-service-account: "" # velero@<project>.iam.gserviceaccount.com
+
+# ---- Envío de métricas
+metrics:
+  enabled: true
+
+# ---- Schedules (retenciones diferenciadas)
+schedules:
+  nightly:
+    schedule: "{{ .Values.common.schedules.nightly }}"
+    template:
+      ttl: "720h"
+      includedNamespaces: ["default","apps","monitoring","security"]
+  hourly:
+    schedule: "{{ .Values.common.schedules.hourly }}"
+    template:
+      ttl: "24h"
+      includedNamespaces: ["default","apps"]
+
+# ---- Tolerations/Affinities opcionales
+tolerations: []
+nodeSelector: {}
+affinity: {}
+
+# ---- Volúmenes adicionales para plugins
+extraVolumes:
+  - name: plugins
+    emptyDir: {}
+
+# ---- Notas:
+#  - Crear el secret de credenciales:
+#    AWS (formato ini):
+#      [default]
+#      aws_access_key_id=AKIA...
+#      aws_secret_access_key=...
+#    kubectl -n backup create secret generic velero-credentials --from-file=cloud=credentials
+#
+#    GCP (JSON de SA):
+#      kubectl -n backup create secret generic velero-credentials --from-file=cloud=sa.json
+#
+#  - Para KMS en bucket: habilitar cifrado por defecto (SSE-KMS en S3 o CMEK en GCS).
+#  - Cumple políticas de Gatekeeper (labels, resources, seccomp) definidas en N260.
+
+Tú dijiste:
+Ejecuta el siguiente prompt N del archivo "/mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N251. En cada ejecución incrementa N en +1 hasta N420, sin repetir. Como IA programadora, entrega exactamente lo indicado por el prompt con máxima precisión, empezando tu respuesta con la ruta completa del archivo de salida y, a continuación, el programa/artefacto en el lenguaje o formato especificado, coherente con todo el proyecto GNEW (monorepo Node/TS, Solidity, Terraform, CI/CD, seguridad). Mantén consistencia con estándares y DoD del documento y conserva un puntero interno de progreso para continuar en N+1 en la siguiente ejecución.
+ChatGPT Plus
+

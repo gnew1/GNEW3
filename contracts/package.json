@@ -1,0 +1,19 @@
+{
+  "name": "@repo/contracts",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "forge build --silent",
+    "test": "forge test -vvv",
+    "slither": "slither . --config-file .slither.json",
+    "coverage": "forge coverage --report lcov && echo 'See lcov.info'",
+    "lint": "solhint 'src/**/*.sol'",
+    "audit:quick": "npm run build && npm run slither",
+    "audit:full": "npm run build && npm run slither && npm run coverage"
+  },
+  "devDependencies": {
+    "solhint": "^4.5.4",
+    "solhint-plugin-prettier": "^0.0.7"
+  }
+}
+

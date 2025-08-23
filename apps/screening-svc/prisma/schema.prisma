@@ -1,0 +1,85 @@
+generator client { provider = "prisma-client-js" } 
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") } 
+ 
+model WatchlistSource { 
+  key        String  @id 
+  version    String 
+  format     String 
+  url        String 
+  etag       String? 
+  sha256     String 
+  fetchedAt  DateTime 
+  items      Int 
+} 
+ 
+model WatchlistItem { 
+  id         String   @id @default(cuid()) 
+  sourceKey  String 
+  externalId String?  // id propio de la lista 
+  kind       String   // person | org | wallet 
+  name       String 
+  aliases    String[] @default([]) 
+  dob        String?  // YYYY or YYYY-MM-DD 
+  country    String?  // ISO-3166-1 alpha-2 
+  docId      String?  // pasaporte/NIF si listado 
+  wallet     String?  // dirección on-chain normalizada (lowercase) 
+  raw        Json 
+  createdAt  DateTime @default(now()) 
+ 
+  @@index([sourceKey, name]) 
+  @@index([wallet]) 
+} 
+ 
+model Subject { // sujeto local (seudónimo → no guardes PII fuera de 
+su sistema) 
+  id         String   @id @default(cuid()) 
+  subjectId  String   @unique // seudónimo transversal 
+  status     String   @default("clear") // clear | review | blocked 
+  lastCheck  DateTime? 
+  reason     String? 
+  updatedAt  DateTime @updatedAt 
+} 
+ 
+model ScreeningRun { 
+  id         String   @id @default(cuid()) 
+  subjectId  String 
+  input      Json     // entrada normalizada: name parts, country, 
+dob, wallets[], docs[] 
+  decision   String   // clear | review | blocked 
+  scoreMax   Float 
+  evidence   Json     // detalle de matches: tokens, pesos, fuente, 
+snapshot 
+  eventHash  String   @unique 
+  batchId    String? 
+  txHash     String? 
+  createdAt  DateTime @default(now()) 
+ 
+  @@index([subjectId, createdAt]) 
+} 
+ 
+model BlockReason { 
+  id        String   @id @default(cuid()) 
+  subjectId String 
+  policy    String   // "sanctions_match" | "wallet_match" | 
+"pep_high_risk" | "country_embargo" 
+  sourceKey String? 
+  itemId    String? 
+  score     Float? 
+  createdAt DateTime @default(now()) 
+} 
+ 
+model Allowlist { // excepciones/whitelist de falsos positivos 
+(expiran) 
+  id        String   @id @default(cuid()) 
+  subjectId String 
+  sourceKey String? 
+  itemId    String? 
+  reason    String 
+  expiresAt DateTime 
+  createdAt DateTime @default(now()) 
+ 
+  @@index([subjectId, sourceKey, itemId]) 
+} 
+ 
+ 
+API (OpenAPI extracto) 

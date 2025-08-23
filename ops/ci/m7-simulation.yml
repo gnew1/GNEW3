@@ -1,0 +1,22 @@
+
+name: M7 Simulación Tokenomics
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install cadCAD pandas pytest
+      - run: pytest tests/simulation/test_m7_tokenomics.py --maxfail=1 --disable-warnings -q
+
+

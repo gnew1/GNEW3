@@ -1,0 +1,49 @@
+{ 
+  "$id": "https://gnew/policy/payments.input.schema.json", 
+  "type": "object", 
+  "required": ["tx","sender","receiver","risk"], 
+  "properties": { 
+    "tx": { 
+      "type":"object", 
+      
+"required":["id","amount","currency","country_from","country_to"], 
+      "properties":{ 
+        "id":{"type":"string"}, 
+        "amount":{"type":"number","minimum":0}, 
+        "currency":{"type":"string"}, 
+        "country_from":{"type":"string"}, 
+        "country_to":{"type":"string"} 
+      } 
+    }, 
+    "sender":{ 
+      "type":"object", 
+      "required":["id","sanctions_status","daily_amount_eur","pep"], 
+      "properties":{ 
+        "id":{"type":"string"}, 
+        "sanctions_status":{"enum":["clear","review","blocked"]}, 
+        "daily_amount_eur":{"type":"number","minimum":0}, 
+        "pep":{"type":"boolean"} 
+      } 
+    }, 
+    "receiver":{ 
+      "type":"object", 
+      "required":["id","sanctions_status"], 
+      "properties":{ 
+        "id":{"type":"string"}, 
+        "sanctions_status":{"enum":["clear","review","blocked"]} 
+      } 
+    }, 
+    "risk":{ 
+      "type":"object", 
+      "required":["score"], 
+      "properties":{ 
+        "score":{"type":"number","minimum":0,"maximum":1}, 
+        "device_trust":{"type":"string"}, 
+        "velocity_1h":{"type":"number"} 
+      } 
+    } 
+  } 
+} 
+ 
+ 
+Enforcement (PEP) 

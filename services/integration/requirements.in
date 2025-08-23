@@ -1,0 +1,12 @@
+fastapi 
+uvicorn[standard] 
+httpx 
+aioredis>=2 
+python-jose[cryptography] 
+pydantic-settings 
+prometheus_client 
+# coherencia con servicios comunes 
+structlog 
+opentelemetry-api 
+ 
+ 

@@ -1,0 +1,1417 @@
+  Dockerfile
+  README.md
+
+ 
+Dependencias
+Ruta completa: services/p13n/package.json
+{
+  "name": "@gnew/p13n",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "migrate": "psql \"$DATABASE_URL\" -f migrations/001_init.sql",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "fastify": "4.28.1",
+    "@fastify/cors": "9.0.1",
+    "@fastify/helmet": "12.3.0",
+    "pg": "8.12.0",
+    "ioredis": "5.4.1",
+    "zod": "3.23.8",
+    "pino": "9.3.2",
+    "prom-client": "15.1.3",
+    "dotenv": "16.4.5",
+    "object-hash": "3.0.0",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/sdk-node": "0.54.0",
+    "@opentelemetry/auto-instrumentations-node": "0.50.1"
+  },
+  "devDependencies": {
+    "typescript": "5.6.2",
+    "tsx": "4.19.1",
+    "vitest": "2.1.2",
+    "@types/node": "22.7.5"
+  }
+}
+
+Ruta completa: services/p13n/tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  }
+}
+
+ 
+Migración
+Ruta completa: services/p13n/migrations/001_init.sql
+create extension if not exists "uuid-ossp";
+
+create table if not exists p13n_rules (
+  id uuid primary key default uuid_generate_v4(),
+  code text not null unique,        -- p.ej. HOME_HERO_BY_ROLE
+  description text not null,
+  targeting jsonb not null,         -- DSL declarativa (conditions)
+  variants jsonb not null,          -- [{id, weight, payload}]
+  enabled boolean not null default true,
+  last_reviewed date not null default now()
+);
+
+create table if not exists p13n_overrides (
+  id uuid primary key default uuid_generate_v4(),
+  user_id text not null,
+  rule_code text not null references p13n_rules(code),
+  variant_id text not null,
+  reason text,
+  created_at timestamptz default now(),
+  unique(user_id, rule_code)
+);
+
+create table if not exists p13n_prefs (
+  user_id text primary key,
+  opt_out boolean not null default false,     -- opt-out de personalización
+  locale text,
+  theme text,
+  updated_at timestamptz default now()
+);
+
+create table if not exists p13n_logs (
+  id bigserial primary key,
+  ts timestamptz not null default now(),
+  user_id text,
+  rule_code text,
+  variant_id text,
+  type text not null,                          -- "expose" | "click" | "success"
+  meta jsonb default '{}'::jsonb
+);
+create index on p13n_logs (rule_code, type, ts desc);
+
+-- Vista de conversión por regla/variante
+create view v_p13n_ctr as
+select rule_code, variant_id,
+  sum(case when type='expose' then 1 else 0 end) as shows,
+  sum(case when type='click' then 1 else 0 end) as clicks,
+  sum(case when type='success' then 1 else 0 end) as successes
+from p13n_logs group by 1,2;
+
+ 
+Infra mínima
+Ruta completa: services/p13n/src/env.ts
+export const env = {
+  PORT: Number(process.env.PORT || 8090),
+  DATABASE_URL: process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/gnew",
+  REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
+  OTEL_ENABLE: process.env.OTEL_ENABLE === "1"
+};
+
+Ruta completa: services/p13n/src/db.ts
+import pg from "pg";
+import { env } from "./env";
+export const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 10 });
+
+Ruta completa: services/p13n/src/redis.ts
+import Redis from "ioredis";
+import { env } from "./env";
+export const redis = new Redis(env.REDIS_URL);
+
+Ruta completa: services/p13n/src/otel.ts
+import { env } from "./env";
+export function initOtel() {
+  if (!env.OTEL_ENABLE) return;
+  import("@opentelemetry/sdk-node").then(({ NodeSDK }) =>
+    import("@opentelemetry/auto-instrumentations-node").then(({ getNodeAutoInstrumentations }) => {
+      const sdk = new NodeSDK({ instrumentations: [getNodeAutoInstrumentations()] });
+      sdk.start();
+      process.on("SIGTERM", () => sdk.shutdown());
+    })
+  );
+}
+
+ 
+DSL de Reglas + Evaluador
+Ruta completa: services/p13n/src/schema.ts
+import { z } from "zod";
+
+export const Condition = z.union([
+  z.object({ all: z.array(z.any()) }),
+  z.object({ any: z.array(z.any()) }),
+  z.object({ not: z.any() }),
+  z.object({ eq: z.tuple([z.string(), z.any()]) }),
+  z.object({ gte: z.tuple([z.string(), z.number()]) }),
+  z.object({ lte: z.tuple([z.string(), z.number()]) }),
+  z.object({ in: z.tuple([z.string(), z.array(z.any())]) }),
+  z.object({ days_since: z.tuple([z.string(), z.number()]) }) // campo fecha vs umbral
+]);
+export type ConditionT = z.infer<typeof Condition>;
+
+export type Variant = { id: string; weight: number; payload: any };
+export type Rule = { code: string; targeting: ConditionT; variants: Variant[]; enabled: boolean; description: string };
+
+Ruta completa: services/p13n/src/dsl.ts
+import type { ConditionT, Variant, Rule } from "./schema";
+
+function get(ctx: any, path: string) {
+  return path.split(".").reduce((a, k) => (a ? a[k] : undefined), ctx);
+}
+
+export function evalCond(cond: ConditionT, ctx: any): boolean {
+  if ("all" in cond) return cond.all.every(c => evalCond(c as any, ctx));
+  if ("any" in cond) return cond.any.some(c => evalCond(c as any, ctx));
+  if ("not" in cond) return !evalCond(cond.not as any, ctx);
+  if ("eq" in cond) { const [p, v] = cond.eq; return get(ctx, p) === v; }
+  if ("gte" in cond) { const [p, v] = cond.gte; return Number(get(ctx, p) ?? 0) >= v; }
+  if ("lte" in cond) { const [p, v] = cond.lte; return Number(get(ctx, p) ?? 0) <= v; }
+  if ("in" in cond) { const [p, arr] = cond.in; return (arr as any[]).includes(get(ctx, p)); }
+  if ("days_since" in cond) {
+    const [p, days] = cond.days_since;
+    const d = get(ctx, p); if (!d) return false;
+    const diff = (Date.now() - new Date(d).getTime()) / 86400000;
+    return diff >= days;
+  }
+  return false;
+}
+
+export function pickVariant(variants: Variant[], seed = Math.random()) {
+  const total = variants.reduce((s, v) => s + v.weight, 0) || 1;
+  let r = seed * total;
+  for (const v of variants) { if ((r -= v.weight) < 0) return v; }
+  return variants[0];
+}
+
+/** Selección con override → luego sorteo por peso; devuelve payload explicable */
+export function decide(rule: Rule, ctx: any, override?: { variant_id: string }) {
+  if (!rule.enabled) return null;
+  if (!evalCond(rule.targeting, ctx)) return null;
+  if (override?.variant_id) {
+    const v = rule.variants.find(x => x.id === override.variant_id);
+    return v ? { variant: v.id, payload: v.payload, reason: "override" } : null;
+  }
+  const v = pickVariant(rule.variants);
+  return { variant: v.id, payload: v.payload, reason: "weighted" };
+}
+
+ 
+Contexto server side
+Ruta completa: services/p13n/src/context.ts
+import { pool } from "./db";
+
+/** Construye un contexto minimizado (GDPR): sin PII; sólo métricas seudónimas */
+export async function buildCtx(userId: string) {
+  // Ejemplo: rol, progreso gamificación, últimas actividades
+  const [[role], [stats]] = await Promise.all([
+    pool.query("select coalesce(min(role),'member') role from (values ('member')) as t(role)"), // reemplazar con origen real
+    pool.query(`
+      with clicks as (
+        select rule_code, count(*) c from p13n_logs where user_id=$1 and type='click' and ts> now()- interval '30 days' group by 1
+      ) select coalesce(sum(c),0) as clicks30d from clicks
+    `, [userId])
+  ]);
+  return {
+    user: { id: userId, role: role?.role || "member", locale: "es" },
+    activity: { clicks30d: Number(stats?.rows?.[0]?.clicks30d || 0) },
+    lastSeenAt: new Date().toISOString() // en producción, tomar de sesiones
+  };
+}
+
+ 
+Rutas HTTP
+Ruta completa: services/p13n/src/routes/rules.ts
+import { FastifyInstance } from "fastify";
+import { pool } from "../db";
+
+export default async function routes(app: FastifyInstance) {
+  app.get("/v1/p13n/rules", async (_req, reply) => {
+    const { rows } = await pool.query("select code, description, targeting, variants, enabled, last_reviewed from p13n_rules order by code");
+    reply.send(rows);
+  });
+
+  // Transparencia por usuario: qué regla aplicó y por qué
+  app.get("/v1/p13n/transparency/:userId", async (req, reply) => {
+    const { userId } = req.params as any;
+    const { rows } = await pool.query(`
+      select rule_code, variant_id, max(ts) as last_ts
+      from p13n_logs where user_id=$1 and type='expose'
+      group by 1,2 order by last_ts desc limit 50
+    `, [userId]);
+    reply.send({ decisions: rows });
+  });
+}
+
+Ruta completa: services/p13n/src/routes/context.ts
+import { FastifyInstance } from "fastify";
+import { pool } from "../db";
+import { buildCtx } from "../context";
+import { decide } from "../dsl";
+
+export default async function routes(app: FastifyInstance) {
+  app.get("/v1/p13n/context/:userId", async (req, reply) => {
+    const { userId } = req.params as any;
+    const ctx = await buildCtx(userId);
+    const { rows: rules } = await pool.query("select code, targeting, variants, enabled, description from p13n_rules where enabled=true");
+    const { rows: overrides } = await pool.query("select rule_code, variant_id from p13n_overrides where user_id=$1", [userId]);
+
+    const decisions = rules.map((r) => {
+      const ov = overrides.find((o) => o.rule_code === r.code);
+      const d = decide(r as any, ctx, ov as any);
+      return d ? { code: r.code, variant: d.variant, payload: d.payload, reason: d.reason } : null;
+    }).filter(Boolean);
+
+    reply.send({ ctx, decisions });
+  });
+}
+
+Ruta completa: services/p13n/src/routes/overrides.ts
+import { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { pool } from "../db";
+
+export default async function routes(app: FastifyInstance) {
+  app.post("/v1/p13n/overrides", async (req, reply) => {
+    const { userId, ruleCode, variantId, reason } = z.object({
+      userId: z.string(), ruleCode: z.string(), variantId: z.string(), reason: z.string().optional()
+    }).parse(req.body);
+    await pool.query(
+      "insert into p13n_overrides(user_id, rule_code, variant_id, reason) values ($1,$2,$3,$4) on conflict (user_id, rule_code) do update set variant_id=$3, reason=$4",
+      [userId, ruleCode, variantId, reason || "user_override"]
+    );
+    reply.code(201).send({ ok: true });
+  });
+
+  app.post("/v1/p13n/prefs", async (req, reply) => {
+    const { userId, optOut, locale, theme } = z.object({
+      userId: z.string(), optOut: z.boolean().optional(), locale: z.string().optional(), theme: z.string().optional()
+    }).parse(req.body);
+    await pool.query(`
+      insert into p13n_prefs(user_id, opt_out, locale, theme) values ($1, coalesce($2,false), coalesce($3,'es'), coalesce($4,'system'))
+      on conflict (user_id) do update set opt_out=coalesce($2,p13n_prefs.opt_out), locale=coalesce($3,p13n_prefs.locale), theme=coalesce($4,p13n_prefs.theme), updated_at=now()
+    `, [userId, optOut, locale, theme]);
+    reply.code(201).send({ ok: true });
+  });
+}
+
+Ruta completa: services/p13n/src/routes/log.ts
+import { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { pool } from "../db";
+
+export default async function routes(app: FastifyInstance) {
+  app.post("/v1/p13n/log", async (req, reply) => {
+    const { userId, ruleCode, variantId, type, meta } = z.object({
+      userId: z.string().nullable(), ruleCode: z.string(), variantId: z.string(), type: z.enum(["expose","click","success"]), meta: z.record(z.any()).optional()
+    }).parse(req.body);
+    await pool.query("insert into p13n_logs(user_id, rule_code, variant_id, type, meta) values ($1,$2,$3,$4,$5)",
+      [userId, ruleCode, variantId, type, meta || {}]);
+    reply.code(201).send({ ok: true });
+  });
+}
+
+Ruta completa: services/p13n/src/routes/reminders.ts
+import { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { pool } from "../db";
+
+/** Minimal: crea "recordatorio" (será consumido por job externo para email/push) */
+export default async function routes(app: FastifyInstance) {
+  app.post("/v1/p13n/reminders", async (req, reply) => {
+    const { userId, kind, afterHours, channel } = z.object({
+      userId: z.string(), kind: z.string(), afterHours: z.number().int().min(1).max(168), channel: z.enum(["email","push"])
+    }).parse(req.body);
+    await pool.query("insert into p13n_logs(user_id, rule_code, variant_id, type, meta) values ($1,$2,$3,'reminder', $4)",
+      [userId, "REMINDER", kind, { afterHours, channel }]);
+    reply.code(201).send({ ok: true });
+  });
+}
+
+Ruta completa: services/p13n/src/index.ts
+import Fastify from "fastify";
+import helmet from "@fastify/helmet";
+import cors from "@fastify/cors";
+import pino from "pino";
+import client from "prom-client";
+import { env } from "./env";
+import { initOtel } from "./otel";
+
+import rules from "./routes/rules";
+import ctx from "./routes/context";
+import overrides from "./routes/overrides";
+import log from "./routes/log";
+import reminders from "./routes/reminders";
+
+initOtel();
+
+const app = Fastify({ logger: pino({ level: "info" }) });
+app.register(helmet);
+app.register(cors, { origin: true });
+
+client.collectDefaultMetrics({ prefix: "gnew_p13n_" });
+app.get("/metrics", async (_req, reply) => {
+  reply.header("Content-Type", client.register.contentType);
+  return client.register.metrics();
+});
+
+app.register(rules);
+app.register(ctx);
+app.register(overrides);
+app.register(log);
+app.register(reminders);
+
+app.get("/healthz", async () => ({ ok: true }));
+app.listen({ port: env.PORT, host: "0.0.0.0" }).then(() => app.log.info(`p13n up :${env.PORT}`));
+
+ 
+Frontend Web — Módulo de Personalización (React 18 + Vite/TS)
+apps/web/src/modules/p13n/
+  prefs.ts                # store de preferencias (local-first) + opt-out
+  rules.d.ts              # tipos de payloads por slot
+  client.ts               # SDK para servicio p13n
+  bandit.ts               # bandit ligero (Thompson/UCB)
+  usePersonalization.ts   # hook principal
+  HomeDynamic.tsx         # Home dinámica (hero + quick actions + recos)
+  Transparency.tsx        # pantalla de transparencia y control
+  Reminders.tsx           # UI para recordatorios
+
+Ruta completa: apps/web/src/modules/p13n/prefs.ts
+export type Prefs = { optOut: boolean; locale?: string; theme?: "light"|"dark"|"system" };
+const KEY = "gnew:prefs:v1";
+
+export function loadPrefs(): Prefs {
+  try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return { optOut: false }; }
+}
+export function savePrefs(p: Prefs) { localStorage.setItem(KEY, JSON.stringify(p)); }
+
+Ruta completa: apps/web/src/modules/p13n/rules.d.ts
+// Define los payloads esperados por slot (para tipado estricto)
+export type HomeHeroPayload =
+  | { kind: "welcome"; title: string; ctaLabel: string; to: string }
+  | { kind: "learn"; title: string; slug: string; ctaLabel: string }
+  | { kind: "governance"; title: string; proposalId: string; ctaLabel: string };
+
+export type RecoCardPayload =
+  | { kind: "tutorial"; slug: string; title: string }
+  | { kind: "mission"; code: string; title: string }
+  | { kind: "proposal"; id: string; title: string };
+
+Ruta completa: apps/web/src/modules/p13n/client.ts
+import axios from "axios";
+export const p13nApi = axios.create({ baseURL: "/api/p13n" });
+
+export async function fetchContext(userId: string) {
+  const { data } = await p13nApi.get(`/v1/p13n/context/${userId}`);
+  return data as { ctx: any; decisions: Array<{ code: string; variant: string; payload: any; reason: string }> };
+}
+export async function logEvent(body: { userId: string|null; ruleCode: string; variantId: string; type: "expose"|"click"|"success"; meta?: any }) {
+  await p13nApi.post(`/v1/p13n/log`, body);
+}
+export async function setPrefs(body: { userId: string; optOut?: boolean; locale?: string; theme?: string }) {
+  await p13nApi.post(`/v1/p13n/prefs`, body);
+}
+export async function setOverride(body: { userId: string; ruleCode: string; variantId: string; reason?: string }) {
+  await p13nApi.post(`/v1/p13n/overrides`, body);
+}
+
+Ruta completa: apps/web/src/modules/p13n/bandit.ts
+/** Bandit Beta-Bernoulli (Thompson) por variante/slot
+ *  Local-first: no envía datos crudos, sólo eventos agregados al servicio.
+ */
+export type Arm = { id: string; a: number; b: number }; // éxitos/fracaso + 1
+export class BetaBandit {
+  arms: Map<string, Arm> = new Map();
+  constructor(ids: string[]) { ids.forEach(id => this.arms.set(id, { id, a: 1, b: 1 })); }
+  choose(): string {
+    let best = "", bestSample = -1;
+    this.arms.forEach((arm) => {
+      // muestreo simple ~ Beta(a,b)
+      const u = Math.random(), v = Math.random();
+      const sample = Math.pow(u, 1 / arm.a) / (Math.pow(u, 1 / arm.a) + Math.pow(v, 1 / arm.b));
+      if (sample > bestSample) { bestSample = sample; best = arm.id; }
+    });
+    return best;
+  }
+  reward(id: string, success: boolean) {
+    const arm = this.arms.get(id); if (!arm) return;
+    success ? arm.a++ : arm.b++;
+  }
+}
+
+Ruta completa: apps/web/src/modules/p13n/usePersonalization.ts
+import { useEffect, useMemo, useRef, useState } from "react";
+import { loadPrefs } from "./prefs";
+import { fetchContext, logEvent } from "./client";
+import { BetaBandit } from "./bandit";
+
+type Decision = { code: string; variant: string; payload: any; reason: string };
+export function usePersonalization(userId: string | null) {
+  const [decisions, setDecisions] = useState<Decision[]>([]);
+  const prefs = loadPrefs();
+  const bandits = useRef<Record<string, BetaBandit>>({});
+
+  useEffect(() => {
+    if (prefs.optOut) { setDecisions([]); return; }
+    (async () => {
+      const res = await fetchContext(userId || "anon");
+      const ds = res.decisions;
+      setDecisions(ds);
+      // Log de exposición (anónima si no hay userId)
+      await Promise.all(ds.map(d => logEvent({ userId, ruleCode: d.code, variantId: d.variant, type: "expose" })));
+    })();
+  }, [userId, prefs.optOut]);
+
+  // API para registrar clicks y éxitos, también alimentar bandit local
+  const onClick = async (ruleCode: string, variantId: string) => {
+    bandits.current[ruleCode] ??= new BetaBandit([variantId]);
+    await logEvent({ userId, ruleCode, variantId, type: "click" });
+  };
+  const onSuccess = async (ruleCode: string, variantId: string, success = true) => {
+    bandits.current[ruleCode] ??= new BetaBandit([variantId]);
+    bandits.current[ruleCode].reward(variantId, success);
+    await logEvent({ userId, ruleCode, variantId, type: "success" });
+  };
+
+  return { decisions, onClick, onSuccess, optOut: prefs.optOut };
+}
+
+Ruta completa: apps/web/src/modules/p13n/HomeDynamic.tsx
+import React from "react";
+import { usePersonalization } from "./usePersonalization";
+import type { HomeHeroPayload, RecoCardPayload } from "./rules.d";
+import { useNavigate } from "react-router-dom";
+
+export default function HomeDynamic({ userId }: { userId: string | null }) {
+  const { decisions, onClick, onSuccess, optOut } = usePersonalization(userId);
+  const nav = useNavigate();
+
+  const hero = decisions.find(d => d.code === "HOME_HERO")?.payload as HomeHeroPayload | undefined;
+  const recos = decisions.filter(d => d.code.startsWith("HOME_RECO_")).map(d => ({ ...d, payload: d.payload as RecoCardPayload }));
+
+  return (
+    <div className="container" style={{ display: "grid", gap: 16 }}>
+      <section className="card" aria-live="polite">
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <h2>Inicio {optOut ? "· personalización desactivada" : ""}</h2>
+          <a href="/settings/personalization" className="button" aria-label="Preferencias">Preferencias</a>
+        </div>
+        {hero ? (
+          <div style={{ marginTop: 8 }}>
+            <h3 style={{ margin: 0 }}>{hero.title}</h3>
+            {"to" in hero && (
+              <button className="button" onClick={() => { onClick("HOME_HERO", "v1"); nav(hero.to); }}>
+                {hero.ctaLabel}
+              </button>
+            )}
+            {"slug" in hero && (
+              <button className="button" onClick={() => { onClick("HOME_HERO", "v2"); nav(`/learn/tutorial/${hero.slug}`); }}>
+                {hero.ctaLabel}
+              </button>
+            )}
+          </div>
+        ) : <div>Bienvenido 👋</div>}
+      </section>
+
+      <section className="card">
+        <h3 style={{ marginTop: 0 }}>Recomendado para ti</h3>
+        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 12 }}>
+          {recos.map((r) => (
+            <article key={`${r.code}:${r.variant}`} className="card" role="article">
+              <strong>{r.payload.title}</strong>
+              <div style={{ marginTop: 8 }}>
+                {r.payload.kind === "tutorial" && (
+                  <button className="button" onClick={() => { onClick(r.code, r.variant); nav(`/learn/tutorial/${r.payload.slug}`); }}>
+                    Abrir tutorial
+                  </button>
+                )}
+                {r.payload.kind === "mission" && (
+                  <button className="button" onClick={() => { onClick(r.code, r.variant); nav(`/missions`); }}>
+                    Ver misión
+                  </button>
+                )}
+                {r.payload.kind === "proposal" && (
+                  <button className="button" onClick={() => { onClick(r.code, r.variant); nav(`/dashboard`); }}>
+                    Ir a propuesta
+                  </button>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+Ruta completa: apps/web/src/modules/p13n/Transparency.tsx
+import React, { useEffect, useState } from "react";
+import { p13nApi } from "./client";
+
+export default function Transparency({ userId }: { userId: string }) {
+  const [data, setData] = useState<any>({});
+  useEffect(() => { (async () => {
+    const { data } = await p13nApi.get(`/v1/p13n/transparency/${userId}`);
+    setData(data);
+  })(); }, [userId]);
+
+  return (
+    <div className="container" style={{ display: "grid", gap: 12 }}>
+      <h2>Transparencia y control</h2>
+      <p>Te explicamos por qué ves cada recomendación. Puedes desactivar personalización cuando quieras.</p>
+      <section className="card">
+        <h3>Últimas decisiones</h3>
+        <ul>{(data.decisions||[]).map((d:any, i:number) => <li key={i}>{d.rule_code} → variante {d.variant_id} · {new Date(d.last_ts).toLocaleString()}</li>)}</ul>
+      </section>
+      <section className="card">
+        <h3>Preferencias</h3>
+        <label><input type="checkbox" id="optout" onChange={() => {
+          const curr = localStorage.getItem("gnew:prefs:v1"); const p = curr ? JSON.parse(curr) : {};
+          p.optOut = !p.optOut; localStorage.setItem("gnew:prefs:v1", JSON.stringify(p));
+          window.location.reload();
+        }} /> Desactivar personalización (opt out)</label>
+      </section>
+    </div>
+  );
+}
+
+Ruta completa: apps/web/src/modules/p13n/Reminders.tsx
+import React, { useState } from "react";
+import { p13nApi } from "./client";
+
+export default function Reminders({ userId }: { userId: string }) {
+  const [hours, setHours] = useState(24);
+  return (
+    <div className="card" aria-label="Recordatorios">
+      <h3 style={{ marginTop: 0 }}>Recordatorios</h3>
+      <div className="row" style={{ gap: 8, alignItems: "center" }}>
+        <label>Recuérdame retomar en</label>
+        <input type="number" min={1} max={168} value={hours} onChange={e => setHours(Number(e.target.value))} /> horas
+        <button className="button" onClick={async () => {
+          await p13nApi.post("/v1/p13n/reminders", { userId, kind: "resume", afterHours: hours, channel: "email" });
+          alert("Programado");
+        }}>Programar</button>
+      </div>
+    </div>
+  );
+}
+
+Integración de rutas (web)
+Ruta completa: apps/web/src/router/guards.tsx (añade entradas)
+// ...
+import HomeDynamic from "@modules/p13n/HomeDynamic";
+import Transparency from "@modules/p13n/Transparency";
+// ...
+{ path: "home", element: <HomeDynamic userId="me" /> },
+{ path: "settings/personalization", element: <Transparency userId="me" /> },
+
+Reemplaza "me" por el userId real del estado de autenticación.
+ 
+Semillas de Reglas (ejemplos explicables)
+Ruta completa: services/p13n/migrations/001_init.sql (añade al final o crea 002_seed.sql)
+insert into p13n_rules(code, description, targeting, variants, enabled) values
+('HOME_HERO', 'Hero de inicio según rol/actividad',
+ '{
+    "all":[
+      {"in":["user.role", ["newbie","dev","validator","creator"]]}
+    ]
+  }',
+ '[
+    {"id":"welcome","weight":1,"payload":{"kind":"welcome","title":"Bienvenido a GNEW","ctaLabel":"Empezar","to":"/onboarding"}},
+    {"id":"learn","weight":1,"payload":{"kind":"learn","title":"Sigue aprendiendo","slug":"intro-governanza","ctaLabel":"Abrir tutorial"}},
+    {"id":"gov","weight":1,"payload":{"kind":"governance","title":"Hay propuestas activas","proposalId":"latest","ctaLabel":"Votar ahora"}}
+  ]',
+ true)
+on conflict do nothing;
+
+insert into p13n_rules(code, description, targeting, variants, enabled) values
+('HOME_RECO_CARD', 'Tarjetas de recomendación (tutoriales/misiones)',
+ '{"any":[{"eq":["user.role","newbie"]},{"gte":["activity.clicks30d",1]}]}',
+ '[
+   {"id":"tut1","weight":2,"payload":{"kind":"tutorial","slug":"intro-governanza","title":"Intro a la Gobernanza"}},
+   {"id":"mis1","weight":1,"payload":{"kind":"mission","code":"ONB_FIRST_WALLET","title":"Crear billetera"}},
+   {"id":"prop1","weight":1,"payload":{"kind":"proposal","id":"latest","title":"Participa en la última propuesta"}}
+ ]',
+ true)
+on conflict do nothing;
+
+ 
+Pruebas (unidad/integ) de la DSL
+Ruta completa: services/p13n/src/dsl.spec.ts
+import { describe, it, expect } from "vitest";
+import { evalCond, decide } from "./dsl";
+
+describe("DSL", () => {
+  const ctx = { user: { role: "newbie" }, activity: { clicks30d: 2 }, lastSeenAt: new Date().toISOString() };
+  it("evalúa condiciones básicas", () => {
+    expect(evalCond({ eq: ["user.role", "newbie"] }, ctx)).toBe(true);
+    expect(evalCond({ gte: ["activity.clicks30d", 1] }, ctx)).toBe(true);
+    expect(evalCond({ lte: ["activity.clicks30d", 0] }, ctx)).toBe(false);
+  });
+  it("decide una variante", () => {
+    const rule: any = { code: "X", targeting: { eq: ["user.role","newbie"] }, variants: [{ id: "a", weight: 1, payload: {} }] , enabled: true };
+    const d = decide(rule, ctx);
+    expect(d?.variant).toBe("a");
+  });
+});
+
+ 
+Observabilidad, Seguridad y CI
+Ruta completa: services/p13n/.github/workflows/p13n-ci.yml
+name: P13N CI
+on:
+  pull_request:
+    paths: ["services/p13n/**", ".github/workflows/p13n-ci.yml"]
+  push:
+    branches: [main]
+    paths: ["services/p13n/**"]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gnew
+        ports: ["5432:5432"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install
+        working-directory: services/p13n
+        run: npm ci
+      - name: Migrate
+        working-directory: services/p13n
+        env: { DATABASE_URL: postgres://postgres:postgres@localhost:5432/gnew }
+        run: npm run migrate
+      - name: Test
+        working-directory: services/p13n
+        env: { DATABASE_URL: postgres://postgres:postgres@localhost:5432/gnew }
+        run: npm test
+      - name: Build
+        working-directory: services/p13n
+        run: npm run build
+
+Ruta completa: services/p13n/Dockerfile
+FROM node:20-alpine as base
+WORKDIR /app
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+RUN npm ci --ignore-scripts
+COPY tsconfig.json ./tsconfig.json
+COPY src ./src
+RUN npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/dist ./dist
+EXPOSE 8090
+CMD ["node","dist/index.js"]
+
+ 
+Entregables
+●	Home dinámica (HomeDynamic.tsx) con hero y cards ajustadas por reglas + bandit.
+
+●	Recomendaciones: tutoriales, misiones y propuestas, con reglas declarativas y variantes ponderadas.
+
+●	Recordatorios: UI + endpoint de programación (job externo para envío).
+
+●	Preferencias: opt out, tema/idioma, y pantalla de transparencia con decisiones recientes.
+
+●	Contexto server: API /v1/p13n/context/:userId devuelve decisiones explicables.
+
+●	Auditoría y métricas: logs de exposición/click/éxito y vista v_p13n_ctr para CTR/éxito.
+
+ 
+Pasos clave
+1.	Definir slots y objetivos (Producto/Data): HOME_HERO, HOME_RECO_CARD, EMAIL_REMINDER.
+
+2.	Modelar reglas en p13n_rules (segmentos por rol/actividad, last reviewed).
+
+3.	Integrar fuentes para contexto: rol, progreso (N55), onboarding (N53), learning (N54).
+
+4.	Activar bandit en cliente para variantes del mismo slot; servidor sólo audita (minimización).
+
+5.	Transparencia y control: UI de preferencias con opt out y explicación por qué ves cada ítem.
+
+6.	Recordatorios con ventanas y límites (no spam), cooldown server side.
+
+7.	Observabilidad: dashboards de uplift y tiempo a valor; alertas si CTR cae > Xσ.
+
+ 
+Pruebas / DoD
+●	Uplift en tareas completadas (tutorial terminado, voto emitido, misión realizada) vs. control ≥ X% (A/B por variante; medir en v_p13n_ctr + Amplitude).
+
+●	Tiempo en valor (desde login hasta 1ª actividad útil) reducido ≥ Y%.
+
+●	Latencia: /v1/p13n/context/:userId p95 < 150 ms.
+
+●	A11y: controles y preferencia opt out accesibles (teclado/ARIA).
+
+●	Privacidad: datos minimizados; local first para bandit; no PII en logs.
+
+●	Transparencia: endpoint y UI muestran las últimas decisiones y motivos.
+
+●	Docs: Docusaurus “Personalización UX” con catálogo de reglas y “last reviewed”.
+
+(Sustituye X/Y por metas acordadas con Data.)
+ 
+Riesgos & Controles
+●	Sesgo → auditorías mensuales: distribución de exposición/clic por rol/idioma; pruebas de paridad; kill switch por regla.
+
+●	Privacidad → opt out fácil; bandit y scoring local first; logs seudónimos y retención mínima.
+
+●	Sobre personalización → variar exploration (pesos), fallback neutro, límite de cambios por sesión.
+
+●	Spam de recordatorios → cooldown y límites por usuario/kind; canal preferido configurable.
+
+●	Desalineación → reglas versionadas con last_reviewed; comité Producto/Privacidad revisa impacto.
+
+ 
+Notas de integración con N51–N56
+●	N51 (Web App): inyectar HomeDynamic como /home y enlazar slots a rutas reales.
+
+●	N53 (Onboarding): usar regla HOME_HERO para reenganchar a quienes no completaron onboarding en ≥ 3 días.
+
+●	N54 (Learning): HOME_RECO_CARD sugiere el siguiente tutorial en la ruta del rol.
+
+●	N55 (Gamificación): éxito de misión/tutorial emite success a /v1/p13n/log; también puede disparar recordatorio si el usuario abandona.
+
+●	N56 (DID Auth): usar sub (DID) seudónimo como userId en p13n; no enviar direcciones ni PII.
+
+ 
+¿Quieres que añada dashboard Grafana JSON con CTR/éxito por variante y un script de simulación de bandit para tuning? Puedo entregarlo en el mismo formato.
+Tú dijiste:
+programa a nivel de detalle para gnew N58 6.8 Centro de ayuda interactivo (Prompt 58) Objetivo: Ayuda contextual, buscador semántico y flujos de soporte. Roles: Soporte, Tech Writer, Frontend, Data. Stack: MDX, embeddings locales, feedback por artículo. Entregables: Knowledge base, guía “cómo empezar”, flujos de ticket. Pasos: Widget de ayuda contextual por pantalla. Recomendaciones según error/evento. Pruebas / DoD: Reducción tickets L1 ≥ X%. Riesgos & Controles: Documentación obsoleta → owners por sección.
+ChatGPT Plus
+Pensó durante 25s
+Listo. Entrego el programa a nivel de detalle y entrega para GNEW · N58 — 6.8 Centro de ayuda interactivo (Prompt 58) con rutas completas y código listo para: KB en MDX, buscador semántico con embeddings locales, widget contextual por pantalla, recomendaciones por error/evento, feedback por artículo y flujos de ticket. Cumple lineamientos globales (GitFlow, CI/CD, OIDC, OTel→Prometheus/Grafana, a11y+i18n, GDPR-by-design).
+ 
+0) Estructura general
+apps/web/
+  content/help/                 # KB MDX
+  src/modules/help/
+    components/
+      HelpWidget.tsx
+      HelpSearch.tsx
+      ArticleCard.tsx
+      ArticleView.tsx
+      FeedbackForm.tsx
+      TicketFlow.tsx
+    context/HelpContext.tsx
+    hooks/useHelpRecommendations.ts
+    data/error-map.ts
+    search/semanticSearch.ts
+  src/pages/help/
+    HelpHome.tsx
+    HelpArticle.tsx
+tools/
+  build-help-index.ts           # genera embeddings locales → index.json
+  validate-help-freshness.ts    # “lastReviewed” y dueños
+services/helpdesk/              # backend minimal (feedback + tickets + owners)
+  package.json
+  tsconfig.json
+  src/...
+  migrations/...
+
+ 
+1) Contenido KB (MDX + metadatos + owners)
+Ruta completa: apps/web/content/help/README.md
+# GNEW · Help KB (MDX)
+Frontmatter requerido:
+- title, slug, section, owner, version, lastReviewed (YYYY-MM-DD), tags[]
+- summary (teaser corto)
+- audience (novice|dev|validator|creator)
+
+Ruta completa: apps/web/content/help/getting-started.mdx
+---
+title: "Cómo empezar en GNEW"
+slug: "getting-started"
+section: "inicio"
+owner: "producto@gnew.org"
+version: "1.0.0"
+lastReviewed: "2025-08-01"
+audience: "novice"
+tags: ["onboarding","cuenta","primeros pasos"]
+summary: "Crea tu cuenta, configura tu billetera y emite tu primer voto."
+---
+
+import { Callout } from "@modules/learn/mdx";
+
+# {frontmatter.title}
+
+<Callout type="info">Tiempo estimado: 3–5 min</Callout>
+
+1. Crea tu cuenta (DID / SIWE).
+2. Configura tu billetera.
+3. Prueba un voto en gobernanza.
+
+**Problemas comunes**
+- *No puedo firmar con mi wallet*: revisa permisos del navegador.
+- *Error “proposal not found”*: verifica el ID o recarga el feed.
+
+Ruta completa: apps/web/content/help/vote-errors.mdx
+---
+title: "Errores al votar y cómo resolverlos"
+slug: "vote-errors"
+section: "gobernanza"
+owner: "soporte@gnew.org"
+version: "1.0.1"
+lastReviewed: "2025-08-10"
+audience: "novice"
+tags: ["errores","gobernanza","voto"]
+summary: "Diagnóstico rápido de fallos de voto (RPC, gas, estado)."
+---
+
+## Mensajes frecuentes
+- **INSUFFICIENT_GAS**: incrementa el límite de gas o reintenta.
+- **PROPOSAL_CLOSED**: la propuesta ya no admite votos.
+- **WALLET_LOCKED**: desbloquea la wallet y vuelve a intentar.
+
+ 
+2) Web · Búsqueda semántica local (embeddings)
+Ruta completa: apps/web/package.json (añadir deps)
+{
+  "dependencies": {
+    "@xenova/transformers": "2.16.1",
+    "gray-matter": "4.0.3"
+  },
+  "devDependencies": { "@mdx-js/rollup": "3.0.1" }
+}
+
+Ruta completa: apps/web/vite.config.ts (si no estaba de N54)
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import mdx from "@mdx-js/rollup";
+export default defineConfig({ plugins: [react(), mdx()] });
+
+Ruta completa: tools/build-help-index.ts
+/**
+ * Genera index.json con embeddings de artículos MDX.
+ * Ejecuta: pnpm tsx tools/build-help-index.ts
+ */
+import fs from "node:fs/promises";
+import path from "node:path";
+import matter from "gray-matter";
+import { pipeline } from "@xenova/transformers";
+
+const root = path.resolve(__dirname, "..", "apps", "web");
+const dir = path.join(root, "content", "help");
+const outPath = path.join(root, "content", "help-index.json");
+
+async function run() {
+  const files = (await fs.readdir(dir)).filter(f => f.endsWith(".mdx"));
+  // Modelo ligero para semántica general
+  // @ts-ignore
+  const embed = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+  const items:any[] = [];
+  for (const f of files) {
+    const p = path.join(dir, f);
+    const raw = await fs.readFile(p, "utf8");
+    const { content, data } = matter(raw);
+    const text = `${data.title}\n${data.summary || ""}\n${(data.tags||[]).join(" ")}\n${content.replace(/[^\w\s]/g," ")}`;
+    const v:any = await embed(text, { pooling: "mean", normalize: true });
+    items.push({ slug: data.slug, title: data.title, section: data.section, owner: data.owner, audience: data.audience, tags: data.tags||[], vec: Array.from(v.data) });
+  }
+  const index = { model: "all-MiniLM-L6-v2", dim: items[0]?.vec?.length || 384, items };
+  await fs.writeFile(outPath, JSON.stringify(index));
+  console.log(`help-index.json OK · ${items.length} artículos`);
+}
+run().catch(e => { console.error(e); process.exit(1); });
+
+Ruta completa: apps/web/src/modules/help/search/semanticSearch.ts
+import helpIndex from "/apps/web/content/help-index.json";
+
+function dot(a:number[], b:number[]) { let s=0; for (let i=0;i<Math.min(a.length,b.length);i++) s+=a[i]*b[i]; return s; }
+function norm(a:number[]) { return Math.sqrt(dot(a,a)) || 1; }
+
+export type HelpHit = { slug: string; title: string; section: string; tags: string[]; score: number };
+
+export async function encodeQuery(q: string): Promise<number[]> {
+  // Para runtime sin WASM, opcionalmente usar una query-vec precalculada o degradar a TF-IDF simple.
+  if ((window as any).__help_qenc) return await (window as any).__help_qenc(q);
+  // fallback: coincidencia textual; retornamos vector cero y usamos includes
+  return [];
+}
+
+export async function searchHelp(q: string, k = 8): Promise<HelpHit[]> {
+  const items:any[] = (helpIndex as any).items || [];
+  if (!items.length) return [];
+  const qvec = await encodeQuery(q);
+  let scored: HelpHit[];
+  if (!qvec.length) {
+    const ql = q.toLowerCase();
+    scored = items.filter(it =>
+      (it.title + (it.tags||[]).join(" ")).toLowerCase().includes(ql)
+    ).map((it:any) => ({ ...it, score: 0 }));
+  } else {
+    scored = items.map((it:any) => {
+      const s = dot(qvec, it.vec) / (norm(qvec) * norm(it.vec));
+      return { slug: it.slug, title: it.title, section: it.section, tags: it.tags, score: s };
+    });
+  }
+  return scored.sort((a,b)=>b.score-a.score).slice(0,k);
+}
+
+ 
+3) Web · Widget contextual + buscador + feedback
+Ruta completa: apps/web/src/modules/help/context/HelpContext.tsx
+import React, { createContext, useContext, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
+
+type Ctx = {
+  screen: string;          // path/route
+  errorCode?: string;      // último error capturado en pantalla
+  setError: (code?: string) => void;
+};
+const HelpCtx = createContext<Ctx>(null as any);
+
+export function HelpProvider({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  const [errorCode, setError] = useState<string|undefined>(undefined);
+  const screen = useMemo(()=> pathname.replace(/\/\d+/g, "/:id"), [pathname]);
+  return <HelpCtx.Provider value={{ screen, errorCode, setError }}>{children}</HelpCtx.Provider>;
+}
+export const useHelp = () => useContext(HelpCtx);
+
+Ruta completa: apps/web/src/modules/help/data/error-map.ts
+// Mapea errores de app → slugs de ayuda recomendados
+export const ERROR_TO_ARTICLES: Record<string, string[]> = {
+  "INSUFFICIENT_GAS": ["vote-errors"],
+  "WALLET_LOCKED":    ["getting-started","vote-errors"],
+  "PROPOSAL_CLOSED":  ["vote-errors"]
+};
+// Mapea pantallas → artículos de contexto
+export const SCREEN_TO_ARTICLES: Record<string, string[]> = {
+  "/onboarding": ["getting-started"],
+  "/dashboard":  ["vote-errors"]
+};
+
+Ruta completa: apps/web/src/modules/help/components/HelpWidget.tsx
+import React, { useEffect, useMemo, useState } from "react";
+import { useHelp } from "../context/HelpContext";
+import { searchHelp } from "../search/semanticSearch";
+import { ERROR_TO_ARTICLES, SCREEN_TO_ARTICLES } from "../data/error-map";
+import { Link } from "react-router-dom";
+
+export default function HelpWidget() {
+  const { screen, errorCode } = useHelp();
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<any[]>([]);
+  const seedSlugs = useMemo(() => {
+    const a = new Set<string>([...(SCREEN_TO_ARTICLES[screen]||[]) , ...((errorCode && ERROR_TO_ARTICLES[errorCode])||[])]);
+    return [...a];
+  }, [screen, errorCode]);
+
+  useEffect(() => { (async () => {
+    if (!query) { setHits(seedSlugs.map(s => ({ slug:s, title: s, score: 1 }))); return; }
+    setHits(await searchHelp(query));
+  })(); }, [query, seedSlugs.join(",")]);
+
+  return (
+    <div className="card" style={{ position: "fixed", right: 16, bottom: 16, width: 360, maxWidth: "90vw", zIndex: 50 }}>
+      <strong>¿Necesitas ayuda?</strong>
+      <input
+        aria-label="Buscar ayuda"
+        placeholder="Busca por palabra clave…"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        style={{ width: "100%", marginTop: 8 }}
+      />
+      <ul style={{ listStyle: "none", padding: 0, marginTop: 8, display: "grid", gap: 8 }}>
+        {hits.map(h => (
+          <li key={h.slug} className="row" style={{ justifyContent: "space-between" }}>
+            <Link to={`/help/${h.slug}`}>{h.title || h.slug}</Link>
+            <span style={{ opacity: .6, fontSize: 12 }}>{Math.round((h.score||0)*100)/100}</span>
+          </li>
+        ))}
+      </ul>
+      <Link to="/help" className="button" style={{ marginTop: 8 }}>Centro de ayuda</Link>
+    </div>
+  );
+}
+
+Ruta completa: apps/web/src/modules/help/components/ArticleCard.tsx
+import React from "react";
+import { Link } from "react-router-dom";
+export default function ArticleCard({ slug, title, summary }: { slug: string; title: string; summary: string }) {
+  return (
+    <article className="card">
+      <strong>{title}</strong>
+      <p style={{ marginTop: 6, color: "var(--fg-muted)" }}>{summary}</p>
+      <Link to={`/help/${slug}`} className="button" aria-label={`Abrir ${title}`}>Abrir</Link>
+    </article>
+  );
+}
+
+Ruta completa: apps/web/src/modules/help/components/ArticleView.tsx
+import React, { useEffect } from "react";
+import { MDXProvider } from "@mdx-js/react";
+import { useParams } from "react-router-dom";
+import * as mdxComponents from "@modules/learn/mdx"; // reusa Callout/Video
+import { useHelp } from "../context/HelpContext";
+import FeedbackForm from "./FeedbackForm";
+
+const modules = import.meta.glob("/apps/web/content/help/*.mdx");
+
+export default function ArticleView() {
+  const { slug="" } = useParams();
+  const { setError } = useHelp(); // por si este artículo se abre desde error específico
+
+  const [Mod, setMod] = React.useState<any>(null);
+  const [frontmatter, setFrontmatter] = React.useState<any>({});
+  useEffect(() => {
+    (async () => {
+      const match = Object.entries(modules).find(([_, mod]) => (mod as any).name.includes(slug));
+      if (match) {
+        const m:any = await (modules as any)[match[0]]();
+        setMod(() => m.default);
+        setFrontmatter(m.frontmatter || {});
+      }
+    })();
+    return () => setError(undefined);
+  }, [slug]);
+
+  if (!Mod) return <div className="container">Cargando…</div>;
+  return (
+    <div className="container" style={{ display: "grid", gap: 16 }}>
+      <header className="card" role="region" aria-label="Metadatos">
+        <h1 style={{ margin: 0 }}>{frontmatter.title}</h1>
+        <div style={{ fontSize: 13, opacity: .8 }}>
+          Sección: {frontmatter.section} · Dueño: {frontmatter.owner} · v{frontmatter.version} · revisado {frontmatter.lastReviewed}
+        </div>
+      </header>
+      <MDXProvider components={{ ...mdxComponents }}>
+        <article className="card"><Mod /></article>
+      </MDXProvider>
+      <FeedbackForm slug={slug} />
+    </div>
+  );
+}
+
+Ruta completa: apps/web/src/modules/help/components/FeedbackForm.tsx
+import React, { useState } from "react";
+import axios from "axios";
+
+export default function FeedbackForm({ slug }: { slug: string }) {
+  const [v, setV] = useState<number|undefined>();
+  const [txt, setTxt] = useState("");
+  const [sent, setSent] = useState(false);
+
+  if (sent) return <div className="card">¡Gracias por tu feedback!</div>;
+
+  return (
+    <div className="card" role="region" aria-label="Feedback del artículo">
+      <div>¿Te sirvió este artículo?</div>
+      <div className="row" style={{ gap: 6, marginTop: 6 }}>
+        {[1,2,3,4,5].map(n => (
+          <button key={n} className="button" onClick={()=>setV(n)} aria-pressed={v===n}>{n}</button>
+        ))}
+      </div>
+      <textarea value={txt} onChange={e=>setTxt(e.target.value)} placeholder="Cuéntanos qué mejorar…" rows={3} style={{ width: "100%", marginTop: 6 }} />
+      <button
+        className="button"
+        onClick={async () => {
+          await axios.post("/api/helpdesk/v1/feedback", { slug, score: v || null, text: txt });
+          setSent(true);
+        }}
+        aria-label="Enviar feedback"
+        style={{ marginTop: 8 }}
+      >Enviar</button>
+    </div>
+  );
+}
+
+Ruta completa: apps/web/src/modules/help/components/HelpSearch.tsx
+import React, { useEffect, useState } from "react";
+import { searchHelp } from "../search/semanticSearch";
+import ArticleCard from "./ArticleCard";
+import list from "/apps/web/content/help-index.json";
+
+export default function HelpSearch() {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<any[]>([]);
+  useEffect(()=>{ (async()=> setHits(q ? await searchHelp(q, 12) : (list as any).items.map((i:any)=>({ ...i, score:0 }))))(); }, [q]);
+  return (
+    <div className="container" style={{ display: "grid", gap: 12 }}>
+      <h2>Centro de ayuda</h2>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Busca por tema o error…" aria-label="Buscar en ayuda" />
+      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 12 }}>
+        {hits.map(h => <ArticleCard key={h.slug} slug={h.slug} title={h.title} summary={h.summary || ""} />)}
+      </div>
+    </div>
+  );
+}
+
+Ruta completa: apps/web/src/pages/help/HelpHome.tsx
+import React from "react";
+import HelpSearch from "@modules/help/components/HelpSearch";
+export default function HelpHome(){ return <HelpSearch/>; }
+
+Ruta completa: apps/web/src/pages/help/HelpArticle.tsx
+import React from "react";
+import ArticleView from "@modules/help/components/ArticleView";
+export default function HelpArticle(){ return <ArticleView/>; }
+
+Integración rutas (web)
+Ruta completa: apps/web/src/router/guards.tsx (añade)
+// ...
+import HelpHome from "@pages/help/HelpHome";
+import HelpArticle from "@pages/help/HelpArticle";
+import HelpWidget from "@modules/help/components/HelpWidget";
+import { HelpProvider } from "@modules/help/context/HelpContext";
+// ...
+{
+  path: "/",
+  element: (
+    <HelpProvider>
+      <AppLayout />
+      <HelpWidget />
+    </HelpProvider>
+  ),
+  children: [
+    // ...
+    { path: "help", element: <HelpHome /> },
+    { path: "help/:slug", element: <HelpArticle /> }
+  ]
+}
+
+ 
+4) Recomendaciones por error/evento (interceptores + boundary)
+Ruta completa: apps/web/src/modules/help/hooks/useHelpRecommendations.ts
+import { useEffect } from "react";
+import axios from "axios";
+import { useHelp } from "../context/HelpContext";
+import { ERROR_TO_ARTICLES } from "../data/error-map";
+
+/** Escucha errores HTTP/JS y sugiere artículos relacionados */
+export function useHelpRecommendations() {
+  const { setError } = useHelp();
+
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (r) => r,
+      (e) => {
+        const code = e?.response?.data?.code || e?.code || "";
+        if (ERROR_TO_ARTICLES[code]) setError(code);
+        return Promise.reject(e);
+      }
+    );
+    const onError = (ev: ErrorEvent) => {
+      const msg = `${ev.error?.name || ""}`.toUpperCase();
+      if (ERROR_TO_ARTICLES[msg]) setError(msg);
+    };
+    window.addEventListener("error", onError);
+    return () => { axios.interceptors.response.eject(interceptor); window.removeEventListener("error", onError); };
+  }, [setError]);
+}
+
+Llama useHelpRecommendations() una sola vez en AppLayout para activar detección.
+ 
+5) Backend helpdesk (feedback + tickets + owners + métricas)
+Ruta completa: services/helpdesk/package.json
+{
+  "name": "@gnew/helpdesk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "migrate": "psql \"$DATABASE_URL\" -f migrations/001_init.sql",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "fastify": "4.28.1",
+    "@fastify/cors": "9.0.1",
+    "@fastify/helmet": "12.3.0",
+    "pg": "8.12.0",
+    "zod": "3.23.8",
+    "pino": "9.3.2",
+    "prom-client": "15.1.3",
+    "dotenv": "16.4.5"
+  },
+  "devDependencies": { "typescript": "5.6.2", "tsx": "4.19.1", "@types/node": "22.7.5", "vitest": "2.1.2" }
+}
+
+Ruta completa: services/helpdesk/migrations/001_init.sql
+create table if not exists kb_owners (
+  section text primary key,
+  owner_email text not null
+);
+
+create table if not exists kb_feedback (
+  id bigserial primary key,
+  slug text not null,
+  score integer,
+  text text,
+  user_anon_id text,
+  ts timestamptz default now()
+);
+create index on kb_feedback (slug, ts desc);
+
+create table if not exists tickets (
+  id uuid primary key default gen_random_uuid(),
+  user_anon_id text,
+  subject text not null,
+  slug text,
+  status text not null default 'open', -- open|pending|closed
+  meta jsonb default '{}'::jsonb,
+  ts timestamptz default now()
+);
+
+create table if not exists ticket_messages (
+  id bigserial primary key,
+  ticket_id uuid references tickets(id) on delete cascade,
+  author text not null, -- user|agent
+  body text not null,
+  ts timestamptz default now()
+);
+
+Ruta completa: services/helpdesk/src/index.ts
+import Fastify from "fastify";
+import helmet from "@fastify/helmet";
+import cors from "@fastify/cors";
+import pino from "pino";
+import client from "prom-client";
+import pg from "pg";
+import { z } from "zod";
+
+const PORT = Number(process.env.PORT || 8088);
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
+const app = Fastify({ logger: pino({ level: "info" }) });
+app.register(helmet);
+app.register(cors, { origin: true });
+
+client.collectDefaultMetrics({ prefix: "gnew_help_" });
+app.get("/metrics", async (_req, reply) => {
+  reply.header("Content-Type", client.register.contentType);
+  return client.register.metrics();
+});
+
+/** Feedback por artículo */
+app.post("/v1/feedback", async (req, reply) => {
+  const { slug, score, text, userAnonId } = z.object({
+    slug: z.string(),
+    score: z.number().int().min(1).max(5).nullable().optional(),
+    text: z.string().max(2000).optional(),
+    userAnonId: z.string().optional()
+  }).parse(req.body);
+  await pool.query("insert into kb_feedback(slug, score, text, user_anon_id) values ($1,$2,$3,$4)", [slug, score ?? null, text || "", userAnonId || null]);
+  reply.code(201).send({ ok: true });
+});
+
+/** Crear ticket */
+app.post("/v1/tickets", async (req, reply) => {
+  const { subject, body, slug, userAnonId } = z.object({
+    subject: z.string().min(3), body: z.string().min(3), slug: z.string().optional(), userAnonId: z.string().optional()
+  }).parse(req.body);
+  const t = await pool.query("insert into tickets(subject, slug, user_anon_id) values ($1,$2,$3) returning id", [subject, slug || null, userAnonId || null]);
+  const id = t.rows[0].id as string;
+  await pool.query("insert into ticket_messages(ticket_id, author, body) values ($1,'user',$2)", [id, body]);
+  reply.code(201).send({ id });
+});
+
+/** Añadir mensaje / cambiar estado */
+app.post("/v1/tickets/:id/message", async (req, reply) => {
+  const { id } = req.params as any;
+  const { author, body, status } = z.object({ author: z.enum(["user","agent"]), body: z.string(), status: z.enum(["open","pending","closed"]).optional() }).parse(req.body);
+  await pool.query("insert into ticket_messages(ticket_id, author, body) values ($1,$2,$3)", [id, author, body]);
+  if (status) await pool.query("update tickets set status=$2 where id=$1", [id, status]);
+  reply.send({ ok: true });
+});
+
+/** Métrica L1 (tickets abiertos por categoría) */
+app.get("/v1/metrics/l1", async (_req, reply) => {
+  const { rows } = await pool.query("select coalesce(slug,'_unknown') as slug, count(*) as total from tickets where status != 'closed' group by 1 order by 2 desc");
+  reply.send(rows);
+});
+
+app.get("/healthz", async () => ({ ok: true }));
+app.listen({ port: PORT, host: "0.0.0.0" }).then(() => app.log.info(`helpdesk up :${PORT}`));
+
+Exposición en web: configura proxy /api/helpdesk/* → services/helpdesk.
+ 
+6) Web · Flujo de tickets
+Ruta completa: apps/web/src/modules/help/components/TicketFlow.tsx
+import React, { useState } from "react";
+import axios from "axios";
+
+export default function TicketFlow({ slug }: { slug?: string }) {
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [tid, setTid] = useState<string|undefined>();
+
+  if (tid) return <div className="card">Ticket creado: <code>{tid}</code>. Te contactaremos por correo si está asociado.</div>;
+
+  return (
+    <div className="card" role="form" aria-label="Crear ticket">
+      <h3 style={{ marginTop: 0 }}>¿Aún necesitas ayuda?</h3>
+      <input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Asunto" aria-label="Asunto" />
+      <textarea value={body} onChange={e=>setBody(e.target.value)} rows={4} placeholder="Describe el problema" aria-label="Descripción" />
+      <button className="button" onClick={async ()=>{
+        const { data } = await axios.post("/api/helpdesk/v1/tickets", { subject, body, slug });
+        setTid(data.id);
+      }}>Crear ticket</button>
+    </div>
+  );
+}
+
+Añade <TicketFlow slug={slug} /> al final de cada ArticleView si quieres escalar a L1 desde la ayuda.
+ 
+7) Validaciones (freshness + owners)
+Ruta completa: tools/validate-help-freshness.ts
+import fs from "node:fs/promises";
+import path from "node:path";
+import matter from "gray-matter";
+
+const dir = path.resolve(__dirname, "..", "apps", "web", "content", "help");
+const MAX_DAYS = 90;
+
+async function run() {
+  const files = (await fs.readdir(dir)).filter(f => f.endsWith(".mdx"));
+  const now = Date.now();
+  const outdated:string[] = [], missingOwner:string[] = [];
+  for (const f of files) {
+    const raw = await fs.readFile(path.join(dir, f), "utf8");
+    const { data } = matter(raw);
+    if (!data.owner) missingOwner.push(data.slug || f);
+    const d = new Date(data.lastReviewed || 0).getTime();
+    if (!d || (now - d) / 86400000 > MAX_DAYS) outdated.push(data.slug || f);
+  }
+  if (missingOwner.length || outdated.length) {
+    console.error("❌ KB inválida");
+    if (missingOwner.length) console.error("Falta owner en:", missingOwner.join(", "));
+    if (outdated.length) console.error("Desactualizados:", outdated.join(", "));
+    process.exit(1);
+  }
+  console.log("✅ KB al día");
+}
+run();
+
+ 
+8) Integración y observabilidad
+●	OTel + Prometheus: services/helpdesk expone /metrics; incluye contadores kb_feedback_total, tickets_open_total, etc. (ampliable).
+
+●	Dashboard Grafana (recomendado):
+
+○	Panel 1: Tickets L1 abiertos por categoría (objetivo ↓ X% vs baseline).
+
+○	Panel 2: CTR del widget (exposiciones → clicks → lectura completa).
+
+○	Panel 3: Satisfacción (media feedback por artículo).
+
+ 
+9) CI/CD

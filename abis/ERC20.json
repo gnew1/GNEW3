@@ -1,0 +1,7 @@
+      eventHandlers: 
+        # Ether/native transfers detectables por ExecutionSuccess 
+(value) 
+        - event: ExecutionSuccess(bytes32,uint256) 
+          handler: handleExecutionSuccess 
+        - event: ExecutionFailure(bytes32,uint256) 
+          handler: handleExecutionFailure 

@@ -1,0 +1,7 @@
+apiVersion: 1 
+providers: 
+  - name: gnew 
+    orgId: 1 
+    folder: GNEW 
+    type: file 
+    options: 

@@ -1,0 +1,37 @@
+{ 
+  "$id": "https://gnew/policy/access.input.schema.json", 
+  "type": "object", 
+  "required": ["subject","action","resource","env"], 
+  "properties": { 
+    "subject": { 
+      "type":"object", 
+      "required":["id","roles","sanctions_status","authenticated"], 
+      "properties":{ 
+        "id":{"type":"string"}, 
+        "roles":{"type":"array","items":{"type":"string"}}, 
+        "sanctions_status":{"enum":["clear","review","blocked"]}, 
+        "authenticated":{"type":"boolean"} 
+      } 
+    }, 
+    "action":{"enum":["read","write","manage"]}, 
+    "resource":{ 
+      "type":"object", 
+      "required":["type","sensitivity","region"], 
+      "properties":{ 
+        "type":{"type":"string"}, 
+        "owner":{"type":"string"}, 
+        "sensitivity":{"enum":["low","medium","high"]}, 
+        "region":{"type":"string"} 
+      } 
+    }, 
+    "env":{ 
+      "type":"object", 
+      "required":["ip_country"], 
+      "properties":{ 
+        "ip_country":{"type":"string"}, 
+        "mfa":{"enum":["passed","absent"],"default":"absent"} 
+      } 
+    } 
+  } 
+} 
+ 

@@ -1,0 +1,25 @@
+
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ES2022",
+		"declaration": true,
+		"outDir": "dist",
+		"rootDir": "src",
+		"strict": true
+	},
+	"include": [
+		"src/index.ts",
+		"src/clients/**/*.ts"
+	],
+	"exclude": [
+		"src/gov.ts",
+		"src/gasless.ts",
+		"src/delegation.ts",
+		"src/addresses.example.ts",
+		"**/*.test.ts",
+		"dist/**"
+	]
+}
+
+

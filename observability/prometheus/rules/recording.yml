@@ -1,0 +1,15 @@
+groups:
+  - name: security-recording
+    rules:
+      # p95 de latencia authz (histograma definido en N67)
+      - record: service:authz_eval_ms:p95
+        expr: histogram_quantile(0.95, sum(rate(authz_eval_ms_bucket[5m])) by (le))
+
+      # MTTD (Mean Time To Detect) sobre la última hora, usando histograma de sec-bridge
+      - record: security:mttd_seconds:rate1h
+        expr: rate(sec_mttd_seconds_sum[1h]) / rate(sec_mttd_seconds_count[1h])
+
+      # SLO de MTTD (N minutos -> segundos). Ajusta este valor en despliegue.
+      - record: security:mttd_slo_seconds
+        expr: 300
+

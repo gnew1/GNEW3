@@ -1,0 +1,382 @@
+name: gas-diff 
+ 
+on: 
+  pull_request: 
+    branches: [main, develop] 
+ 
+jobs: 
+  gas: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+        with: { fetch-depth: 0 } 
+ 
+      - name: Setup pnpm 
+        uses: pnpm/action-setup@v4 
+        with: { version: 9 } 
+ 
+      - name: Setup Node 
+        uses: actions/setup-node@v4 
+        with: 
+          node-version: 20 
+          cache: "pnpm" 
+ 
+      - name: Install deps 
+        run: pnpm i --frozen-lockfile 
+ 
+      - name: Setup Foundry 
+        uses: foundry-rs/foundry-toolchain@v1 
+        with: { version: nightly } 
+ 
+      # Snapshot en base (merge-base con main) 
+      - name: Compute base ref 
+        id: base 
+        run: | 
+          echo "sha=$(git merge-base origin/${{ github.base_ref }} 
+$GITHUB_SHA)" >> $GITHUB_OUTPUT 
+ 
+      - name: Snapshot (base) 
+        run: | 
+          git checkout ${{ steps.base.outputs.sha }} 
+          pnpm --filter @gnew/contracts test:forge 
+          pnpm --filter @gnew/contracts snapshot 
+          cp packages/contracts/.gas-snapshot /tmp/gas-base.txt 
+ 
+      - name: Snapshot (head) 
+        run: | 
+          git checkout $GITHUB_SHA 
+          pnpm --filter @gnew/contracts test:forge 
+          pnpm --filter @gnew/contracts snapshot 
+          cp packages/contracts/.gas-snapshot /tmp/gas-head.txt 
+ 
+      - name: Gas diff (hotspots ≥15%) 
+        run: | 
+          npx ts-node packages/contracts/scripts/ci/gas-diff.ts 
+/tmp/gas-base.txt /tmp/gas-head.txt \ 
+            "StakingManagerGasTest: 
+gas_delegate_hot,StakingManagerGasTest: 
+gas_undelegate_hot,StakingManagerGasTest: 
+gas_claim_hot,StakingManagerGasTest: gas_executeSlash_hot" 
+ 
+      - name: Render diff 
+        id: render 
+        run: | 
+          echo '```diff' > /tmp/gas.diff 
+          git --no-pager diff --no-index /tmp/gas-base.txt 
+/tmp/gas-head.txt || true >> /tmp/gas.diff 
+          echo '```' >> /tmp/gas.diff 
+ 
+      - name: Comment PR with gas diff 
+        uses: peter-evans/create-or-update-comment@v4 
+        with: 
+          issue-number: ${{ github.event.pull_request.number }} 
+          body: | 
+            ## Gas diff (Foundry) 
+            **Target:** ≥15% mejora media en hotspots 
+(delegate/undelegate/claim/executeSlash). 
+            <details> 
+            <summary>Tabla</summary> 
+ 
+            ```txt 
+            (ver job "Gas diff (hotspots ≥15%)" para tabla y media) 
+            ``` 
+            </details> 
+ 
+            <details> 
+            <summary>Diff bruto</summary> 
+            ${{ steps.render.outputs.body }} 
+            </details> 
+ 
+/README.md (añade sección N9 y badge) 
+## N9 — Optimización de gas & reporte por commit 
+ 
+- **Optimizado** `StakingManager.sol`: - *Custom errors*, *caching* de SLOAD/SSTORE, *bitpacking* 
+(`Unbonding` en 1 slot), `unchecked` en contadores. - **Pruebas de gas (Foundry)**: `test/gas/*.t.sol` con 
+`vm.pauseGasMetering()` / `resumeGasMetering()`. - **CI** `gas-diff`: - Corre `forge snapshot` en base y head, calcula **diff** y exige 
+**≥15%** de mejora media en hotspots: - `delegate`, `undelegate`, `claim`, `executeSlash`. - Publica comentario con el diff. 
+**Comandos locales** 
+```bash 
+pnpm --filter @gnew/contracts snapshot 
+# comparar manualmente con otro snapshot: 
+git checkout main && pnpm --filter @gnew/contracts snapshot && cp 
+packages/contracts/.gas-snapshot /tmp/base.txt 
+git checkout - && pnpm --filter @gnew/contracts snapshot && diff -u 
+/tmp/base.txt packages/contracts/.gas-snapshot 
+DoD: El pipeline falla si la mejora media < 15% (configurable con GAS_TARGET). --- 
+### Qué queda listo con N9 - Rutas críticas (`delegate/undelegate/claim/executeSlash`) 
+optimizadas con técnicas solicitadas (**unchecked**, **caching**, 
+**custom errors**, **bitpacking**). - **Informe “gas-diff” por commit** automatizado vía **GitHub 
+Actions**, basado en `forge snapshot --diff` y comparativa base/head. - **Pruebas/DoD**: gas-tests dedicados y gate de **≥15%** mejora media 
+en hotspots. 
+Tú dijiste: 
+N10 Objetivo: Falla segura y operativa. Roles: Seguridad (lead), Eng. SC. Stack: Pausable, 
+ReentrancyGuard, códigos de error. Entregables: Plan de emergencia y runbook. Pruebas/DoD: 
+simulación de incidente con recuperación en < 15 min. 
+ChatGPT Plus 
+Pensó durante 29s 
+/packages/contracts/src/common/Errors.sol 
+// SPDX-License-Identifier: MIT 
+pragma solidity ^0.8.24; 
+ 
+/// @title GNEW Common Errors (códigos de error uniformes) 
+/// @notice Reutiliza estos custom errors en todo el stack para 
+revertir barato y trazable. 
+library Errors { 
+    // Genéricos 
+    error ZeroAddress();               // address = 0 
+    error AmountZero();                // amount = 0 
+    error Unauthorized();              // remitente sin permisos 
+    error InvalidParam();              // parámetro inválido 
+    error AlreadySet();                // intentar setear el mismo 
+valor 
+    error IndexOOB();                  // índice fuera de rango 
+    error Paused();                    // operación bloqueada por 
+pausa 
+ 
+    // Staking 
+    error OperatorNotRegistered(); 
+    error InsufficientShares(); 
+    error NotReleased(); 
+    error EmptyPool(); 
+    error InvalidBps(); 
+    error Delay(); 
+    error AppealPending(); 
+    error NotStakeholder(); 
+} 
+ 
+/packages/contracts/src/ops/PauseGuardian.sol 
+// SPDX-License-Identifier: MIT 
+pragma solidity ^0.8.24; 
+ 
+/** 
+ * @title PauseGuardian (GNEW) 
+ * @notice Custodio de emergencia para pausar/despausar múltiples 
+contratos de forma atómica y segura. 
+ *         - Debe tener PAUSER_ROLE en cada contrato objetivo 
+(GovToken, Utility, StakingManager, etc.). 
+ *         - Minimiza riesgo operacional centralizando el “circuit 
+breaker”. 
+ */ 
+import {AccessControl} from 
+"@openzeppelin/contracts/access/AccessControl.sol"; 
+import {ReentrancyGuard} from 
+"@openzeppelin/contracts/utils/ReentrancyGuard.sol"; 
+ 
+interface IPausable { 
+    function pause() external; 
+    function unpause() external; 
+    function paused() external view returns (bool); 
+} 
+ 
+contract PauseGuardian is AccessControl, ReentrancyGuard { 
+    bytes32 public constant GUARDIAN_ROLE = 
+keccak256("GUARDIAN_ROLE"); 
+ 
+    event PausedAll(address[] targets); 
+    event UnpausedAll(address[] targets); 
+ 
+    constructor(address admin, address guardian) { 
+        require(admin != address(0) && guardian != address(0), "zero 
+addr"); 
+        _grantRole(DEFAULT_ADMIN_ROLE, admin); 
+        _grantRole(GUARDIAN_ROLE, guardian); 
+    } 
+ 
+    /// @notice Pausa una lista de contratos que implementan 
+`pause()`. 
+    function pauseAll(address[] calldata targets) external 
+nonReentrant onlyRole(GUARDIAN_ROLE) { 
+        for (uint256 i; i < targets.length; ) { 
+            // Si ya está pausado, ignora (idempotente) 
+            (bool ok, bytes memory data) = 
+targets[i].staticcall(abi.encodeWithSignature("paused()")); 
+            if (ok && data.length == 32 && abi.decode(data, (bool)) == 
+false) { 
+                (ok, ) = 
+targets[i].call(abi.encodeWithSignature("pause()")); 
+                require(ok, "pause failed"); 
+            } 
+            unchecked { ++i; } 
+        } 
+        emit PausedAll(targets); 
+    } 
+ 
+    /// @notice Despausa una lista de contratos que implementan 
+`unpause()`. 
+    function unpauseAll(address[] calldata targets) external 
+nonReentrant onlyRole(GUARDIAN_ROLE) { 
+        for (uint256 i; i < targets.length; ) { 
+            (bool ok, bytes memory data) = 
+targets[i].staticcall(abi.encodeWithSignature("paused()")); 
+            if (ok && data.length == 32 && abi.decode(data, (bool)) == 
+true) { 
+                (ok, ) = 
+targets[i].call(abi.encodeWithSignature("unpause()")); 
+                require(ok, "unpause failed"); 
+            } 
+            unchecked { ++i; } 
+        } 
+        emit UnpausedAll(targets); 
+    } 
+} 
+ 
+/packages/contracts/tasks/panic.ts 
+import { task } from "hardhat/config"; 
+import "dotenv/config"; 
+ 
+/** 
+ * Tareas de “falla segura”: pausa/despausa y rotación mínima de 
+roles. 
+ * Requiere: GOV_TOKEN_ADDRESS, UTILITY_TOKEN_ADDRESS (opcional), 
+STAKING_MANAGER_ADDRESS, GUARDIAN_ADDRESS 
+ */ 
+task("panic:pause-all", "Pausa Gov, Utility y Staking via guardian o 
+directo").setAction(async (_, hre) => { 
+  const { ethers, network } = hre; 
+  const guardian = process.env.GUARDIAN_ADDRESS; 
+  const gov = process.env.GOV_TOKEN_ADDRESS!; 
+  const util = process.env.UTILITY_TOKEN_ADDRESS; 
+  const stk = process.env.STAKING_MANAGER_ADDRESS!; 
+  const targets = [gov, ...(util ? [util] : []), stk].filter(Boolean) 
+as string[]; 
+ 
+  if (guardian) { 
+    const G = await ethers.getContractAt("PauseGuardian", guardian); 
+    const tx = await G.pauseAll(targets); 
+    console.log(`PauseAll tx: ${(await tx.wait())?.hash}`); 
+  } else { 
+    for (const a of targets) { 
+      const c = await 
+ethers.getContractAt("contracts/utils/IPausable.sol:IPausable", a); 
+      const tx = await c.pause(); 
+      console.log(`Paused ${a} @ tx: ${(await tx.wait())?.hash}`); 
+    } 
+  } 
+  console.log(`✓ Pausa ejecutada en ${network.name}`); 
+}); 
+ 
+task("panic:unpause-all", "Despausa Gov, Utility y 
+Staking").setAction(async (_, hre) => { 
+  const { ethers } = hre; 
+  const guardian = process.env.GUARDIAN_ADDRESS; 
+  const gov = process.env.GOV_TOKEN_ADDRESS!; 
+  const util = process.env.UTILITY_TOKEN_ADDRESS; 
+  const stk = process.env.STAKING_MANAGER_ADDRESS!; 
+  const targets = [gov, ...(util ? [util] : []), stk].filter(Boolean) 
+as string[]; 
+ 
+  if (guardian) { 
+    const G = await ethers.getContractAt("PauseGuardian", guardian); 
+    const tx = await G.unpauseAll(targets); 
+    console.log(`UnpauseAll tx: ${(await tx.wait())?.hash}`); 
+  } else { 
+    for (const a of targets) { 
+      const c = await 
+ethers.getContractAt("contracts/utils/IPausable.sol:IPausable", a); 
+      const tx = await c.unpause(); 
+      console.log(`Unpaused ${a} @ tx: ${(await tx.wait())?.hash}`); 
+    } 
+  } 
+}); 
+ 
+task("panic:freeze-slasher", "Revoca SLASHER_ROLE al emisor 
+comprometido") 
+  .addParam("compromised", "Address comprometido") 
+  .setAction(async ({ compromised }, hre) => { 
+    const { ethers } = hre; 
+    const stk = process.env.STAKING_MANAGER_ADDRESS!; 
+    const SM = await ethers.getContractAt("StakingManager", stk); 
+    const role = await SM.SLASHER_ROLE(); 
+    const tx = await SM.revokeRole(role, compromised); 
+    console.log(`Revoked SLASHER_ROLE from ${compromised} tx=${(await 
+tx.wait())?.hash}`); 
+  }); 
+ 
+Importa los tasks en tu hardhat.config.ts: 
+import "./tasks/panic"; 
+ 
+/packages/contracts/test/emergency/PauseGuardian.spec.ts 
+import { expect } from "chai"; 
+import { ethers } from "hardhat"; 
+ 
+describe("PauseGuardian — emergencia multi-contrato", () => { 
+  it("pausa/despausa Gov + Stk en < 15m (simulado)", async () => { 
+    const [admin, guardian, owner] = await ethers.getSigners(); 
+ 
+    // Deploy Gov 
+    const GF = await ethers.getContractFactory("GnewGovToken"); 
+    const gov = await GF.deploy("G", "G", owner.address, 0n, 
+1_000_000n * 10n ** 18n, 0n, 0); 
+    await gov.waitForDeployment(); 
+    // Grant PAUSER_ROLE to guardian 
+    await gov.grantRole(await gov.PAUSER_ROLE(), guardian.address); 
+ 
+    // Deploy Staking 
+    const SF = await ethers.getContractFactory("StakingManager"); 
+    const stk = await SF.deploy(await gov.getAddress(), admin.address, 
+admin.address, 0n, 3600, 1800); 
+    await stk.waitForDeployment(); 
+    await stk.connect(admin).grantRole(await stk.PAUSER_ROLE(), 
+guardian.address); 
+ 
+    // Deploy PauseGuardian 
+    const PGF = await ethers.getContractFactory("PauseGuardian"); 
+    const pg = await PGF.deploy(admin.address, guardian.address); 
+    await pg.waitForDeployment(); 
+ 
+    // Simula incidente a T0: guardian pausa ambos en una única TX 
+    const t0 = await ethers.provider.getBlock("latest"); 
+    const tx = await pg.connect(guardian).pauseAll([await 
+gov.getAddress(), await stk.getAddress()]); 
+    await tx.wait(); 
+ 
+    // Ambos deben estar pausados 
+    expect(await gov.paused()).to.eq(true); 
+    expect(await stk.paused()).to.eq(true); 
+// Simula mitigación y re-open < 15 min (900s) 
+await ethers.provider.send("evm_increaseTime", [899]); await 
+ethers.provider.send("evm_mine", []); 
+const tx2 = await pg.connect(guardian).unpauseAll([await 
+gov.getAddress(), await stk.getAddress()]); 
+await tx2.wait(); 
+expect(await gov.paused()).to.eq(false); 
+expect(await stk.paused()).to.eq(false); 
+}); 
+}); 
+/runbooks/EMERGENCY-PLAN.md 
+# Plan de Emergencia — GNEW (N10) 
+**Objetivo:** asegurar *falla segura* (graceful degradation) y 
+**recuperación < 15 min** ante incidentes. 
+## 1) Supuestos y alcance - Contratos críticos: `GnewGovToken`, `GnewToken`, `StakingManager`. - Capacidades: `Pausable`, `ReentrancyGuard`, **custom errors** 
+(códigos) y **PauseGuardian**. - Gobernanza: DAO/Multisig con `DEFAULT_ADMIN_ROLE`. SRE con 
+`PAUSER_ROLE`. Oráculo con `SLASHER_ROLE`. Comité con `APPEALS_ROLE`. 
+## 2) Niveles de severidad - **SEV-1**: pérdida de fondos inminente / exploit activo → **PAUSA 
+INMEDIATA**. - **SEV-2**: degradación severa (spam, gas spike, oráculo 
+inconsistente) → pausa selectiva (solo `StakingManager`) y mitigación. - **SEV-3**: baja prioridad (explorer desincronizado, subgraph caído) 
+→ sin pausa; alertas únicamente. 
+## 3) Controles preventivos - `ReentrancyGuard` en rutas críticas (`StakingManager`). - `Pausable` en todos los contratos core. 
+- Separación de roles (`SLASHER_ROLE` ≠ `APPEALS_ROLE`; ambos ≠ 
+`PAUSER_ROLE`). - **OIDC** + secret scanner (CI) para credenciales (véase N7). - **Timelock** para upgrades (N6). 
+## 4) Procedimiento SEV-1 (resumen) 
+1. **Activar pausa global**:   
+```bash 
+npx hardhat panic:pause-all --network <net> 
+Congelar slasher comprometido (si aplica): 
+npx hardhat panic:freeze-slasher --compromised 0xBad --network <net> 
+2.  
+3. Diagnóstico rápido (5–7 min): revisar métricas (N5), logs de eventos, últimas TX 
+fallidas. 
+4. Mitigación: hotfix de parámetros (e.g., setParams en StakingManager) o 
+deshabilitar faucet si procede. 
+Reapertura controlada: 
+npx hardhat panic:unpause-all --network <net> 
+5.  
+6. Postmortem en 24–48h. 
+5) Comunicación 
+● Slack #gnew-incidents: plantilla SEV con timeline (T0 pausa, T+X diagnóstico, T+Y 
+mitigación, T+Z reopen). 
+● Statuspage/README: señalar incidente resuelto + hash de TX de pausa/despausa. 
+6) Evidencias 
+● TX de PausedAll / UnpausedAll. 
+● Revoke de roles comprometidos. 
+● PR con cambios paramétricos (si hubo). 

@@ -1,0 +1,20 @@
+
+{
+  "name": "@gnew/final-report",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "generate": "node dist/generate.js"
+  },
+  "dependencies": {
+    "marked": "^12.0.2",
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "tsx": "^4.15.7"
+  }
+}
+
+

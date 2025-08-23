@@ -1,0 +1,45 @@
+apiVersion: apps/v1 
+kind: Deployment 
+metadata: 
+  name: realtime 
+  labels: { app: realtime } 
+spec: 
+  replicas: 2 
+  selector: { matchLabels: { app: realtime } } 
+  template: 
+    metadata: { labels: { app: realtime } } 
+    spec: 
+      containers: 
+        - name: realtime 
+          image: ghcr.io/gnew1/realtime:latest 
+          ports: [{ containerPort: 8010 }] 
+          env: 
+            - { name: PORT, value: "8010" } 
+            - { name: NATS_URL, valueFrom: { secretKeyRef: { name: 
+nats, key: url } } } 
+            - { name: REALTIME_REGION, valueFrom: { fieldRef: { 
+fieldPath: metadata.labels['topology.kubernetes.io/region'] } } } 
+            - { name: AUTH_URL, value: "http://auth:8001" } 
+            - { name: MAX_QUEUE, value: "200" } 
+            - { name: PING_INTERVAL_MS, value: "15000" } 
+            - { name: PONG_TIMEOUT_MS, value: "10000" } 
+          readinessProbe: 
+            httpGet: { path: /health, port: 8010 } 
+            initialDelaySeconds: 5 
+            periodSeconds: 10 
+          livenessProbe: 
+            httpGet: { path: /health, port: 8010 } 
+            initialDelaySeconds: 10 
+            periodSeconds: 20 
+          resources: 
+            requests: { cpu: 50m, memory: 64Mi } 
+            limits: { cpu: 500m, memory: 256Mi } --- 
+apiVersion: v1 
+kind: Service 
+metadata: { name: realtime } 
+spec: 
+  selector: { app: realtime } 
+  ports: 
+    - { name: http, port: 8010, targetPort: 8010 } 
+ 
+ 

@@ -1,0 +1,50 @@
+
+# Hello GNEW (Node/TypeScript)
+
+**Goal:** call GNEW Sandbox `health` and `echo` endpoints using the TS SDK.
+
+## 1) Scaffold
+```bash
+pnpm dlx @gnew/create-quickstart js
+cd examples/hello-gnew-js
+pnpm i
+
+2) Run
+pnpm start
+
+
+Expected:
+
+✔ health: ok
+✔ echo: pong
+
+3) Verify (T2D)
+node ../../apps/dev-portal/scripts/t2d-check.js --example js
+
+
+/apps/dev-portal/docs/quickstarts/hello-gnew-py.mdx
+```mdx
+# Hello GNEW (Python)
+
+**Goal:** call GNEW Sandbox using Python SDK.
+
+## 1) Scaffold
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ../../packages/sdk-python
+python main.py
+
+2) Verify (T2D)
+node ../../apps/dev-portal/scripts/t2d-check.js --example py
+
+
+/apps/dev-portal/docs/sdk/index.mdx
+```mdx
+# SDKs
+
+GNEW provides official SDKs:
+
+- [TypeScript](./typescript)
+- [Python](./python)
+
+

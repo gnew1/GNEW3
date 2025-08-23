@@ -1,0 +1,12 @@
+{ 
+"Rules": [{ 
+    "ID": "gnew-attachments-expire-90d", 
+    "Status": "Enabled", 
+    "Prefix": "users/", 
+    "Expiration": { "Days": 90 }, 
+    "NoncurrentVersionExpiration": { "NoncurrentDays": 30 } 
+  }] 
+} 
+ 
+ 
+Redactor de logs (minimización en observabilidad) 

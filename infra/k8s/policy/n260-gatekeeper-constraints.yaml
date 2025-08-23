@@ -1,0 +1,359 @@
+
+# =============================================================================
+# GNEW • N260 — Kubernetes Policy as Code (OPA Gatekeeper)
+# Objetivo: Asegurar baseline de seguridad/operación en todos los clusters.
+# Incluye ConstraintTemplates + Constraints para:
+#  - Labels obligatorios (project, component, environment, managed-by)
+#  - Prohibir privileged/privilegeEscalation y capabilities peligrosas
+#  - Exigir requests/limits de CPU y memoria
+#  - Restringir registries de imágenes
+#  - Bloquear volúmenes hostPath y seccomp no restringido
+# Aplicación: kubectl apply -f n260-gatekeeper-constraints.yaml
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Template: Required Labels
+# -----------------------------------------------------------------------------
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {l | l := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("missing required labels: %v", [missing])
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: gnew-required-labels
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace","Service","ConfigMap","Secret","PersistentVolumeClaim"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment","StatefulSet","DaemonSet"]
+  parameters:
+    labels: ["project","component","environment","managed-by"]
+
+# -----------------------------------------------------------------------------
+# Template: Disallow Privileged & Dangerous Capabilities
+# -----------------------------------------------------------------------------
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdisallowprivileged
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDisallowPrivileged
+      validation:
+        openAPIV3Schema:
+          properties:
+            forbiddenCapabilities:
+              type: array
+              items: { type: string }
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdisallowprivileged
+
+        default forbidden := {"NET_ADMIN","SYS_ADMIN","SYS_PTRACE","NET_RAW"}
+
+        violation[{"msg": msg}] {
+          c := input.review.object
+          containers := concat_arrays([c.spec.containers, c.spec.initContainers])
+          ctr := containers[_]
+
+          # privileged
+          ctr.securityContext.privileged == true
+          msg := sprintf("privileged container is not allowed: %v", [ctr.name])
+        }
+
+        violation[{"msg": msg}] {
+          c := input.review.object
+          containers := concat_arrays([c.spec.containers, c.spec.initContainers])
+          ctr := containers[_]
+
+          # allowPrivilegeEscalation
+          ctr.securityContext.allowPrivilegeEscalation == true
+          msg := sprintf("allowPrivilegeEscalation=true is not allowed: %v", [ctr.name])
+        }
+
+        violation[{"msg": msg}] {
+          c := input.review.object
+          containers := concat_arrays([c.spec.containers, c.spec.initContainers])
+          ctr := containers[_]
+          some cap
+          required_caps := object.get(input.parameters, "forbiddenCapabilities", forbidden)
+          caps := { x | x := ctr.securityContext.capabilities.add[_] }
+          cap := required_caps[_]
+          caps[cap]
+          msg := sprintf("capability %q is forbidden in container: %v", [cap, ctr.name])
+        }
+
+        # Helpers
+        concat_arrays(arrs) = out {
+          out := []
+          some i
+          arr := arrs[i]
+          out := arr if arr != null
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDisallowPrivileged
+metadata:
+  name: gnew-disallow-privileged
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment","StatefulSet","DaemonSet"]
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    forbiddenCapabilities: ["NET_ADMIN","SYS_ADMIN","SYS_PTRACE","NET_RAW"]
+
+# -----------------------------------------------------------------------------
+# Template: Require CPU/Memory Requests & Limits
+# -----------------------------------------------------------------------------
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredresources
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredResources
+      validation:
+        openAPIV3Schema:
+          properties:
+            requireLimits:
+              type: boolean
+            requireRequests:
+              type: boolean
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredresources
+
+        violation[{"msg": msg}] {
+          input.parameters.requireRequests
+          ctr := input_containers[_]
+          not has_requests(ctr)
+          msg := sprintf("container %q must set resources.requests.cpu and resources.requests.memory", [ctr.name])
+        }
+
+        violation[{"msg": msg}] {
+          input.parameters.requireLimits
+          ctr := input_containers[_]
+          not has_limits(ctr)
+          msg := sprintf("container %q must set resources.limits.cpu and resources.limits.memory", [ctr.name])
+        }
+
+        input_containers[ctr] {
+          c := input.review.object
+          containers := concat_arrays([c.spec.containers, c.spec.initContainers])
+          ctr := containers[_]
+        }
+
+        has_requests(ctr) {
+          ctr.resources.requests.cpu
+          ctr.resources.requests.memory
+        }
+
+        has_limits(ctr) {
+          ctr.resources.limits.cpu
+          ctr.resources.limits.memory
+        }
+
+        concat_arrays(arrs) = out {
+          out := []
+          some i
+          arr := arrs[i]
+          out := arr if arr != null
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredResources
+metadata:
+  name: gnew-required-resources
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment","StatefulSet","DaemonSet"]
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    requireLimits: true
+    requireRequests: true
+
+# -----------------------------------------------------------------------------
+# Template: Restrict Image Registries
+# -----------------------------------------------------------------------------
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8simageregistry
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sImageRegistry
+      validation:
+        openAPIV3Schema:
+          properties:
+            allowed:
+              type: array
+              items: { type: string }
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8simageregistry
+
+        violation[{"msg": msg}] {
+          allowed := {a | a := input.parameters.allowed[_]}
+          ctr := input_containers[_]
+          repo := split(ctr.image, "/")[0]
+          not allowed[repo]
+          msg := sprintf("image registry %q not in allowlist", [repo])
+        }
+
+        input_containers[ctr] {
+          c := input.review.object
+          containers := concat_arrays([c.spec.containers, c.spec.initContainers])
+          ctr := containers[_]
+        }
+
+        concat_arrays(arrs) = out {
+          out := []
+          some i
+          arr := arrs[i]
+          out := arr if arr != null
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sImageRegistry
+metadata:
+  name: gnew-allowed-registries
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment","StatefulSet","DaemonSet"]
+      - apiGroups: [""]
+        kinds: ["Pod"]
+  parameters:
+    allowed:
+      - "ghcr.io"
+      - "gcr.io"
+      - "eu.gcr.io"
+      - "registry.k8s.io"
+      - "docker.io"   # opcional; considerar restringir en prod
+
+# -----------------------------------------------------------------------------
+# Template: Disallow hostPath volumes & enforce seccomp
+# -----------------------------------------------------------------------------
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdisallowhostpath
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDisallowHostPath
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdisallowhostpath
+
+        violation[{"msg": msg}] {
+          v := input.review.object.spec.volumes[_]
+          v.hostPath
+          msg := "hostPath volumes are not allowed"
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDisallowHostPath
+metadata:
+  name: gnew-no-hostpath
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment","StatefulSet","DaemonSet"]
+      - apiGroups: [""]
+        kinds: ["Pod"]
+
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sseccompbaseline
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sSeccompBaseline
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sseccompbaseline
+
+        violation[{"msg": msg}] {
+          pod := input.review.object
+          not pod.metadata.annotations["seccomp.security.alpha.kubernetes.io/pod"]
+          not pod.spec.securityContext.seccompProfile.type
+          msg := "seccomp profile must be set at pod or container level (RuntimeDefault or Localhost)"
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sSeccompBaseline
+metadata:
+  name: gnew-seccomp-required
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+
+Tú dijiste:
+Ejecuta el siguiente prompt N del archivo "/mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N251. En cada ejecución incrementa N en +1 hasta N420, sin repetir. Como IA programadora, entrega exactamente lo indicado por el prompt con máxima precisión, empezando tu respuesta con la ruta completa del archivo de salida y, a continuación, el programa/artefacto en el lenguaje o formato especificado, coherente con todo el proyecto GNEW (monorepo Node/TS, Solidity, Terraform, CI/CD, seguridad). Mantén consistencia con estándares y DoD del documento y conserva un puntero interno de progreso para continuar en N+1 en la siguiente ejecución.
+ChatGPT Plus
+Pensó durante 24s
+

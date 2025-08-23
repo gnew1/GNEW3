@@ -1,0 +1,7 @@
+
+test-mode: assertion
+seq-len: 20
+test-limit: 10000
+corpus-dir: echidna-out
+
+

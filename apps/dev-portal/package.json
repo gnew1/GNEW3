@@ -1,0 +1,29 @@
+
+{
+  "name": "@gnew/dev-portal",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "start": "docusaurus start",
+    "build": "docusaurus build",
+    "serve": "docusaurus serve build",
+    "lint:links": "docusaurus docs:version-check && docusaurus write-translations --dry",
+    "check": "node scripts/t2d-check.js"
+  },
+  "dependencies": {
+    "@docusaurus/core": "^3.4.0",
+    "@docusaurus/preset-classic": "^3.4.0",
+    "@mdx-js/react": "^3.0.1",
+    "prism-react-renderer": "^2.4.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=18.17"
+  }
+}
+
+

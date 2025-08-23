@@ -1,0 +1,19 @@
+{
+  "period": "month",
+  "horizon": 3,
+  "alpha": 0.4,
+  "beta": 0.2,
+  "services": {
+    "compute": {
+      "unit": "vCPUh",
+      "onDemandRate": 0.050,
+      "reservedRate": 0.032,
+      "granularity": 25,
+      "maxCommitMultiplier": 1.1
+    }
+  }
+}
+
+
+¿Quieres que también integre este plan con tus dashboards de Grafana/Alertas (p. ej., publicar totalSavings y alertar si cae por debajo de un umbral), o lo dejamos como módulo CLI por ahora?
+

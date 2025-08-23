@@ -1,0 +1,55 @@
+
+### Health
+GET http://localhost:8116/healthz
+
+### Registrar dataset
+POST http://localhost:8116/datasets
+Content-Type: application/json
+
+{
+  "name": "events table",
+  "db": "demo",
+  "table": "events"
+}
+
+### Registrar job con edges
+POST http://localhost:8116/jobs
+Content-Type: application/json
+
+{
+  "name": "etl_events_to_summary",
+  "edges": [
+    { "sourceDatasetId": "{{eventsId}}", "targetDatasetId": "{{summaryId}}", "transform":"agg" }
+  ]
+}
+
+### Consultar upstream
+GET http://localhost:8116/lineage/upstream?datasetId={{summaryId}}
+
+### Consultar downstream
+GET http://localhost:8116/lineage/downstream?datasetId={{eventsId}}
+
+### Adjuntar calidad
+POST http://localhost:8116/quality/attach
+Content-Type: application/json
+
+{
+  "datasetId": "{{eventsId}}",
+  "ruleId":"rule123",
+  "runId":"run123",
+  "status":"pass"
+}
+
+### Ver calidad
+GET http://localhost:8116/quality/{{eventsId}}
+
+Notas de implementación
+
+Reutiliza better-sqlite3 con WAL para persistencia simple.
+
+Usa CTE recursivos para lineage upstream y downstream.
+
+Permite adjuntar métricas de calidad directamente desde ejecuciones del runner (N174).
+
+Preparado para panel de visualización de lineage en siguientes prompts.
+

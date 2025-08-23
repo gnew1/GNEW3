@@ -1,0 +1,59 @@
+name: SC Security & QA
+on:
+  pull_request:
+    paths:
+      - "contracts/**"
+  push:
+    branches: [ main ]
+    paths:
+      - "contracts/**"
+jobs:
+  foundry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+      - name: Install deps
+        working-directory: contracts
+        run: |
+          forge install OpenZeppelin/openzeppelin-contracts@v5.0.2 --no-commit
+          npm ci
+      - name: Build
+        working-directory: contracts
+        run: npm run build
+      - name: Test
+        working-directory: contracts
+        run: npm run test
+      - name: Coverage
+        working-directory: contracts
+        run: npm run coverage
+      - name: Slither
+        uses: crytic/slither-action@v0.3.2
+        with:
+          slither-args: "--config-file contracts/.slither.json contracts"
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: sc-coverage
+          path: contracts/lcov.info
+
+ 
+Notas de integración con GNEW
+●	Repositorio: añade carpeta contracts/ en el monorepo. CI ya preparado en .github/workflows/sc-security.yml respetando tu GitFlow y gates de Seguridad/Gobernanza.
+
+●	Docs Docusaurus: incluye README.md y SECURITY.md en la sección “Contratos” y “Runbooks”.
+
+●	Observabilidad: los contratos emiten eventos clave (Deposited, Withdrawn, Pushed, Allowed); captura desde indexer para dashboards.
+
+●	Legal & privacidad: no se tratan datos personales en on-chain.
+
+●	Accesibilidad e i18n: documentación bilingüe ES/EN (código neutro).
+
+Con este paquete tienes: guía de patrones, plantillas seguras (vault, escrow, UUPS), errores custom, CEI + reentrancy guard, y tooling (Foundry, Slither, cobertura) para cumplir el DoD de cero High/Critical pendientes.
+Tú dijiste:
+programa a nivel de detalle para GNEW N63 7.3 Simulaciones de ataque en testnets (Prompt 63) Objetivo: Chaos-security para SC y backend. Roles: Seguridad Red Team, QA. Stack: Forking mainnet, fuzzing transaccional. Entregables: Playbooks de ataque/defensa, correcciones. Pasos: Escenarios: reentrancy, price oracle, griefing. Ensayos periódicos. DoD: MTTR reducido, brechas cerradas.
+ChatGPT Plus
+Pensó durante 1m 27s

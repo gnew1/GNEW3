@@ -1,0 +1,16 @@
+{ 
+  "$id": "https://gnew/jx/resolve.input.schema.json", 
+  "type": "object", 
+  "required": ["country","productType"], 
+  "properties": { 
+    "country": { "type":"string", "minLength":2, "maxLength":2 }, 
+    "productType": { 
+"enum":["digital","physical","financial","service"] }, 
+    "kycLevel": { "enum":["NONE","BASIC","STANDARD","ENHANCED"] }, 
+    "isPEP": { "type":"boolean" }, 
+    "sanctionsStatus": { "enum":["clear","review","blocked"] }, 
+    "amount": { "type":"number", "minimum":0 }, 
+    "currency": { "type":"string" } 
+  } 
+} 
+ 

@@ -1,0 +1,114 @@
+ on.md 
+N124 — 13.4 Score de reputación con decaimiento 
+temporal (GNEW) 
+Objetivo: Definir e implementar una métrica compuesta de reputación que integre señales 
+on‑chain y off‑chain con decaimiento exponencial en el tiempo, resistente a 
+gaming/sybil/collusión, auditable y anclada on‑chain. 
+Roles: Data, Producto. 
+Stack: Python (pipelines y scoring), YAML (fórmula/weights), Solidity (anclaje Merkle), IPFS 
+(artefactos/auditoría), TypeScript SDK + React UI. 
+DoD: 
+● Cálculo reproducible con selective features on/off‑chain. 
+● Decay exponencial por tipo de evento con half‑life configurable. 
+● Anti‑gaming (rate‑limit, diversidad, anti‑colusión, saturación, outlier clipping). 
+● Auditoría: versión de fórmula, codeHash, configHash, artefactos en IPFS y Merkle 
+root on‑chain (verificación local de pruebas). 
+1) Definición matemática 
+1.1 Score base 
+Para cada usuario uuu y tiempo de evaluación ttt: 
+Su(t)  =  ∑e∈Euwk(e)⋅fk(ve)⋅e−λk(e)(t−τe)⋅MeS_u(t) \;=\; \sum_{e \in \mathcal{E}_u} w_{k(e)} 
+\cdot f_k(v_e)\cdot e^{-\lambda_{k(e)} (t - \tau_e)} \cdot 
+M_eSu (t)=e∈Eu ∑ wk(e) ⋅fk (ve )⋅e−λk(e) (t−τe )⋅Me 
+● Evento eee: de tipo kkk (p. ej. voto, merge PR, review, stake, badge SBT…). 
+● wkw_kwk : peso base por tipo. 
+● fk(⋅)f_k(\cdot)fk (⋅): saturación por tipo, p.ej. logística: 
+fk(v)=αk⋅11+e−bk(v−ck)f_k(v)=\alpha_k \cdot \frac{1}{1+e^{-b_k 
+(v-c_k)}}fk (v)=αk ⋅1+e−bk (v−ck )1 o clip [0,vkmax ][0, v^{\max}_k][0,vkmax ]. 
+● λk=ln (2)/hk\lambda_k = \ln(2)/h_kλk =ln(2)/hk : decaimiento con half‑life hkh_khk (días). 
+● τe\tau_eτe : timestamp del evento. 
+● MeM_eMe : multiplicador compuesto anti‑gaming (ver 1.2). 
+1.2 Multiplicadores anti‑gaming Me=pvel⋅pdiv⋅pcol⋅pqual⋅pidM_e = 
+p_{\text{vel}} \cdot p_{\text{div}} \cdot p_{\text{col}} \cdot p_{\text{qual}} 
+\cdot p_{\text{id}}Me =pvel ⋅pdiv ⋅pcol ⋅pqual ⋅pid 
+● Velocidad pvelp_{\text{vel}}pvel : penaliza ráfagas/spam. 
+pvel=11+max (0,ru,k−rk⋆)/rk⋆∈(0,1]p_{\text{vel}} = \frac{1}{1 + \max(0, 
+r_{u,k}-r^{\star}_k)/r^{\star}_k} \in (0,1]pvel =1+max(0,ru,k −rk⋆ )/rk⋆ 1 ∈(0,1] 
+donde ru,kr_{u,k}ru,k = eventos kkk/día recientes; umbral rk⋆r^{\star}_krk⋆ . 
+● Diversidad pdivp_{\text{div}}pdiv : bonifica variedad de tipos/áreas; penaliza repetición. 
+pdiv=min   (1,  γ0+γ1⋅HShannon(tipos uˊltimos 30d))p_{\text{div}} = \min\!\big(1,\; \gamma_0 + 
+\gamma_1 \cdot H_{\text{Shannon}}(\text{tipos últimos 
+}30d)\big)pdiv =min(1,γ0 +γ1 ⋅HShannon (tipos uˊltimos 30d)) 
+● Anti‑colusión pcolp_{\text{col}}pcol : penaliza concentración de contrapartes (Gini/SN 
+ratio sobre destinatarios/reviewers). 
+pcol=1−min (β,ratio concentracioˊn)p_{\text{col}} = 1 - \min(\beta, \text{ratio 
+concentración})pcol =1−min(β,ratio concentracioˊn) 
+● Calidad pqualp_{\text{qual}}pqual : factor de calidad (puntuaciones de 
+revisión/aceptación) ∈[0.8,1.5]\in[0.8,1.5]∈[0.8,1.5]. 
+ 
+● Identidad/Stake pidp_{\text{id}}pid : verificación DID/VC + stake productivo (cap a 1.2). 
+ 
+1.3 Normalización y bandas 
+Se expone Su′=min (1000,  α⋅Su)S^\prime_u = \min(1000,\; \alpha\cdot 
+S_u)Su′ =min(1000,α⋅Su ), con bandas de confianza (percentiles por cohorte) y breakdown por 
+contribución. 
+ 
+2) Señales (features) iniciales 
+Tipo (k) Fuente v_e h_k 
+(half‑life) 
+w_k 
+(ej.) 
+Guardarraíl 
+Voto en gobernanza on‑chai
+ n 
+1 por voto 60d 3.0 máx. 1/día 
+Propuesta aceptada on‑chai
+ n 
+impacto ∈[1,5] 120d 8.0 cap 
+mensual 
+Claim/recompensa 
+trabajo 
+on‑chai
+ n 
+importe 
+normalizado 
+45d 4.0 clip p95 
+Badge SBT relevante on‑chai
+ n 
+puntos del tipo 180d 5.0 únicos 
+PR mergeado (repo) off‑chai
+ n 
+LOC/complexity 
+score 
+30d 6.0 saturación 
+Code review útil off‑chai
+ n 
+helpfulness score 21d 3.5 anti‑anillo 
+Foros: respuesta 
+aceptada 
+off‑chai
+ n 
+upvotes 
+normalizados 
+14d 2.0 velocity 
+Stake de tiempo 
+Gnew0 
+on‑chai
+ n 
+log(1+stake) 90d 2.5 cap 1.2x 
+Evaluaciones pares 
+(VC) 
+off‑chai
+ n 
+media ponderada 60d 3.0 z‑score clip 
+(configurable en YAML; valores de ejemplo) 
+3) Entregables 
+1. Motor de scoring (Python) con CLI y servicio: ingestión, agregación, decay, 
+anti‑gaming, artefactos de auditoría. 
+2. Contrato ReputationRootRegistry (Solidity): ancla Merkle root por epoch, 
+formulaHash y ipfsURI. 
+3. SDK (packages/sdk/reputation.ts): verificación local de pruebas Merkle y 
+breakdown. 
+4. UI (React): ScoreCard, gráfico de decay y explicación por contribuciones. 
+5. Jobs/Runbooks: cron de cálculo diario, publicación a IPFS, anclaje root en cadena, 
+alertas. 
+6. Tests: decay, anti‑gaming, verificación de prueba, reproducibilidad (hashes). 

@@ -1,0 +1,47 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+      grpc:
+
+processors:
+  batch:
+  attributes:
+    actions:
+      - key: service.version
+        action: insert
+        value: "unknown"
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["deployment.environment"], "prod") where attributes["deployment.environment"] == nil
+
+exporters:
+  prometheus:
+    endpoint: ":8889"
+  otlphttp/tempo:
+    endpoint: http://tempo:4318
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+  # Ejemplo de SIEM (Elastic/OpenSearch) vía Loki/OTLP o HTTP(s)
+  # http/splunk:
+  #   endpoint: https://siem.example.com/collector
+  #   headers: { "Authorization": "Splunk ${SPLUNK_TOKEN}" }
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+    traces:
+      receivers: [otlp]
+      processors: [batch, attributes, transform]
+      exporters: [otlphttp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [loki]
+

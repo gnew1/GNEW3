@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools","wheel"]
+
+[project]
+name = "gnew-sec-bridge"
+version = "0.1.0"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "pydantic",
+  "prometheus-client",
+]
+

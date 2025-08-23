@@ -1,0 +1,9 @@
+{
+  "detectors_to_exclude": ["naming-convention", "similar-names"],
+  "exclude_informational": true,
+  "exclude_low": true,
+  "solc_remaps": ["@openzeppelin/="],
+  "filter_paths": ["lib/"],
+  "fail_pedantic": false
+}
+

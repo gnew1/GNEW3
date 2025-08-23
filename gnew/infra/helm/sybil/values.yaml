@@ -1,0 +1,57 @@
+image: 
+repository: gnew/sybil-api 
+tag: v0.1.0 
+env: 
+SYBIL_DATA_DIR: /data/sybil 
+SYBIL_EPOCH: "20250819" 
+ingress: 
+enabled: true 
+hosts: [ "sybil.api.gnew.example" ] 
+cron: 
+schedule: "0 * * * *" # horario de recomputo (cada hora o diario 
+según costos) 
+args: - "--config=/app/config/formula.v1.yaml" - "--epoch=$(date +%Y%m%d)" - "--out=/data/sybil/$(date +%Y%m%d)" 
+resources: 
+requests: { cpu: "300m", memory: "512Mi" } 
+limits: { cpu: "2", memory: "2Gi" } 
+3) Integraciones GNEW 
+● N121 (DID): seeds desde DIDs con controller verificado. 
+● N122 (VCs): vc_score por tipos válidos/fecha/estado (revocación). 
+● N123 (SBT): sbt_shared y badges VerifiedHuman/CoreContributor. 
+● N124 (Reputación): usar bandas altas como seeds adicionales y/o factor anti‑sybil. 
+● N120 (Gasless): Gate en Sponsor: acciones patrocinadas requieren risk ≤ 
+green/amber o stake. 
+4) Políticas de seguridad y privacidad 
+● PII: sólo hashes de device/telemetría; no almacenar contenido. 
+● Explicabilidad: API devuelve signals y top razones; UI muestra RiskCard. 
+● Fairness: monitorizar FPR por cohorte; ajustar pesos/umbrales vía YAML versionado. 
+● Ataques conocidos: farming de micro‑edges → filtrado por valor/decay y diversidad; 
+colusión → conductancia; granjas → device_diversity bajo; puente de stake → stake 
+efectivo ligado a epoch/lock. 
+5) Runbooks 
+● Cambio de fórmula: PR + revisión Seguridad → version+1, recalcula, ancla root y 
+publica artefactos. 
+● Rollback: set currentEpoch a epoch previo; UI y gates leen epoch activo. 
+● Incidente: si FPR sube, bajar umbral a amber y requerir VC humano temporalmente. 
+● Auditoría: publicar README.audit (método, métricas, curvas ROC), risk.json 
+sample y hashes on‑chain. 
+6) DoD — Checklist 
+● K‑graph implementado con decay, k‑core/triángulos, PPR seed‑based y 
+conductancia. 
+● Señales tiempo/edad, stake, VC/SBT integradas. 
+● Riesgo calculado, thresholds green/amber/red y explicabilidad. 
+● Merkle root on‑chain + SybilGate para verificación local. 
+● Ensayo: test de simulación con caída ≥70% y FPR ≤5%. 
+● Helm, scripts y runbooks. 
+Notas y próximos pasos 
+● Sustituir stubs por libs: keccak (pysha3/ethers), pruebas Merkle completas, y proof 
+generation en API. 
+● Integrar presentations (N122) para VC humano como step‑up en amber/red. 
+● Añadir detección comunitaria (Louvain/Leiden) para aislar componentes sospechosos. 
+● Medir impacto en UX y budget (N120) para balancear fricción y seguridad. 
+Tú dijiste: 
+programa a bivel e detalle para gnew N126 13.6 Privacidad: ZK para atributos (Prompt 126) 
+Objetivo: Probar atributos sin revelar datos. Roles: Cripto/zk, Back. DoD: demos de “soy mayor 
+de 18” y “no sancionado”. 
+ChatGPT Plus 
+Pensó durante 1m 35s 

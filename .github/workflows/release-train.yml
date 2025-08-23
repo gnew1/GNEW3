@@ -1,0 +1,876 @@
+name: Release Train (weekly) 
+ 
+on: 
+  schedule: 
+    - cron: "0 8 * * MON"   # Lunes 08:00 UTC ≈ 10:00 Europe/Amsterdam 
+  workflow_dispatch: {} 
+ 
+jobs: 
+  cut-train: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+        with: { fetch-depth: 0 } 
+      - name: Ensure Node 
+        uses: actions/setup-node@v4 
+        with: { node-version: "20" } 
+ 
+      - name: Plan next run (service) 
+        env: 
+          RT_URL: ${{ vars.RELEASE_TRAINS_URL || 
+'https://release-trains.gnew.io' }} 
+        run: | 
+          curl -sS -X POST "$RT_URL/admin/train" \ 
+            -H 'Content-Type: application/json' \ 
+            -d '{"key":"weekly-train","cron":"0 8 * * 
+MON","tz":"Europe/Amsterdam","branchPrefix":"release","sloKeys":["ai-a
+ pi-availability","ai-api-latency-500ms"],"checklistKey":"weekly"}' || 
+true 
+          # Buscar último run PLANNED e iniciarlo 
+          RUN_ID=$(curl -s "$RT_URL/trains" | jq -r '.[] | 
+select(.key=="weekly-train") | .runs | map(select(.status=="PLANNED")) 
+| sort_by(.plannedAt) | reverse | .[0].id') 
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV 
+          curl -s -X POST "$RT_URL/runs/$RUN_ID/start" 
+ 
+      - name: Create release branch 
+        run: | 
+          git config user.name "gnew-bot" 
+          git config user.email "bot@gnew.io" 
+          BR="release/$(date +'%Y.%V')" 
+          git checkout -B "$BR" 
+          git push -u origin "$BR" --force 
+ 
+      - name: Generate draft release notes (service) 
+        env: { RT_URL: ${{ vars.RELEASE_TRAINS_URL || 
+'https://release-trains.gnew.io' }} } 
+        run: | 
+          curl -s -X POST "$RT_URL/runs/$RUN_ID/notes" 
+          NOTES_PATH=$(curl -s "$RT_URL/runs/$RUN_ID" | jq -r 
+'.notesPath') 
+          echo "Notes at $NOTES_PATH (on server)." 
+ 
+      - name: Checklist: fill notes URL 
+        env: { RT_URL: ${{ vars.RELEASE_TRAINS_URL || 
+'https://release-trains.gnew.io' }} } 
+        run: | 
+          ITEM_ID=$(curl -s "$RT_URL/runs/$RUN_ID" | jq -r 
+'.checklist[] | select(.key=="links-notes") | .id') 
+          curl -s -X POST "$RT_URL/checklist/$ITEM_ID/status" -H 
+'Content-Type: application/json' \ 
+            -d 
+"{\"status\":\"OK\",\"details\":\"https://github.com/${{ 
+github.repository }}/releases\"}" 
+ 
+      - name: Evaluate exit criteria (service) 
+        env: { RT_URL: ${{ vars.RELEASE_TRAINS_URL || 
+'https://release-trains.gnew.io' }} } 
+        run: | 
+          curl -s -X POST "$RT_URL/runs/$RUN_ID/evaluate" | tee 
+eval.json 
+          STATUS=$(jq -r '.status' eval.json) 
+          echo "STATUS=$STATUS" >> $GITHUB_ENV 
+          test "$STATUS" = "READY" || { echo "Train not READY yet."; 
+exit 0; } 
+ 
+  publish: 
+    needs: [cut-train] 
+    if: env.STATUS == 'READY' 
+    runs-on: ubuntu-latest 
+    permissions: 
+      contents: write 
+    steps: 
+      - uses: actions/checkout@v4 
+        with: { fetch-depth: 0 } 
+      - name: Derive version (server) 
+        env: { RT_URL: ${{ vars.RELEASE_TRAINS_URL || 
+'https://release-trains.gnew.io' }} } 
+        run: | 
+          VERSION=$(curl -s "$RT_URL/runs/$RUN_ID" | jq -r '.version') 
+          echo "VERSION=$VERSION" >> $GITHUB_ENV 
+ 
+      - name: Tag & push 
+        run: | 
+          git config user.name "gnew-bot" 
+          git config user.email "bot@gnew.io" 
+          git tag "$VERSION" 
+          git push origin "$VERSION" 
+ 
+      - name: Create GitHub Release 
+        uses: softprops/action-gh-release@v2 
+        with: 
+          tag_name: ${{ env.VERSION }} 
+          name: ${{ env.VERSION }} 
+          draft: false 
+          generate_release_notes: true 
+ 
+      - name: Mark released in service 
+        env: { RT_URL: ${{ vars.RELEASE_TRAINS_URL || 
+'https://release-trains.gnew.io' }} } 
+        run: | 
+          curl -s -X POST "$RT_URL/runs/$RUN_ID/released" \ 
+            -H 'Content-Type: application/json' \ 
+            -d "{\"tagName\":\"${{ env.VERSION 
+}}\",\"notesUrl\":\"https://github.com/${{ github.repository 
+}}/releases/tag/${{ env.VERSION }}\"}" 
+ 
+Si el gate de SLOs (N146) está FREEZE, el checklist fallará por slogate → no se 
+publica (queda para el siguiente tren). 
+ 
+ 
+ 
+ Alta del tren (ejemplo rápido) 
+Ruta completa: tools/release-trains/example/train.json 
+{ 
+  "key": "weekly-train", 
+  "description": "Tren semanal de producción", 
+  "env": "prod", 
+  "cron": "0 8 * * MON", 
+  "tz": "Europe/Amsterdam", 
+  "branchPrefix": "release", 
+  "sloKeys": ["ai-api-availability", "ai-api-latency-500ms"], 
+"checklistKey": "weekly" 
+} 
+ 
+ 
+ README / Operación 
+Ruta completa: services/release-trains/README.md 
+# GNEW N147 — Release Trains 
+Cadencia fija con criterios de salida y **notas de versión** 
+automáticas. 
+## Endpoints clave - `POST /admin/train` → alta/edición de tren (cron, tz, gates SLO, 
+checklist) - `POST /runs/:id/start` → inicia el run (instancia checklist) - `POST /runs/:id/evaluate` → evalúa criterios de salida (SLO gates + 
+checklist) - `POST /runs/:id/notes` → genera **draft** de notas y sugiere 
+**version** (semver por commits) - `POST /runs/:id/released` → marca como **RELEASED** (guarda tag y 
+URL) - `POST /runs/:id/frozen` → marca **FROZEN** (con razón) - `POST /checklist/:id/status` → marcar ítems manuales (QA, docs, 
+etc.) - `GET /trains` / `GET /runs/:id` / `GET /metrics` / `GET /healthz` 
+## Flujo típico (DoD) 
+1. **Planificación automática** por `cron` → `PLANNED`. 
+2. **Start** del run → se instancia **checklist**. 
+3. **Generación de notas** y **versión** desde commits (conventional). 
+4. **Evaluación de salida**: - SLO gates (N146) → si **FREEZE** → `FROZEN`. - Checklist: **OK** todos los requeridos → `READY`. 
+5. **Publicación** (tag y release) → `RELEASED`.   
+**DoD:** *checklist cumplido* + *notas de versión* publicadas. 
+## Notas - Los ítems `http` guardan su URL en `details` (puedes inicializarlos 
+al crear el template). - `git` debe estar disponible en el runner/container para generar 
+notas desde el repo. Si no, puedes pasar tu propio changelog y marcar 
+el ítem `links-notes` con la URL final. 
+✅
+ Cómo queda cubierto el DoD 
+● Checklist cumplido: plantilla versionable + instanciación por run + API para 
+marcar/validar; el release sólo sale cuando todo requerido está OK. 
+● Notas de versión: generadas automáticamente desde commits (agrupación por 
+feat/fix/etc.) y publicadas en GitHub Release (workflow). 
+● Cadencia fija con criterios de salida: cron + SLO gates (freeze automático si se 
+excede) + checklist (QA/Docs/Health). 
+¿Quieres que añada un dashboard Grafana (JSON) para visualizar estado de trenes, frozen 
+vs released y tiempos por etapa? 
+Tú dijiste: 
+repite y muestra la programacion 
+ChatGPT Plus 
+Pensó durante 59s 
+Aquí tienes el programa a nivel de detalle y entrega para GNEW N147 — 15.7 Release 
+Trains (Cadencia fija con criterios de salida). Incluye un microservicio release-trains 
+(Node/TypeScript + Prisma/PostgreSQL) para definir trenes con cadencia fija, checklist de 
+salida, gates automáticos (SLO/Error Budget, HTTP), notas de versión (a partir de 
+conventional commits), tags/semver, métricas Prometheus y workflows CI para operar la 
+cadencia. Cumple el DoD: checklist completo y notas de versión en cada salida. 
+ 
+ 
+ Servicio: services/release-trains 
+Ruta completa: services/release-trains/package.json 
+{ 
+  "name": "@services/release-trains", 
+  "version": "0.1.0", 
+  "private": true, 
+  "type": "module", 
+  "main": "dist/index.js", 
+  "scripts": { 
+    "dev": "tsx watch src/index.ts", 
+    "build": "tsc -p tsconfig.json && tsc-alias", 
+    "start": "node dist/index.js", 
+    "prisma:generate": "prisma generate", 
+    "prisma:migrate": "prisma migrate deploy", 
+    "prisma:dev": "prisma migrate dev --name init-release-trains" 
+  }, 
+  "dependencies": { 
+    "@prisma/client": "^5.18.0", 
+    "axios": "^1.7.7", 
+    "date-fns": "^3.6.0", 
+    "dotenv": "^16.4.5", 
+    "express": "^4.19.2", 
+    "morgan": "^1.10.0", 
+    "prom-client": "^15.1.3", 
+    "prisma": "^5.18.0", 
+    "rrule": "^2.8.1", 
+    "semver": "^7.6.3", 
+    "simple-git": "^3.25.0", 
+    "zod": "^3.23.8" 
+  }, 
+  "devDependencies": { 
+    "@repo/typescript-config": "workspace:*", 
+    "@types/express": "^4.17.21", 
+    "@types/node": "^22.5.4", 
+    "tsc-alias": "^1.8.10", 
+    "tsx": "^4.17.0", 
+    "typescript": "^5.5.4" 
+  } 
+} 
+ 
+Ruta completa: services/release-trains/tsconfig.json 
+{ 
+} 
+"extends": "@repo/typescript-config/node.json", 
+"compilerOptions": { 
+"rootDir": "src", 
+"outDir": "dist", 
+"baseUrl": "./src", 
+"paths": { "@/*": ["*"] } 
+}, 
+"include": ["src/**/*"] 
+Ruta completa: services/release-trains/.env.example 
+PORT=8090 
+DATABASE_URL=postgresql://gnew:gnew@postgres:5432/gnew_release_trains?
+ schema=public 
+SLO_GATE_URL=http://slo-budget.gnew.svc.cluster.local:8089 
+# Repo local opcional (para generar notas con simple-git si el runner 
+tiene el repo) 
+REPO_PATH=/workspace/gnew 
+DEFAULT_TZ=Europe/Amsterdam 
+# Notificaciones opcionales 
+SLACK_WEBHOOK_URL= 
+ALERT_WEBHOOK_URL= 
+ 
+ 
+ Datos (Prisma) 
+Ruta completa: services/release-trains/prisma/schema.prisma 
+generator client { provider = "prisma-client-js" } 
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") } 
+model Train { 
+id          
+key         
+String   @id @default(cuid()) 
+String   @unique        
+// ej: web-weekly 
+  name        String 
+  env         String   @default("staging") 
+  // RRULE ICS (ej: 
+"FREQ=WEEKLY;BYDAY=MO;BYHOUR=10;BYMINUTE=0;BYSECOND=0") 
+  rrule       String 
+  timezone    String   @default("Europe/Amsterdam") 
+  branch      String   @default("main") 
+  releasePrefix String @default("v") // prefijo de tags 
+  active      Boolean  @default(true) 
+  checklistTemplateId String? 
+  createdAt   DateTime @default(now()) 
+  updatedAt   DateTime @updatedAt 
+ 
+  template    ChecklistTemplate? @relation(fields: 
+[checklistTemplateId], references: [id]) 
+  departures  Departure[] 
+  gates       Gate[] 
+} 
+ 
+model ChecklistTemplate { 
+  id          String   @id @default(cuid()) 
+  name        String 
+  items       Json     // [{key, title, description, mandatory, role}] 
+  createdAt   DateTime @default(now()) 
+  trains      Train[] 
+} 
+ 
+model Gate { 
+  id          String   @id @default(cuid()) 
+  trainId     String 
+  kind        GateKind        // SLO|HTTP|MANUAL 
+  name        String 
+  config      Json            // p.ej. { "keys": 
+["ai-api-availability"] } o { "url": "https://..." } 
+  createdAt   DateTime @default(now()) 
+  train       Train    @relation(fields: [trainId], references: [id], 
+onDelete: Cascade) 
+} 
+ 
+model Departure { 
+  id          String   @id @default(cuid()) 
+  trainId     String 
+  seq         Int 
+  plannedAt   DateTime 
+  status      DepartureStatus @default(PLANNED) // 
+PLANNED|BOARDING|BLOCKED|DEPARTED|LANDED|CANCELED 
+  version     String?  // semver elegido (ej: 1.12.0) 
+  tag         String?  // prefijo+version (ej: v1.12.0) 
+  changelogMd String?  // notas de versión 
+  checklist   Json     // snapshot items 
+[{key,title,mandatory,status,evidenceUrl,role}] 
+  gates       Json     // resultados por gate [{name, kind, ok, 
+reason}] 
+  createdAt   DateTime @default(now()) 
+  updatedAt   DateTime @updatedAt 
+  train       Train    @relation(fields: [trainId], references: [id], 
+onDelete: Cascade) 
+ 
+  @@unique([trainId, seq]) 
+} 
+ 
+enum GateKind { SLO HTTP MANUAL } 
+enum DepartureStatus { PLANNED BOARDING BLOCKED DEPARTED LANDED 
+CANCELED } 
+ 
+ 
+ 
+ 
+ Código del servicio 
+Ruta completa: services/release-trains/src/config.ts 
+import 'dotenv/config'; 
+ 
+export const cfg = { 
+  port: Number(process.env.PORT ?? 8090), 
+  sloGateUrl: process.env.SLO_GATE_URL || 'http://slo-budget:8089', 
+  repoPath: process.env.REPO_PATH || '', 
+tz: process.env.DEFAULT_TZ || 'Europe/Amsterdam', 
+notify: { 
+slack: process.env.SLACK_WEBHOOK_URL || '', 
+alt: process.env.ALERT_WEBHOOK_URL || '' 
+} 
+}; 
+Ruta completa: services/release-trains/src/db.ts 
+import { PrismaClient } from '@prisma/client'; 
+export const prisma = new PrismaClient(); 
+Ruta completa: services/release-trains/src/metrics.ts 
+import client from 'prom-client'; 
+const reg = new client.Registry(); 
+client.collectDefaultMetrics({ register: reg }); 
+export const counters = { 
+departures: new client.Counter({ name: 'rt_departures_total', help: 
+'Departures by status', labelNames: ['status','train'] }), 
+gatesBlocked: new client.Counter({ name: 'rt_gates_blocked_total', 
+help: 'Blocked by gate', labelNames: ['gate','train'] }), 
+}; 
+export const gauges = { 
+nextDepartureTs: new client.Gauge({ name: 
+'rt_next_departure_timestamp', help: 'Unix time of next planned 
+departure', labelNames: ['train'] }) 
+}; 
+Object.values(counters).forEach(c => reg.registerMetric(c)); 
+Object.values(gauges).forEach(g => reg.registerMetric(g)); 
+export async function metricsText(){ return reg.metrics(); } 
+Ruta completa: services/release-trains/src/rr.ts 
+import { RRule } from 'rrule'; 
+ 
+export function nextFromRRule(rrule: string, from: Date): Date | null 
+{ 
+  const rule = RRule.fromString(rrule); 
+  const next = rule.after(from, true); 
+  return next || null; 
+} 
+ 
+Ruta completa: services/release-trains/src/notes.ts 
+import path from 'node:path'; 
+import simpleGit from 'simple-git'; 
+ 
+type Sectioned = { feat: string[]; fix: string[]; perf: string[]; 
+docs: string[]; chore: string[]; other: string[] }; 
+ 
+export async function generateChangelog(repoPath: string, fromTag: 
+string | null, toRef = 'HEAD') { 
+  if (!repoPath) return '# Release Notes\n\n> (Repo no disponible en 
+este runner)\n'; 
+  const git = simpleGit({ baseDir: repoPath }); 
+  let range = toRef; 
+  if (fromTag) range = `${fromTag}..${toRef}`; 
+  const log = await git.log({ from: fromTag ?? undefined, to: toRef 
+}); 
+  const sec: Sectioned = { feat:[], fix:[], perf:[], docs:[], 
+chore:[], other:[] }; 
+ 
+  for (const c of log.all) { 
+    const msg = c.message; 
+    const entry = `- ${msg} (${c.hash.slice(0,7)})`; 
+    if (/^feat(\(.+?\))?:/i.test(msg)) sec.feat.push(entry); 
+    else if (/^fix(\(.+?\))?:/i.test(msg)) sec.fix.push(entry); 
+    else if (/^perf(\(.+?\))?:/i.test(msg)) sec.perf.push(entry); 
+    else if (/^docs(\(.+?\))?:/i.test(msg)) sec.docs.push(entry); 
+    else if (/^chore(\(.+?\))?:/i.test(msg)) sec.chore.push(entry); 
+    else sec.other.push(entry); 
+  } 
+ 
+  const mk = (title: string, arr: string[]) => arr.length ? `\n## 
+${title}\n${arr.join('\n')}\n` : ''; 
+  return [ 
+    `# Release Notes`, 
+    mk('Features', sec.feat), 
+    mk('Fixes', sec.fix), 
+    mk('Performance', sec.perf), 
+    mk('Docs', sec.docs), 
+    mk('Chore', sec.chore), 
+    mk('Other', sec.other) 
+  ].join('\n'); 
+} 
+ 
+Ruta completa: services/release-trains/src/gates.ts 
+import axios from 'axios'; 
+import { cfg } from './config'; 
+import { Gate, GateKind } from '@prisma/client'; 
+ 
+export async function evalGate(g: Gate): Promise<{ ok: boolean; 
+reason?: string }> { 
+  if (g.kind === 'MANUAL') return { ok: true }; 
+ 
+  if (g.kind === 'SLO') { 
+    const keys: string[] = (g.config as any)?.keys || []; 
+    if (!keys.length) return { ok: false, reason: 'no_slo_keys' }; 
+    const results = await Promise.all(keys.map(async (k) => { 
+      try { 
+        const r = await axios.get(`${cfg.sloGateUrl}/gate/${k}`, { 
+timeout: 4000 }); 
+        return r.status === 200; 
+      } catch (e: any) { 
+        return false; 
+      } 
+    })); 
+    const ok = results.every(Boolean); 
+    return { ok, reason: ok ? undefined : 'slo_gate_block' }; 
+  } 
+ 
+  if (g.kind === 'HTTP') { 
+    const url: string = (g.config as any)?.url; 
+    if (!url) return { ok: false, reason: 'no_url' }; 
+    try { 
+      const r = await axios.get(url, { timeout: 4000 }); 
+      if (r.status !== 200) return { ok: false, reason: 
+`http_${r.status}` }; 
+      const allowed = typeof r.data?.allowed === 'boolean' ? 
+r.data.allowed : true; 
+      return { ok: allowed, reason: allowed ? undefined : 
+'http_gate_denied' }; 
+    } catch (e: any) { 
+      return { ok: false, reason: 'http_error' }; 
+    } 
+  } 
+ 
+  return { ok: false, reason: 'unknown_gate' }; 
+} 
+ 
+Ruta completa: services/release-trains/src/checklist.ts 
+type Item = { key: string; title: string; description?: string; 
+mandatory?: boolean; role?: string; status?: 'PENDING'|'PASS'|'FAIL'; 
+evidenceUrl?: string }; 
+ 
+export function instantiateChecklist(templateItems: any): Item[] { 
+  const items: Item[] = Array.isArray(templateItems) ? templateItems : 
+[]; 
+  return items.map(i => ({ ...i, status: 'PENDING' })); 
+} 
+ 
+export function updateChecklist(list: Item[], key: string, status: 
+'PASS'|'FAIL', evidenceUrl?: string) { 
+  const idx = list.findIndex(i => i.key === key); 
+  if (idx === -1) throw new Error('item_not_found'); 
+  list[idx].status = status; 
+  list[idx].evidenceUrl = evidenceUrl ?? list[idx].evidenceUrl; 
+  return list; 
+} 
+ 
+export function checklistPassed(list: Item[]): { ok: boolean; missing: 
+string[] } { 
+  const missing = (list || []).filter(i => (i.mandatory ?? true) && 
+i.status !== 'PASS').map(i => i.key); 
+  return { ok: missing.length === 0, missing }; 
+} 
+ 
+Ruta completa: services/release-trains/src/release.ts 
+import semver from 'semver'; 
+import simpleGit from 'simple-git'; 
+import path from 'node:path'; 
+import { cfg } from './config'; 
+ 
+export async function computeNextVersion(current?: string, bump: 
+'patch'|'minor'|'major' = 'patch') { 
+  const base = current && semver.valid(current) ? current : '0.0.0'; 
+  return semver.inc(base, bump) as string; 
+} 
+ 
+export async function tagRelease(tag: string): Promise<{ ok: boolean; 
+out?: string; err?: string }> { 
+  if (!cfg.repoPath) return { ok: true, out: '(tag skipped: no repo 
+path)' }; 
+  try { 
+    const git = simpleGit({ baseDir: cfg.repoPath }); 
+    await git.addTag(tag); 
+    // push tag si hay remoto configurado 
+    try { await git.push(['origin', tag]); } catch {} 
+    return { ok: true, out: `tagged ${tag}` }; 
+  } catch (e: any) { 
+    return { ok: false, err: String(e?.message || e) }; 
+  } 
+} 
+ 
+Ruta completa: services/release-trains/src/notify.ts 
+import axios from 'axios'; 
+import { cfg } from './config'; 
+ 
+export async function notify(payload: any) { 
+  const urls = [cfg.notify.slack, cfg.notify.alt].filter(Boolean); 
+  await Promise.all(urls.map(u => axios.post(u, 
+payload).catch(()=>{}))); 
+} 
+ 
+Ruta completa: services/release-trains/src/controllers.ts 
+import { prisma } from './db'; 
+import { counters, gauges } from './metrics'; 
+import { nextFromRRule } from './rr'; 
+import { instantiateChecklist, updateChecklist, checklistPassed } from 
+'./checklist'; 
+import { evalGate } from './gates'; 
+import { generateChangelog } from './notes'; 
+import { computeNextVersion, tagRelease } from './release'; 
+import { cfg } from './config'; 
+import { add } from 'date-fns'; 
+ 
+export async function upsertTrain(input: any) { 
+  const tpl = input.checklistTemplate 
+    ? await prisma.checklistTemplate.upsert({ 
+        where: { name: input.checklistTemplate.name }, 
+        update: { items: input.checklistTemplate.items }, 
+        create: { name: input.checklistTemplate.name, items: 
+input.checklistTemplate.items } 
+      }) 
+    : null; 
+ 
+  const train = await prisma.train.upsert({ 
+    where: { key: input.key }, 
+    update: { ...input, checklistTemplateId: tpl?.id }, 
+    create: { ...input, checklistTemplateId: tpl?.id } 
+  }); 
+ 
+  // planificar siguiente (si no existe) 
+  await ensureNextDeparture(train.id); 
+  return train; 
+} 
+ 
+export async function ensureNextDeparture(trainId: string) { 
+  const train = await prisma.train.findUnique({ where: { id: trainId 
+}, include: { template: true, departures: true }}); 
+  if (!train || !train.active) return; 
+  const last = train.departures.sort((a,b)=>b.seq-a.seq)[0]; 
+  const from = last?.plannedAt ? add(last.plannedAt, { seconds: 1 }) : 
+new Date(); 
+  const next = nextFromRRule(train.rrule, from); 
+  if (!next) return; 
+ 
+  const exists = await prisma.departure.findFirst({ where: { trainId: 
+train.id, plannedAt: next }}); 
+  if (exists) { 
+    
+gauges.nextDepartureTs.labels(train.key).set(Math.floor(Number(exists.
+ plannedAt)/1000)); 
+    return exists; 
+  } 
+ 
+  const seq = (last?.seq ?? 0) + 1; 
+  const checklist = instantiateChecklist(train.template?.items || 
+defaultChecklist()); 
+  const dep = await prisma.departure.create({ 
+    data: { trainId: train.id, seq, plannedAt: next, status: 
+'PLANNED', checklist, gates: [] } 
+  }); 
+  
+gauges.nextDepartureTs.labels(train.key).set(Math.floor(Number(dep.pla
+ nnedAt)/1000)); 
+  return dep; 
+} 
+ 
+function defaultChecklist() { 
+  return [ 
+    { key: 'qa-regression', title: 'QA regression suite', mandatory: 
+true, role: 'QA' }, 
+    { key: 'security-scan', title: 'Security SAST/DAST green', 
+mandatory: true, role: 'Seguridad' }, 
+    { key: 'slo-gate', title: 'SLO/Error Budget gate OK', mandatory: 
+true, role: 'SRE' }, 
+    { key: 'perf-budgets', title: 'Perf budgets sin regresión', 
+mandatory: true, role: 'Perf' }, 
+    { key: 'docs-notes', title: 'Notas de versión redactadas', 
+mandatory: true, role: 'Producto' } 
+  ]; 
+} 
+ 
+export async function listTrains() { return prisma.train.findMany({ 
+include: { gates: true } }); } 
+export async function listDepartures(trainKey?: string) { 
+  return prisma.departure.findMany({ 
+    where: trainKey ? { train: { key: trainKey } } : undefined, 
+    include: { train: true }, 
+    orderBy: [{ plannedAt: 'desc' }] 
+  }); 
+} 
+ 
+export async function updateChecklistItem(depId: string, key: string, 
+status: 'PASS'|'FAIL', evidenceUrl?: string) { 
+  const d = await prisma.departure.findUnique({ where: { id: depId 
+}}); 
+  if (!d) throw new Error('departure_not_found'); 
+  const list = updateChecklist(d.checklist as any, key, status, 
+evidenceUrl); 
+  return prisma.departure.update({ where: { id: d.id }, data: { 
+checklist: list }}); 
+} 
+ 
+export async function evaluateGates(depId: string) { 
+  const dep = await prisma.departure.findUnique({ where: { id: depId 
+}, include: { train: { include: { gates: true } } }}); 
+  if (!dep) throw new Error('departure_not_found'); 
+  const results = []; 
+  let allOk = true; 
+  for (const g of dep.train.gates) { 
+    const r = await evalGate(g); 
+    results.push({ name: g.name, kind: g.kind, ok: r.ok, reason: 
+r.reason ?? null }); 
+    if (!r.ok) { allOk = false; } 
+  } 
+  const status = allOk ? 'BOARDING' : 'BLOCKED'; 
+  if (!allOk) { 
+    for (const r of results.filter(x=>!x.ok)) 
+counters.gatesBlocked.labels(r.name, dep.train.key).inc(); 
+  } 
+  return prisma.departure.update({ where: { id: dep.id }, data: { 
+gates: results, status }}); 
+} 
+ 
+export async function generateNotes(depId: string, fromTag?: string | 
+null) { 
+  const dep = await prisma.departure.findUnique({ where: { id: depId 
+}, include: { train: true }}); 
+  if (!dep) throw new Error('departure_not_found'); 
+  const md = await generateChangelog(cfg.repoPath, fromTag ?? dep.tag 
+?? null, 'HEAD'); 
+  return prisma.departure.update({ where: { id: dep.id }, data: { 
+changelogMd: md }}); 
+} 
+ 
+export async function depart(depId: string, bump: 
+'patch'|'minor'|'major' = 'patch') { 
+  const dep = await prisma.departure.findUnique({ where: { id: depId 
+}, include: { train: true }}); 
+  if (!dep) throw new Error('departure_not_found'); 
+ 
+  // checklist 
+  const ck = checklistPassed(dep.checklist as any); 
+  if (!ck.ok) throw new 
+Error(`checklist_incomplete:${ck.missing.join(',')}`); 
+ 
+  // gates 
+  const gates = Array.isArray(dep.gates) ? dep.gates : []; 
+  const allOk = gates.length ? gates.every((g:any)=>g.ok) : true; 
+  if (!allOk) throw new Error('gates_blocked'); 
+ 
+  // version/tag 
+  const last = await prisma.departure.findFirst({ 
+    where: { trainId: dep.trainId, status: { in: ['DEPARTED','LANDED'] 
+}, version: { not: null } }, 
+    orderBy: { plannedAt: 'desc' } 
+  }); 
+  const nextVersion = await computeNextVersion(last?.version ?? 
+undefined, bump); 
+  const tag = `${dep.train.releasePrefix}${nextVersion}`; 
+  const tagRes = await tagRelease(tag); 
+  const updated = await prisma.departure.update({ 
+    where: { id: dep.id }, 
+    data: { status: 'DEPARTED', version: nextVersion, tag } 
+  }); 
+  counters.departures.labels('DEPARTED', dep.train.key).inc(); 
+  return { departure: updated, tag: { ok: tagRes.ok, info: tagRes.out 
+?? tagRes.err } }; 
+} 
+ 
+export async function land(depId: string) { 
+  const dep = await prisma.departure.findUnique({ where: { id: depId 
+}, include: { train: true }}); 
+  if (!dep) throw new Error('departure_not_found'); 
+  const updated = await prisma.departure.update({ where: { id: dep.id 
+}, data: { status: 'LANDED' }}); 
+  counters.departures.labels('LANDED', dep.train.key).inc(); 
+  return updated; 
+} 
+ 
+Ruta completa: services/release-trains/src/app.ts 
+import express from 'express'; 
+import morgan from 'morgan'; 
+import { z } from 'zod'; 
+import { metricsText } from './metrics'; 
+import * as ctrl from './controllers'; 
+ 
+export function createApp() { 
+  const app = express(); 
+  app.use(express.json({ limit: '1mb' })); 
+  app.use(morgan('tiny')); 
+ 
+  app.get('/healthz', (_req,res)=>res.json({status:'ok'})); 
+  app.get('/metrics', async (_req,res)=>{ 
+res.set('Content-Type','text/plain'); res.send(await metricsText()); 
+}); 
+ 
+  // Trenes 
+  app.post('/admin/train', async (req,res,next)=>{ try { 
+    const S = z.object({ 
+      key: z.string(), name: z.string(), 
+      env: z.string().default('staging'), 
+      rrule: z.string(), timezone: 
+z.string().default('Europe/Amsterdam'), 
+      branch: z.string().default('main'), releasePrefix: 
+z.string().default('v'), 
+      active: z.boolean().default(true), 
+      checklistTemplate: z.object({ name: z.string(), items: 
+z.array(z.any()) }).optional() 
+    }); 
+    const r = await ctrl.upsertTrain(S.parse(req.body)); 
+    res.json(r); 
+  } catch(e){ next(e);} }); 
+ 
+  app.get('/trains', async (_req,res)=> res.json(await 
+ctrl.listTrains())); 
+  app.get('/departures', async (req,res)=> res.json(await 
+ctrl.listDepartures(req.query.trainKey as string | undefined))); 
+ 
+  // Checklist 
+  app.post('/departures/:id/checks/:key', async (req,res,next)=>{ try 
+{ 
+    const S = z.object({ status: z.enum(['PASS','FAIL']), evidenceUrl: 
+z.string().optional() }); 
+    res.json(await ctrl.updateChecklistItem(req.params.id, 
+req.params.key, S.parse(req.body).status, 
+S.parse(req.body).evidenceUrl)); 
+  } catch(e){ next(e);} }); 
+ 
+  // Gates + Notas + Salida/Aterrizaje 
+  app.post('/departures/:id/evaluate-gates', async (req,res,next)=>{ 
+try { res.json(await ctrl.evaluateGates(req.params.id)); } catch(e){ 
+next(e);} }); 
+  app.post('/departures/:id/generate-notes', async (req,res,next)=>{ 
+try { 
+    res.json(await ctrl.generateNotes(req.params.id, req.body?.fromTag 
+?? null)); 
+  } catch(e){ next(e);} }); 
+ 
+  app.post('/departures/:id/depart', async (req,res,next)=>{ try { 
+    const bump = (req.body?.bump ?? 'patch') as 
+'patch'|'minor'|'major'; 
+    res.json(await ctrl.depart(req.params.id, bump)); 
+  } catch(e){ next(e);} }); 
+ 
+  app.post('/departures/:id/land', async (req,res,next)=>{ try { 
+res.json(await ctrl.land(req.params.id)); } catch(e){ next(e);} }); 
+ 
+  // error 
+  app.use((err:any,_req:any,res:any,_next:any)=>{ console.error(err); 
+res.status(400).json({ error: String(err?.message||err) }); }); 
+  return app; 
+} 
+ 
+Ruta completa: services/release-trains/src/index.ts 
+import { createApp } from './app'; 
+const port = Number(process.env.PORT ?? 8090); 
+createApp().listen(port, ()=>console.log(`[release-trains] 
+:${port}`)); 
+Ruta completa: services/release-trains/Dockerfile 
+FROM node:20-alpine AS deps 
+WORKDIR /app 
+COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* 
+.npmrc* ./ 
+RUN --mount=type=cache,target=/root/.npm npm ci || npm i 
+FROM node:20-alpine AS build 
+WORKDIR /app 
+COPY --from=deps /app/node_modules ./node_modules 
+COPY . . 
+RUN npm run prisma:generate 
+RUN npm run build && npx tsc-alias 
+FROM node:20-alpine 
+WORKDIR /app 
+ENV NODE_ENV=production 
+RUN apk add --no-cache git 
+COPY --from=build /app/node_modules ./node_modules 
+COPY --from=build /app/dist ./dist 
+COPY --from=build /app/prisma ./prisma 
+COPY --from=build /app/package.json . 
+EXPOSE 8090 
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- 
+http://localhost:8090/healthz || exit 1 
+CMD ["node","dist/index.js"] 
+ 
+ 
+ Checklist/Plantilla de ejemplo 
+Ruta completa: 
+services/release-trains/templates/weekly-web.json 
+{ 
+  "name": "Checklist Web Semanal", 
+  "items": [ 
+    { "key": "qa-regression", "title": "QA regression suite completa", 
+"mandatory": true, "role": "QA" }, 
+    { "key": "security-scan", "title": "SAST/DAST sin críticos", 
+"mandatory": true, "role": "Seguridad" }, 
+    { "key": "slo-gate", "title": "SLO/Error Budget gate OK", 
+"mandatory": true, "role": "SRE" }, 
+    { "key": "perf-budgets", "title": "Budgets Lighthouse/k6 sin 
+regresión", "mandatory": true, "role": "Perf" }, 
+    { "key": "docs-notes", "title": "Notas de versión redactadas y 
+aprobadas", "mandatory": true, "role": "Producto" } 
+  ] 
+} 
+ 
+ 
+ 
+ 
+ Ejemplo de alta de tren (RRULE semanal, Lunes 10:00 
+CET) 
+Ruta completa: 
+services/release-trains/examples/create-train.http 
+POST /admin/train HTTP/1.1 
+Content-Type: application/json 
+ 
+{ 
+  "key": "web-weekly", 
+  "name": "Release Train Web Semanal", 
+  "env": "staging", 
+  "rrule": "FREQ=WEEKLY;BYDAY=MO;BYHOUR=10;BYMINUTE=0;BYSECOND=0", 
+  "timezone": "Europe/Amsterdam", 
+  "branch": "main", 
+  "releasePrefix": "v", 
+  "active": true, 
+  "checklistTemplate": { 
+    "name": "Checklist Web Semanal", 
+    "items": [ 
+      { "key": "qa-regression", "title": "QA regression suite", 
+"mandatory": true, "role": "QA" }, 
+      { "key": "security-scan", "title": "SAST/DAST sin críticos", 
+"mandatory": true, "role": "Seguridad" }, 
+      { "key": "slo-gate", "title": "SLO/Error Budget gate OK", 
+"mandatory": true, "role": "SRE" }, 
+      { "key": "perf-budgets", "title": "Budgets sin regresión", 
+"mandatory": true, "role": "Perf" }, 
+      { "key": "docs-notes", "title": "Notas de versión aprobadas", 
+"mandatory": true, "role": "Producto" } 
+    ] 
+  } 
+} 
+ 
+ 
+ 
+ 
+ Gates del tren (SLO + HTTP + Manual) 
+Ruta completa: services/release-trains/examples/add-gates.http 
+# Añade gates (hazlo con Prisma o endpoint adicional si lo prefieres) 
+# Ejemplo Prisma script (pseudo): 
+# prisma.gate.create({ data: { trainId, kind: 'SLO', name: 'SLO main', 
+config: { keys: ['ai-api-availability','ai-api-latency-500ms'] } }}) 
+# prisma.gate.create({ data: { trainId, kind: 'HTTP', name: 'Perf 
+gate', config: { url: 'https://perf.gnew.io/gate' } }}) 
+# prisma.gate.create({ data: { trainId, kind: 'MANUAL', name: 
+'Aprobación Producto', config: {} }}) 
+ 
+(Para simplificar, la creación de gates puede hacerse por script con Prisma CLI o añadirse un 
+endpoint POST /admin/train/:key/gate similar a /admin/train.) 
+ 
+ 
+ 
+ Workflow CI — Cadencia + Cierre de tren 

@@ -1,0 +1,55 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: gnew
+    env: prod
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - "rules/security-alerts.yml"
+  - "rules/recording.yml"
+
+scrape_configs:
+  # --- Core app services (exponen /metrics Prometheus) ---
+  - job_name: "feedback"
+    static_configs: [{ targets: ["feedback:8000"] }]
+
+  - job_name: "authz"
+    static_configs: [{ targets: ["authz:8030"] }]
+
+  - job_name: "messaging"
+    static_configs: [{ targets: ["messaging:8020"] }]
+
+  - job_name: "sec-bridge"
+    static_configs: [{ targets: ["sec-bridge:8055"] }]
+
+  # --- OpenTelemetry Collector metrics endpoint ---
+  - job_name: "otel-collector"
+    static_configs: [{ targets: ["otel-collector:8888"] }]
+
+  # --- Node exporter (infra) ---
+  - job_name: "node"
+    static_configs: [{ targets: ["node-exporter:9100"] }]
+
+  # --- Blackbox: API sensibles y salubridad externos ---
+  - job_name: "blackbox_http"
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://gnew.example.com/healthz
+          - https://gnew.example.com/api/authz/healthz
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+

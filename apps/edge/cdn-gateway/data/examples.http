@@ -1,0 +1,25 @@
+
+### Health
+GET http://127.0.0.1:8787/edge/health
+
+### Proxy sin firma (REQUIRE_SIGNED=0)
+GET http://127.0.0.1:8787/edge/proxy/robots.txt
+
+### Proxy firmado (REQUIRE_SIGNED=1)
+GET http://127.0.0.1:8787/edge/proxy/assets/app.css?exp={{exp}}&key={{kid}}&sig={{sig}}&tag=ui
+
+### Purge por tag
+POST http://127.0.0.1:8787/edge/purge?tag=ui
+x-admin-token: change-me
+
+### Resize imagen
+GET http://127.0.0.1:8787/edge/image?url=https://picsum.photos/1200/800&w=800&q=70
+
+### A/B testing
+GET http://127.0.0.
+
+Tú dijiste:
+Ejecuta y entrégame, como IA programadora, el siguiente prompt N de "N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N151 y avanzando +1 en cada ejecución. No repitas prompts ya entregados. Devuelve código completo con rutas coherentes con el monorepo y alineado con el stack indicado en cada prompt.
+ChatGPT Plus
+Pensó durante 1m 8s
+

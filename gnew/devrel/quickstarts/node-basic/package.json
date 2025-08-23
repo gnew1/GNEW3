@@ -1,0 +1,143 @@
+```json
+{
+  "name": "gnew-node-quickstart",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.11.30"
+  }
+}
+
+/gnew/devrel/quickstarts/node-basic/tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "types": ["node"]
+  },
+  "include": ["src", "__tests__"]
+}
+
+/gnew/devrel/quickstarts/node-basic/src/types.ts
+export type Project = { id: string; name: string; };
+export type TokenBalance = { symbol: string; amount: string; };
+
+/gnew/devrel/quickstarts/node-basic/src/client.ts
+import axios, { AxiosInstance } from "axios";
+
+export class GnewClient {
+  private http: AxiosInstance;
+  constructor(apiUrl: string, apiKey: string) {
+    this.http = axios.create({
+      baseURL: apiUrl,
+      headers: { "X-GNEW-API-KEY": apiKey }
+    });
+  }
+
+  async verifyKey(): Promise<boolean> {
+    await this.http.get("/auth/api-key/verify");
+    return true;
+  }
+
+  async listProjects() {
+    const { data } = await this.http.get("/v1/projects");
+    return data;
+  }
+
+  async getTokenBalance() {
+    const { data } = await this.http.get("/v1/tokens/balance");
+    return data;
+  }
+}
+
+/gnew/devrel/quickstarts/node-basic/src/index.ts
+import "dotenv/config";
+import { GnewClient } from "./client.js";
+
+async function main() {
+  const apiUrl = process.env.GNEW_API_URL!;
+  const apiKey = process.env.GNEW_API_KEY!;
+  if (!apiUrl || !apiKey) throw new Error("Falta GNEW_API_URL o GNEW_API_KEY");
+
+  const client = new GnewClient(apiUrl, apiKey);
+
+  console.log("Verificando API Key...");
+  await client.verifyKey();
+
+  console.log("Listando proyectos...");
+  const projects = await client.listProjects();
+  console.log(projects);
+
+  console.log("Consultando balance de tokens...");
+  const balance = await client.getTokenBalance();
+  console.log(balance);
+
+  console.log("✅ Quickstart Node.js OK");
+}
+
+main().catch((e) => {
+  console.error("❌ Error:", e?.response?.data ?? e);
+  process.exit(1);
+});
+
+/gnew/devrel/quickstarts/node-basic/tests/smoke.test.ts
+import "dotenv/config";
+import { GnewClient } from "../src/client.js";
+import assert from "node:assert";
+
+const required = ["GNEW_API_URL", "GNEW_API_KEY"] as const;
+for (const k of required) if (!process.env[k]) throw new Error(`Missing ${k}`);
+
+const client = new GnewClient(process.env.GNEW_API_URL!, process.env.GNEW_API_KEY!);
+
+test("verify key", async () => {
+  assert.equal(await client.verifyKey(), true);
+});
+
+test("list projects", async () => {
+  const p = await client.listProjects();
+  assert.ok(Array.isArray(p));
+});
+
+/gnew/devrel/quickstarts/node-basic/Dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm i
+COPY tsconfig.json ./
+COPY src ./src
+COPY __tests__ ./__tests__
+CMD ["sh","-c","npm run build && npm start"]
+
+ 
+5) Quick start Python
+/gnew/devrel/quickstarts/python-basic/README.md
+# GNEW Quickstart — Python
+
+## Docker (recomendado)
+```bash
+docker build -t gnew-py-qs .
+docker run --rm --env-file ../shared/.env.example gnew-py-qs
+
+Local
+cp ../shared/.env.example .env
+python -m venv .venv && . .venv/bin/activate
+pip install -e .
+python -m gnew_quickstart.main
+pytest -q
+
+

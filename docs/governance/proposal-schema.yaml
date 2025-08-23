@@ -1,0 +1,24 @@
+type: object 
+required: [title, summary, type] 
+properties: 
+  title: { type: string, minLength: 8 } 
+  summary: { type: string, minLength: 24 } 
+  type: { enum: [on-chain, off-chain] } 
+  actions: 
+    type: array 
+    items: 
+      type: object 
+      required: [target, calldata, value] 
+      properties: 
+        target: { type: string, pattern: "^0x[a-fA-F0-9]{40}$" } 
+        calldata: { type: string, pattern: "^0x[a-fA-F0-9]*$" } 
+        value: { type: string } 
+  quorumPercent: { type: number, minimum: 1, maximum: 33 } 
+  proposalThreshold: { type: string } 
+  mirrors: 
+    type: object 
+    properties: 
+      ipfsCid: { type: string } 
+      arweaveId: { type: string } 
+      snapshotId: { type: string } 
+ 

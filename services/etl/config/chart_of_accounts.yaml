@@ -1,0 +1,32 @@
+# Mapeo de cuentas contables (ejemplo). Ajusta a tu plan contable. 
+accounts: 
+  - code: "1000" 
+    name: "Caja y bancos" 
+    type: "ASSET" 
+  - code: "6200" 
+    name: "Gastos operativos" 
+    type: "EXPENSE" 
+  - code: "7000" 
+    name: "Ingresos" 
+    type: "INCOME" 
+ 
+# Reglas de mapeo automáticas del subledger -> cuentas 
+mapping: 
+  # Por defecto: salidas desde SAFE a terceros 
+  - match: 
+      nature: "outflow"         # derivado por ETL 
+      token: "native"           # nativo vs erc20 
+    debit: "6200"               # gasto 
+    credit: "1000"              # banco 
+  # Entradas (refunds/ingresos) 
+  - match: 
+      nature: "inflow" 
+      token: "native" 
+    debit: "1000" 
+    credit: "7000" 
+ 
+# Contrapartes conocidas 
+counterparties: 
+  - address: "0xabc...def" 
+name: "Proveedor X" - address: "0x123...456" 
+name: "Cliente Y" 

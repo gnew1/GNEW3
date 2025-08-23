@@ -1,0 +1,83 @@
+generator client { provider = "prisma-client-js" } 
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") } 
+model DSARRequest { 
+id              
+String   @id @default(cuid()) 
+subjectId       
+region          
+String   // seudónimo 
+String   // EU, US-CA, BR, etc. 
+  type            String   // access | erasure | rectification | 
+restriction 
+  scope           Json     // filtros: data_categories, date_range, 
+systems[] 
+  status          String   // received | verifying | verified | 
+approved | in_progress | fulfilled | denied | extended 
+  reason          String?  // motivo de denegación/extension 
+  slaAckAt        DateTime? // acuse 
+  dueAt           DateTime // fecha límite 
+  createdAt       DateTime @default(now()) 
+  updatedAt       DateTime @updatedAt 
+  tasks           DSARTask[] 
+  evidences       DSAREvidence[] 
+  artifacts       DSARArtifact[] 
+} 
+ 
+model DSARTask { 
+  id          String   @id @default(cuid()) 
+  requestId   String 
+  connector   String   // postgres, s3, consent, webhook:marketing, 
+etc. 
+  op          String   // export | erasure | verify 
+  status      String   // pending | running | done | failed | skipped 
+  attempts    Int      @default(0) 
+  result      Json? 
+  createdAt   DateTime @default(now()) 
+  updatedAt   DateTime @updatedAt 
+  request     DSARRequest @relation(fields: [requestId], references: 
+[id]) 
+} 
+ 
+model DSAREvidence { 
+  id          String   @id @default(cuid()) 
+  requestId   String 
+  kind        String   // count_before, count_after, sample_hashes, 
+sql_proof, s3_proof 
+  content     Json 
+  createdAt   DateTime @default(now()) 
+  request     DSARRequest @relation(fields: [requestId], references: 
+[id]) 
+} 
+ 
+model DSARArtifact { 
+  id          String   @id @default(cuid()) 
+  requestId   String 
+  name        String   // export.zip, erasure-certificate.json 
+  mime        String 
+  path        String   // ruta en storage interno 
+  sha256      String 
+  createdAt   DateTime @default(now()) 
+  request     DSARRequest @relation(fields: [requestId], references: 
+[id]) 
+} 
+ 
+model LegalHold { 
+  id          String   @id @default(cuid()) 
+  subjectId   String 
+  system      String   // sistema afectado 
+  reason      String 
+  createdAt   DateTime @default(now()) 
+} 
+ 
+model DataMap { 
+  id          String   @id @default(cuid()) 
+  system      String   @unique 
+  connector   String 
+  config      Json       // DSN, tabla, bucket, claves, estrategias 
+(delete/anonymize) 
+  active      Boolean    @default(true) 
+  updatedAt   DateTime   @updatedAt 
+} 
+ 
+ 
+API (OpenAPI extracto) 

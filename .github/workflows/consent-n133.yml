@@ -1,0 +1,29 @@
+name: consent-n133 
+on: 
+  push: { paths: ["apps/consent-svc/**", 
+"apps/web/components/consent/**", "packages/consent-guard/**", 
+"packages/schemas/openapi/consent.yml"] } 
+  pull_request: { branches: [ "main" ] } 
+jobs: 
+  build-test: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-node@v4 
+        with: { node-version: 20 } 
+      - run: npm ci 
+      - run: npm run lint --workspaces 
+      - run: npm test --workspaces 
+      - run: npx swagger-cli validate 
+packages/schemas/openapi/consent.yml 
+      - run: npm run build -w apps/consent-svc 
+      - run: npm run build -w apps/web 
+  e2e: 
+    needs: build-test 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: cypress-io/github-action@v6 
+        with: 
+          working-directory: apps/web 
+          browser: chrome 
+ 

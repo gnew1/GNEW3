@@ -1,0 +1,41 @@
+name: ZK Build & Tests
+on:
+  pull_request:
+    paths:
+      - "zk/**"
+      - "contracts/src/zk/**"
+      - "contracts/test/zk/**"
+  push:
+    branches: [ main ]
+    paths:
+      - "zk/**"
+      - "contracts/src/zk/**"
+      - "contracts/test/zk/**"
+jobs:
+  circom-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install deps
+        working-directory: zk/circom
+        run: npm ci
+      - name: Compile circuits
+        working-directory: zk/circom
+        run: |
+          mkdir -p build/ptau
+          npm run build
+          npm run compile:vote
+          npm run compile:range
+  solidity-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: nightly }
+      - name: Test SC (zk modules)
+        working-directory: contracts
+        run: forge test -vvv --match-path 'test/zk/*.t.sol'
+

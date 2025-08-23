@@ -1,0 +1,103 @@
+# DSL de motor de jurisdicción — versionado SemVer 
+version: v1.0.0-2025-08 
+defaults: 
+  taxes: 
+    # Tipos de producto: digital|physical|financial|service 
+    product_type_defaults: 
+      vat_applicable: true 
+      vat_rate: 21.0     # fallback % 
+      reverse_charge: false 
+  kyc: 
+    levels: [NONE, BASIC, STANDARD, ENHANCED] 
+    requirements: 
+      NONE:     { docs: [] } 
+      BASIC:    { docs: [email, phone] } 
+      STANDARD: { docs: [gov_id_front, selfie] } 
+      ENHANCED: { docs: [gov_id_front, gov_id_back, selfie, 
+proof_of_address] } 
+  limits: 
+    per_level: 
+      NONE:     { tx_max: 100,  daily_max: 200,  monthly_max: 500,  
+currency: EUR } 
+      BASIC:    { tx_max: 250,  daily_max: 1000, monthly_max: 2500, 
+currency: EUR } 
+      STANDARD: { tx_max: 2000, daily_max: 5000, monthly_max: 15000, 
+currency: EUR } 
+      ENHANCED: { tx_max: 10000, daily_max: 25000, monthly_max: 
+100000, currency: EUR } 
+  risk: 
+    pep_requires: REVIEW       # REVIEW/BLOCK/NONE 
+    sanctioned_requires: BLOCK 
+rules: 
+  # Reglas regionales 
+  - match: { region: EU } 
+    taxes: 
+      product_type_overrides: 
+        financial: { vat_applicable: false, vat_rate: 0 } 
+    kyc: 
+      levels: [NONE, BASIC, STANDARD, ENHANCED] 
+  # Países específicos (ejemplo; Legal puede ajustar tasas y límites) 
+  - match: { country: ES } 
+    taxes: 
+      product_type_overrides: 
+        digital:  { vat_rate: 21.0 } 
+        physical: { vat_rate: 21.0 } 
+    limits: 
+      per_level: 
+        BASIC:    { tx_max: 150, daily_max: 1000, monthly_max: 2000, 
+currency: EUR } 
+        STANDARD: { tx_max: 1000, daily_max: 3000, monthly_max: 10000, 
+currency: EUR } 
+  - match: { country: FR } 
+    taxes: 
+      product_type_overrides: 
+        digital:  { vat_rate: 20.0 } 
+        physical: { vat_rate: 20.0 } 
+  - match: { country: DE } 
+    taxes: 
+      product_type_overrides: 
+        digital:  { vat_rate: 19.0 } 
+        physical: { vat_rate: 19.0 } 
+  - match: { country: NL } 
+    taxes: 
+      product_type_overrides: 
+        digital:  { vat_rate: 21.0 } 
+        physical: { vat_rate: 21.0 } 
+  - match: { country: PT } 
+    taxes: 
+      product_type_overrides: 
+        digital:  { vat_rate: 23.0 } 
+        physical: { vat_rate: 23.0 } 
+  - match: { country: IT } 
+    taxes: 
+      product_type_overrides: 
+        digital:  { vat_rate: 22.0 } 
+        physical: { vat_rate: 22.0 } 
+  - match: { country: UK } 
+    taxes: 
+      product_type_overrides: 
+        digital:  { vat_rate: 20.0 } 
+        physical: { vat_rate: 20.0 } 
+  # US (IVA no aplica; ejemplo simplificado) 
+  - match: { country: US } 
+    taxes: 
+      product_type_defaults: { vat_applicable: false, vat_rate: 0 } 
+    kyc: 
+      levels: [NONE, BASIC, STANDARD, ENHANCED] 
+    limits: 
+      per_level: 
+        BASIC:    { tx_max: 200, daily_max: 1500, monthly_max: 3000, 
+currency: USD } 
+        STANDARD: { tx_max: 2000, daily_max: 7000, monthly_max: 20000, 
+currency: USD } 
+  - match: { country: BR } 
+    taxes: 
+      product_type_defaults: { vat_applicable: true, vat_rate: 17.0 } 
+# placeholder 
+  - match: { country: MX } 
+    taxes: 
+      product_type_defaults: { vat_applicable: true, vat_rate: 16.0 } 
+ 
+# Embargos/sanciones (sincronizar con N134) 
+embargo_countries: [CU, IR, KP, SY, RU] 
+ 

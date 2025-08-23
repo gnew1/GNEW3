@@ -1,0 +1,56 @@
+
+### Health
+GET http://localhost:8113/healthz
+
+### Upload inventory (CSV base64)
+POST http://localhost:8113/inventory/upload
+Content-Type: application/json
+
+{
+  "bucket": "gnew-primary",
+  "format": "csv",
+  "dataBase64": "QnVja2V0LEtleSxTaXplLFN0b3JhZ2VDbGFzcyxMYXN0TW9kaWZpZWREYXRlLEVUYWcsSXNMYXRlc3QKZ25ldy1wcmltYXJ5LGxvZ3MvYS50eHQsMTAyNCxTVEFOREFSRCwyMDI1LTA4LTIwVDAwOjAwOjAwWiwsVHJ1ZQo="
+}
+
+### Stats by class
+GET http://localhost:8113/inventory/stats?bucket=gnew-primary&prefix=logs/
+
+### Cost current
+GET http://localhost:8113/cost/current?bucket=gnew-primary&prefix=logs/
+
+### Advisor plan (transition to STANDARD_IA after 30d, min 10MB)
+POST http://localhost:8113/advisor/plan
+Content-Type: application/json
+
+{
+  "bucket": "gnew-primary",
+  "prefix": "logs/",
+  "rules": {
+    "minAgeDays": 30,
+    "minSize": 10485760,
+    "toStorageClass": "STANDARD_IA"
+  },
+  "limit": 1000,
+  "dryRun": true
+}
+
+### Get plan (csv)
+GET http://localhost:8113/plans/{{planId}}?format=csv
+
+Notas de diseño
+
+Tabla objects representa la última fotografía por bucket/key. Nuevos inventarios reemplazan por runId.
+
+Coste: TB = bytes / (1024^4); coste mensual = TB * PRICE_CLASS.
+
+Advisor: calcula ahorro mensual estimado por delta de precio entre clases, o equivalente al coste actual si expire.
+
+Fácil de extender para Parquet (añadir un parser en routes/upload.ts usando parquetjs o similar).
+
+Siguiente N (+1): N173 — Catálogo de Datos + Glue/Hive Metastore Bridge (puedo entregarlo en la próxima ejecución).
+
+Tú dijiste:
+Ejecuta y entrégame, como IA programadora, el siguiente prompt N de "N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N151 y avanzando +1 en cada ejecución. No repitas prompts ya entregados. Devuelve código completo con rutas coherentes con el monorepo y alineado con el stack indicado en cada prompt.
+ChatGPT Plus
+Pensó durante 23s
+

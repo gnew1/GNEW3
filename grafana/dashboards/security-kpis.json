@@ -1,0 +1,51 @@
+{
+  "title": "GNEW – Seguridad (KPIs & Alertas)",
+  "timezone": "browser",
+  "refresh": "15s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "CVE críticas",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(sec_cves_total{severity=\"critical\"})" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "MTTD (media 1h)",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "security:mttd_seconds:rate1h" }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "red", "value": 300 }
+      ]}}}
+    },
+    {
+      "type": "timeseries",
+      "title": "Authz p95 (ms)",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 6 },
+      "targets": [{ "expr": "service:authz_eval_ms:p95" }],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "type": "bargauge",
+      "title": "Incidentes abiertos por severidad",
+      "gridPos": { "x": 0, "y": 10, "w": 6, "h": 6 },
+      "targets": [{ "expr": "sum by (severity) (sec_incidents_open_total)" }]
+    },
+    {
+      "type": "table",
+      "title": "Alertas activas",
+      "gridPos": { "x": 6, "y": 10, "w": 6, "h": 6 },
+      "targets": [{ "expr": "ALERTS{alertstate=\"firing\"}" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Disponibilidad endpoints (blackbox)",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 6 },
+      "targets": [{ "expr": "probe_success" }]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}
+

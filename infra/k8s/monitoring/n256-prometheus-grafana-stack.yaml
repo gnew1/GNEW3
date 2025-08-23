@@ -1,0 +1,440 @@
+
+# =============================================================================
+# GNEW • N256 — Monitoreo con Prometheus + Grafana
+# SRE: métricas de blockchain, wallets y chat (NATS) en tiempo real
+# Single-file, multi-doc K8s stack listo para kubectl apply -f.
+# Namespaces/SA/RBAC, Prometheus, Grafana, NATS Exporter, reglas y dashboards.
+# =============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    project: GNEW
+    component: monitoring
+    managed-by: gnew
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+# Minimal RBAC so Prometheus can discover pods/endpoints by label/annotation
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-discovery
+rules:
+  - apiGroups: [""]
+    resources: ["nodes","nodes/proxy","services","endpoints","pods","configmaps"]
+    verbs: ["get","list","watch"]
+  - apiGroups: ["extensions","networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get","list","watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-discovery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-discovery
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+
+# -----------------------------------------------------------------------------
+# Prometheus configuration (scrapes + alert rules)
+# -----------------------------------------------------------------------------
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+
+    scrape_configs:
+      # --- Kubernetes pods with prometheus.io annotations
+      - job_name: 'kubernetes-pods-annotated'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: keep
+            source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            target: __metrics_path__
+            regex: "(.+)"
+            replacement: "$1"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            target: __address__
+            regex: "(.+)"
+            replacement: "$1"
+            action: replace
+          - source_labels: [__address__, __meta_kubernetes_pod_ip]
+            regex: "(.+);(.+)"
+            target: __address__
+            replacement: "$2:$(__address__)"
+
+      # --- GNEW Blockchain nodes (label-based discovery)
+      - job_name: 'gnew-chain'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: keep
+            source_labels: [__meta_kubernetes_pod_label_app]
+            regex: "gnew-chain-node"
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            target: __metrics_path__
+            regex: "(.+)"
+            replacement: "$1"
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_ip]
+            target: __address__
+            replacement: "$1:6060" # ajusta si tu nodo expone otro puerto
+
+      # --- GNEW Wallet API (Node.js prom-client, /metrics)
+      - job_name: 'gnew-wallet-api'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: keep
+            source_labels: [__meta_kubernetes_pod_label_app]
+            regex: "gnew-wallet-api"
+          - action: replace
+            source_labels: [__meta_kubernetes_pod_ip]
+            target: __address__
+            replacement: "$1:3000"
+        metrics_path: /metrics
+
+      # --- NATS Exporter (chat en tiempo real)
+      - job_name: 'nats-exporter'
+        static_configs:
+          - targets: ["nats-exporter.monitoring.svc.cluster.local:7777"]
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-rules
+  namespace: monitoring
+data:
+  general.yml: |
+    groups:
+      - name: gnew-general
+        rules:
+          - alert: TargetDown
+            expr: up == 0
+            for: 2m
+            labels: { severity: page }
+            annotations:
+              summary: "Instancia caída: {{ $labels.instance }}"
+              description: "El objetivo {{ $labels.job }} no responde desde hace 2m."
+
+          - alert: WalletApiHighErrorRate
+            expr: |
+              sum(rate(http_requests_total{job="gnew-wallet-api",status=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="gnew-wallet-api"}[5m])) > 0.02
+            for: 5m
+            labels: { severity: critical }
+            annotations:
+              summary: "Wallet API error rate > 2%"
+              description: "Errores 5xx sostenidos en Wallet API."
+
+          - alert: NatsBacklogGrowing
+            expr: |
+              rate(gnatsd_varz_in_msgs[5m]) < rate(gnatsd_varz_out_msgs[5m]) * 0.5
+            for: 10m
+            labels: { severity: warning }
+            annotations:
+              summary: "Backlog de NATS creciendo"
+              description: "La salida de mensajes es muy inferior a la entrada."
+
+          - alert: ChainNoNewBlocks
+            expr: |
+              increase(gnew_block_height[10m]) < 1
+            for: 10m
+            labels: { severity: critical }
+            annotations:
+              summary: "Sin nuevos bloques"
+              description: "La altura de bloque no avanza en 10m (verifica nodos validadores)."
+
+# -----------------------------------------------------------------------------
+# Prometheus deployment & service
+# -----------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels: { app: prometheus }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: prometheus } }
+  template:
+    metadata:
+      labels: { app: prometheus }
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.54.1
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.enable-lifecycle"
+            - "--storage.tsdb.retention.time=15d"
+          ports:
+            - containerPort: 9090
+              name: http
+          volumeMounts:
+            - name: cfg
+              mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: cfg
+          configMap: { name: prometheus-config }
+        - name: rules
+          configMap: { name: alert-rules }
+        - name: data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels: { app: prometheus }
+spec:
+  ports:
+    - port: 9090
+      targetPort: http
+      name: http
+  selector:
+    app: prometheus
+
+# -----------------------------------------------------------------------------
+# NATS Prometheus Exporter (para chat en tiempo real)
+# -----------------------------------------------------------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-exporter
+  namespace: monitoring
+  labels: { app: nats-exporter }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: nats-exporter } }
+  template:
+    metadata:
+      labels: { app: nats-exporter }
+    spec:
+      containers:
+        - name: exporter
+          image: natsio/prometheus-nats-exporter:0.14.0
+          args:
+            - "-connz"
+            - "-routez"
+            - "-subz"
+            - "-varz"
+            - "http://nats.gnew.svc.cluster.local:8222"  # endpoint de monitoreo de NATS
+          ports:
+            - containerPort: 7777
+              name: metrics
+          readinessProbe:
+            httpGet: { path: /metrics, port: metrics }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /metrics, port: metrics }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-exporter
+  namespace: monitoring
+  labels: { app: nats-exporter }
+spec:
+  selector:
+    app: nats-exporter
+  ports:
+    - name: http
+      port: 7777
+      targetPort: metrics
+
+# -----------------------------------------------------------------------------
+# Grafana (con provisioning de datasource + dashboards)
+# -----------------------------------------------------------------------------
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.monitoring.svc.cluster.local:9090
+        isDefault: true
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  blockchain-overview.json: |
+    {
+      "title": "GNEW • Blockchain Overview",
+      "timezone": "browser",
+      "panels": [
+        { "type": "stat", "title": "Block Height",
+          "targets": [ { "expr": "max(gnew_block_height)" } ] },
+        { "type": "graph", "title": "TPS (1m)",
+          "targets": [ { "expr": "sum(rate(gnew_tx_total[1m]))" } ],
+          "lines": true, "fill": 1 },
+        { "type": "graph", "title": "Peer Count",
+          "targets": [ { "expr": "avg(gnew_p2p_peers)" } ],
+          "lines": true, "fill": 1 }
+      ],
+      "schemaVersion": 39, "version": 1
+    }
+  wallet-api.json: |
+    {
+      "title": "GNEW • Wallet API",
+      "timezone": "browser",
+      "panels": [
+        { "type": "graph", "title": "RPS",
+          "targets": [ { "expr": "sum(rate(http_requests_total{job=\"gnew-wallet-api\"}[1m]))" } ],
+          "lines": true, "fill": 1 },
+        { "type": "graph", "title": "Latency p95 (s)",
+          "targets": [ { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"gnew-wallet-api\"}[5m])) by (le))" } ],
+          "lines": true, "fill": 1 },
+        { "type": "graph", "title": "Error Rate 5xx",
+          "targets": [ { "expr": "sum(rate(http_requests_total{job=\"gnew-wallet-api\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"gnew-wallet-api\"}[5m]))" } ],
+          "lines": true, "fill": 1 }
+      ],
+      "schemaVersion": 39, "version": 1
+    }
+  chat-nats.json: |
+    {
+      "title": "GNEW • Chat (NATS)",
+      "timezone": "browser",
+      "panels": [
+        { "type": "graph", "title": "In msgs/s",
+          "targets": [ { "expr": "sum(rate(gnatsd_varz_in_msgs[1m]))" } ],
+          "lines": true, "fill": 1 },
+        { "type": "graph", "title": "Out msgs/s",
+          "targets": [ { "expr": "sum(rate(gnatsd_varz_out_msgs[1m]))" } ],
+          "lines": true, "fill": 1 },
+        { "type": "graph", "title": "Conexiones activas",
+          "targets": [ { "expr": "sum(gnatsd_varz_connections)" } ],
+          "lines": true, "fill": 1 }
+      ],
+      "schemaVersion": 39, "version": 1
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels: { app: grafana }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: grafana } }
+  template:
+    metadata:
+      labels: { app: grafana }
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.1.0
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: admin # cambia en prod (secrets)
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+          ports:
+            - containerPort: 3000
+              name: http
+          volumeMounts:
+            - name: ds
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: db
+              mountPath: /var/lib/grafana
+            - name: d1
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+      volumes:
+        - name: ds
+          configMap: { name: grafana-datasource }
+        - name: d1
+          configMap:
+            name: grafana-dashboards
+            items:
+              - key: blockchain-overview.json
+                path: dashboards.yml
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: db
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels: { app: grafana }
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+  selector:
+    app: grafana
+
+
+Cumple N256 (SRE → Prometheus + Grafana para blockchain, wallets y chat en tiempo real).
+

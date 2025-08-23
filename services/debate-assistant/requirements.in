@@ -1,0 +1,23 @@
+# API 
+fastapi 
+uvicorn[standard] 
+# NLP + vector search 
+scikit-learn 
+numpy 
+scipy 
+nltk 
+faiss-cpu 
+# Optional quality (auto-fallbacks si no están disponibles) 
+transformers 
+sentence-transformers 
+# Observabilidad y utilidades 
+prometheus_client 
+pydantic-settings 
+sqlalchemy 
+sqlmodel 
+httpx 
+opentelemetry-api 
+# Tests 
+pytest 
+pytest-asyncio 
+httpx 

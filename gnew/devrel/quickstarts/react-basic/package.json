@@ -1,0 +1,119 @@
+```json
+{
+  "name": "gnew-react-quickstart",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}
+
+/gnew/devrel/quickstarts/react-basic/src/lib/gnewClient.ts
+import axios from "axios";
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_GNEW_API_URL || "https://api.gnew.example.com",
+  headers: { "X-GNEW-API-KEY": import.meta.env.VITE_GNEW_API_KEY || "" }
+});
+
+export async function fetchProjects() {
+  const { data } = await api.get("/v1/projects");
+  return data as Array<{id:string; name:string;}>;
+}
+
+/gnew/devrel/quickstarts/react-basic/src/App.tsx
+import { useEffect, useState } from "react";
+import { fetchProjects } from "./lib/gnewClient";
+
+export default function App() {
+  const [projects, setProjects] = useState<any[]>([]);
+  const [error, setError] = useState<string>("");
+
+  useEffect(() => {
+    fetchProjects().then(setProjects).catch((e) => setError(String(e)));
+  }, []);
+
+  return (
+    <main style={{ fontFamily: "sans-serif", padding: 24 }}>
+      <h1>GNEW — React Quickstart</h1>
+      {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
+      <ul>
+        {projects.map(p => <li key={p.id}>{p.name}</li>)}
+      </ul>
+      {!projects.length && !error && <p>Cargando…</p>}
+    </main>
+  );
+}
+
+/gnew/devrel/quickstarts/react-basic/Dockerfile
+FROM node:20-alpine
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm i
+COPY . .
+ENV VITE_GNEW_API_URL=${GNEW_API_URL}
+ENV VITE_GNEW_API_KEY=${GNEW_API_KEY}
+EXPOSE 5173
+CMD ["npm","run","dev"]
+
+/gnew/devrel/quickstarts/react-basic/.devcontainer/devcontainer.json
+{
+  "name": "GNEW React QS",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
+  "forwardPorts": [5173],
+  "postCreateCommand": "npm i"
+}
+
+ 
+7) Quick start Webhooks (verificación de firma)
+/gnew/devrel/quickstarts/webhooks/src/server.ts
+import "dotenv/config";
+import express from "express";
+import crypto from "node:crypto";
+
+const app = express();
+app.use(express.json({ type: "*/*" }));
+
+function verifySignature(secret: string, payload: string, header: string | undefined) {
+  if (!header) return false;
+  const hmac = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+  return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(header));
+}
+
+app.post("/webhooks/gnew", (req, res) => {
+  const secret = process.env.GNEW_WEBHOOK_SECRET!;
+  const signature = req.header("X-GNEW-Signature");
+  const raw = JSON.stringify(req.body);
+  if (!verifySignature(secret, raw, signature)) {
+    return res.status(401).json({ error: "invalid signature" });
+  }
+  console.log("Evento recibido:", req.body.type);
+  res.json({ ok: true });
+});
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log(`Webhook server on ${port}`));
+
+/gnew/devrel/quickstarts/webhooks/README.md
+# GNEW Webhooks Quickstart
+
+1. Configura tu endpoint público (ngrok, Cloud Run, etc.)
+2. Define `GNEW_WEBHOOK_SECRET` igual al configurado en tu panel de GNEW.
+3. Ejecuta:
+```bash
+docker build -t gnew-webhook .
+docker run --rm -p 3000:3000 --env-file ../shared/.env.example gnew-webhook
+
+

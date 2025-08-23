@@ -1,0 +1,25 @@
+
+name: M16 Data Governance Tests
+
+on:
+  pull_request:
+    paths:
+      - "services/data-governance/**"
+      - "apps/dao-web/hooks/useDataGovernance.ts"
+      - "apps/dao-web/pages/api/data-governance/**"
+      - "tests/data-governance/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Ejecutar tests M16
+        run: npx mocha tests/data-governance/test_m16.spec.ts
+
+

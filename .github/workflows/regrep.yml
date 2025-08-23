@@ -1,0 +1,31 @@
+name: regrep-svc 
+on: 
+  push: 
+    paths: 
+      - "apps/regrep-svc/**" 
+      - "apps/regrep-svc/config/reports.yml" 
+      - "packages/schemas/openapi/reports.yml" 
+  pull_request: { branches: [ main ] } 
+jobs: 
+  build-test: 
+    runs-on: ubuntu-latest 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-node@v4 
+        with: { node-version: 20 } 
+      - run: npm ci 
+      - run: npm run lint --workspaces 
+      - run: npm test --workspaces 
+      - run: npx swagger-cli validate 
+packages/schemas/openapi/reports.yml 
+      - run: npm run build -w apps/regrep-svc 
+  deploy: 
+    needs: build-test 
+    if: github.ref == 'refs/heads/main' 
+    runs-on: ubuntu-latest 
+    permissions: { id-token: write, contents: read } 
+    steps: 
+      - uses: actions/checkout@v4 
+      - name: Deploy 
+        run: ./infra/deploy-regrep.sh 
+ 

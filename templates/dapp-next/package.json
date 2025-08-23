@@ -1,0 +1,289 @@
+```json 
+{ 
+"name": "gnew-dapp-next", 
+"version": "1.0.0", 
+"private": true, 
+"scripts": { 
+"dev": "next dev -p 3000", 
+"build": "next build", 
+"start": "next start -p 3000", 
+"lint": "next lint", 
+    "test": "node -e \"console.log('ok')\"" 
+  }, 
+  "dependencies": { 
+    "@tanstack/react-query": "5.59.15", 
+    "next": "14.2.14", 
+    "react": "18.3.1", 
+    "react-dom": "18.3.1", 
+    "viem": "2.21.11", 
+    "wagmi": "2.12.17" 
+  }, 
+  "devDependencies": { 
+    "@types/node": "20.14.15", 
+    "@types/react": "18.3.10", 
+    "autoprefixer": "10.4.20", 
+    "eslint": "9.10.0", 
+    "eslint-config-next": "14.2.14", 
+    "postcss": "8.4.41", 
+    "tailwindcss": "3.4.10", 
+    "typescript": "5.6.2" 
+  } 
+} 
+ 
+ 
+ruta completa: ./templates/dapp-next/next.config.mjs 
+/** @type {import('next').NextConfig} */ 
+const nextConfig = { 
+  poweredByHeader: false, 
+  reactStrictMode: true 
+}; 
+export default nextConfig; 
+ 
+ 
+ruta completa: ./templates/dapp-next/tsconfig.json 
+{ 
+  "compilerOptions": { 
+    "target": "ES2022", 
+    "lib": ["ES2022", "DOM", "DOM.Iterable"], 
+    "types": ["node"], 
+    "allowJs": false, 
+    "skipLibCheck": true, 
+    "strict": true, 
+    "noEmit": true, 
+    "module": "ESNext", 
+    "moduleResolution": "Bundler", 
+    "resolveJsonModule": true, 
+    "isolatedModules": true, 
+    "jsx": "preserve", 
+    "baseUrl": ".", 
+    "paths": { 
+      "@/*": ["./*"] 
+    } 
+  }, 
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"], 
+  "exclude": ["node_modules"] 
+} 
+ 
+ 
+ruta completa: ./templates/dapp-next/postcss.config.mjs 
+export default { 
+  plugins: { 
+    tailwindcss: {}, 
+    autoprefixer: {} 
+  } 
+} 
+ 
+ 
+ruta completa: ./templates/dapp-next/tailwind.config.ts 
+import type { Config } from 'tailwindcss' 
+ 
+export default { 
+  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"], 
+  theme: { extend: {} }, 
+plugins: [] 
+} satisfies Config 
+ruta completa: ./templates/dapp-next/app/layout.tsx 
+import "./globals.css"; 
+import type { Metadata } from "next"; 
+export const metadata: Metadata = { 
+title: "GNEW Dapp Starter", 
+description: "Starter dapp con wagmi/viem + Tailwind" 
+}; 
+export default function RootLayout({ children }: { children: 
+React.ReactNode }) { 
+return ( 
+<html lang="es"> 
+<body className="min-h-screen bg-slate-50 
+text-slate-900">{children}</body> 
+</html> 
+); 
+} 
+ruta completa: ./templates/dapp-next/app/page.tsx 
+"use client"; 
+import { useEffect, useMemo } from "react"; 
+import { http, createConfig, WagmiProvider, useAccount, useBalance, 
+useConnect, useDisconnect } from "wagmi"; 
+import { injected } from "wagmi/connectors" 
+import { QueryClient, QueryClientProvider } from 
+"@tanstack/react-query"; 
+import { ConnectButton } from "../components/ConnectButton"; 
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 
+"https://cloudflare-eth.com"; 
+const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "1"); 
+ 
+const config = createConfig({ 
+  chains: [{ id: CHAIN_ID, name: "Chain", nativeCurrency: { name: 
+"ETH", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: 
+[RPC_URL] } } }], 
+  connectors: [injected()], 
+  transports: { [CHAIN_ID]: http(RPC_URL) } 
+}); 
+ 
+function Demo() { 
+  const { isConnected, address } = useAccount(); 
+  const { disconnect } = useDisconnect(); 
+  const { data: bal } = useBalance({ address, chainId: CHAIN_ID, 
+query: { enabled: !!address } }); 
+  const short = useMemo(() => (address ? `${address.slice(0, 
+6)}…${address.slice(-4)}` : ""), [address]); 
+ 
+  useEffect(() => { 
+    console.log("Connected?", isConnected, address); 
+  }, [isConnected, address]); 
+ 
+  return ( 
+    <main className="container mx-auto max-w-2xl p-8"> 
+      <h1 className="text-3xl font-bold mb-6">GNEW Dapp Starter</h1> 
+      <ConnectButton /> 
+      {isConnected && ( 
+        <div className="mt-6 space-y-2 rounded-lg border bg-white p-4 
+shadow-sm"> 
+          <div><strong>Address:</strong> {short}</div> 
+          <div><strong>ChainId:</strong> {CHAIN_ID}</div> 
+          <div><strong>Balance:</strong> {bal?.formatted} 
+{bal?.symbol}</div> 
+          <button className="mt-3 rounded bg-slate-800 px-3 py-2 
+text-white" onClick={() => disconnect()}>Desconectar</button> 
+        </div> 
+      )} 
+    </main> 
+  ); 
+} 
+ 
+const qc = new QueryClient(); 
+ 
+export default function Page() { 
+  return ( 
+    <WagmiProvider config={config}> 
+      <QueryClientProvider client={qc}> 
+        <Demo /> 
+      </QueryClientProvider> 
+    </WagmiProvider> 
+  ); 
+} 
+ 
+ 
+ruta completa: ./templates/dapp-next/components/ConnectButton.tsx 
+"use client"; 
+import { useConnect, useAccount } from "wagmi"; 
+ 
+export function ConnectButton() { 
+  const { connectors, connect, error, isPending } = useConnect(); 
+  const { isConnected } = useAccount(); 
+ 
+  if (isConnected) return <div className="inline-block rounded 
+bg-emerald-600 px-3 py-2 text-white">Wallet conectada</div>; 
+ 
+  return ( 
+    <div className="flex gap-2"> 
+      {connectors.map((c) => ( 
+        <button 
+          key={c.uid} 
+          disabled={!c.ready || isPending} 
+          onClick={() => connect({ connector: c })} 
+          className="rounded bg-indigo-600 px-3 py-2 text-white 
+disabled:opacity-60" 
+        > 
+          {c.name} 
+        </button> 
+      ))} 
+      {error && <span className="text-red-600">{error.message}</span>} 
+    </div> 
+  ); 
+} 
+ 
+ 
+ruta completa: ./templates/dapp-next/app/globals.css 
+@tailwind base; 
+@tailwind components; 
+@tailwind utilities; 
+ 
+:root { color-scheme: light; } 
+ 
+ 
+ruta completa: ./templates/dapp-next/.env.example 
+NEXT_PUBLIC_RPC_URL=https://cloudflare-eth.com 
+NEXT_PUBLIC_CHAIN_ID=1 
+ 
+ 
+ruta completa: ./templates/dapp-next/vercel.json 
+{ 
+  "buildCommand": "npm run build", 
+  "outputDirectory": ".next", 
+  "framework": "nextjs" 
+} 
+ 
+ 
+ruta completa: ./templates/dapp-next/railway.json 
+{ 
+"build": { "builder": "NIXPACKS" }, 
+"deploy": { "startCommand": "npm start", "healthcheckPath": "/" } 
+} 
+ruta completa: ./templates/dapp-next/Dockerfile 
+# Simple container (opcional si no usas Vercel/Railway buildpacks) 
+FROM node:20-alpine AS deps 
+WORKDIR /app 
+COPY package.json package-lock.json* ./ 
+RUN npm ci 
+FROM node:20-alpine AS build 
+WORKDIR /app 
+COPY --from=deps /app/node_modules node_modules 
+COPY . . 
+RUN npm run build 
+FROM node:20-alpine 
+WORKDIR /app 
+ENV NODE_ENV=production 
+COPY --from=build /app/node_modules node_modules 
+COPY --from=build /app/.next .next 
+COPY --from=build /app/public public 
+COPY --from=build /app/package.json . 
+EXPOSE 3000 
+CMD ["npm","start"] 
+ruta completa: ./templates/dapp-next/.github/workflows/ci.yml 
+name: dapp-ci 
+on: 
+push: 
+paths: ["templates/dapp-next/**"] 
+pull_request: 
+    paths: ["templates/dapp-next/**"] 
+jobs: 
+  build: 
+    runs-on: ubuntu-latest 
+    defaults: { run: { working-directory: templates/dapp-next } } 
+    steps: 
+      - uses: actions/checkout@v4 
+      - uses: actions/setup-node@v4 
+        with: { node-version: '20', cache: 'npm' } 
+      - run: npm ci 
+      - run: npm run build 
+      - run: npm test 
+ 
+ 
+ruta completa: ./templates/subgraph-graph/README.md 
+# GNEW Subgraph Starter (The Graph) 
+ - Estructura mínima para `graph-cli` - `Transfer` de un ERC20 como ejemplo - CI para build - Deploy mediante acción manual (`deploy.yml`) usando 
+`GRAPH_ACCESS_TOKEN` 
+ 
+## Uso 
+ 
+```bash 
+npm ci 
+npm run codegen 
+npm run build 
+ 
+Para desplegar en Subgraph Studio: 
+1. Configura secretos en GitHub: 
+ 
+○ GRAPH_ACCESS_TOKEN 
+ 
+○ SUBGRAPH_SLUG (e.g. yourname/gnew-starter) 
+ 
+○ SUBGRAPH_NODE (opcional; por defecto usa 
+https://api.studio.thegraph.com/deploy/) 
+ 
+2. Ejecuta el workflow Deploy Subgraph manualmente (workflow_dispatch). 
+ 
+Local: Para testear contra una red de prueba, actualiza subgraph.yaml con la 
+dirección del contrato y startBlock. 
+ --- 
+ 

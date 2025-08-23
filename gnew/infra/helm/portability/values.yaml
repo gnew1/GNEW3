@@ -1,0 +1,19 @@
+image: 
+  repository: gnew/portability-service 
+  tag: v0.1.0 
+env: 
+  VC_ISSUER_PRIV: "vault://kv/identity/issuer" 
+  GNEW_RPC_URL: https://rpc.gnew.example 
+  EAS_CONTRACT: "0xEAS"                 # según red 
+  EAS_SCHEMA_REGISTRY: "0xSchemaReg" 
+  EAS_SCHEMA_ID: "0xSchemaId" 
+  EAS_ISSUER_KEY: "vault://kv/portability/eas-issuer" 
+ingress: 
+  enabled: true 
+  hosts: [ "portability.api.gnew.example" ] 
+resources: 
+  requests: { cpu: "100m", memory: "256Mi" } 
+  limits: { cpu: "500m", memory: "512Mi" } 
+ 
+ 
+Mapeos y normalización (YAML) 
