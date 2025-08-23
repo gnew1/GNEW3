@@ -1,128 +1,29 @@
-name: Verify Supply Chain (reusable) 
-on: 
-  workflow_call: 
-    inputs: 
-      image: 
-        required: true 
-        type: string 
-      expected_identity: 
-        required: true 
-        type: string  # e.g., 
-"https://github.com/GNEW-ORG/GNEW/.github/workflows/supply-chain.yml@r
- efs/heads/main" 
-jobs: 
-  verify: 
-    runs-on: ubuntu-latest 
-    steps: 
-      - uses: sigstore/cosign-installer@v3 
-        with: { cosign-release: "v2.2.4" } 
-      - name: cosign verify (OIDC identity + Rekor) 
-        run: | 
-          cosign verify "${{ inputs.image }}" \ 
-            --certificate-oidc-issuer 
-"https://token.actions.githubusercontent.com" \ 
-            --certificate-identity "${{ inputs.expected_identity }}" \ 
-            --rekor-url https://rekor.sigstore.dev 
-      - name: verify SBOM attestation (spdx) 
-        run: | 
-          cosign verify-attestation "${{ inputs.image }}" \ 
-            --type spdx \ 
-            --certificate-oidc-issuer 
-"https://token.actions.githubusercontent.com" \ 
-            --certificate-identity "${{ inputs.expected_identity }}" 
- 
-Integra esto en deploy-staging/prod (N92) antes de helm upgrade. 
- 
-3) Enforce en clúster: firmas y no “latest” 
-Opción A: Kyverno (simple y portable) 
-Ruta completa: policies/kyverno/require-signed-images.yaml 
-apiVersion: kyverno.io/v1 
-kind: ClusterPolicy 
-metadata: 
-  name: require-signed-images 
-spec: 
-  validationFailureAction: Enforce 
-  background: true 
-  webhookTimeoutSeconds: 10 
-  rules: 
-    - name: verify-cosign 
-      match: 
-        any: 
-          - resources: 
-              kinds: 
-["Pod","Deployment","StatefulSet","DaemonSet","Job","CronJob"] 
-      verifyImages: 
-        - imageReferences: 
-            - "ghcr.io/**/gnew-*"   # nuestras imágenes 
-          attestors: 
-            - entries: 
-                - keyless: 
-                    issuer: 
-"https://token.actions.githubusercontent.com" 
-                    subject: 
-"https://github.com/GNEW-ORG/GNEW/.github/workflows/supply-chain.yml@r
- efs/heads/main" 
-          attestations: 
-            - type: "spdx" 
-              conditions: 
-                all: 
-                  - key: "_.SPDXID" 
-                    operator: Exists 
- 
-Ruta completa: policies/kyverno/disallow-latest.yaml 
-apiVersion: kyverno.io/v1 
-kind: ClusterPolicy 
-metadata: 
-  name: disallow-latest-tag 
-spec: 
-  validationFailureAction: Enforce 
-  background: true 
-  rules: 
-    - name: no-latest 
-      match: 
-        any: 
-          - resources: 
-              kinds: 
-["Pod","Deployment","StatefulSet","DaemonSet","Job","CronJob"] 
-      validate: 
-        message: "Usa digests o tags inmutables; 'latest' está 
-prohibido." 
-        pattern: 
-          spec: 
-            containers: 
-              - image: "!*:latest" 
- 
-Opción B: Sigstore policy-controller (ClusterImagePolicy) 
-Ruta completa: policies/sigstore/cluster-image-policy.yaml 
-apiVersion: policy.sigstore.dev/v1beta1 
-kind: ClusterImagePolicy 
-metadata: 
-  name: gnew-signed-and-attested 
-spec: 
-  images: 
-    - glob: ghcr.io/**/gnew-* 
-  authorities: 
-    - keyless: 
-        identities: 
-          - issuer: "https://token.actions.githubusercontent.com" 
-            subject: 
-"https://github.com/GNEW-ORG/GNEW/.github/workflows/supply-chain.yml@r
- efs/heads/main" 
-        ctlog: 
-          url: https://rekor.sigstore.dev 
-  attestations: 
-    - name: has-sbom 
-      predicateType: spdx 
-      policy: 
-        type: cue 
-        data: | 
-          predicate: { 
-            # Require SPDX document fields 
-            SPDXID: =~ #"SPDXRef-.*" 
-          } 
- 
-Instala Kyverno o Sigstore policy-controller vía Helm/YAML en 
-infra/iac/terraform/k8s (puedes seguir el patrón de addons del N91). 
- 
-4) Políticas de dependencias (Dependabot 
-+ gates CI) 
+name: Verify Supply Chain (reusable)
+on:
+  workflow_call:
+    inputs:
+      image:
+        required: true
+        type: string
+      expected_identity:
+        required: true
+        type: string
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.2.4
+      - name: cosign verify (OIDC identity + Rekor)
+        run: |
+          cosign verify "${{ inputs.image }}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "${{ inputs.expected_identity }}" \
+            --rekor-url https://rekor.sigstore.dev
+      - name: verify SBOM attestation (spdx)
+        run: |
+          cosign verify-attestation "${{ inputs.image }}" \
+            --type spdx \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "${{ inputs.expected_identity }}"

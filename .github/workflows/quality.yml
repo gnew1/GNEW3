@@ -1,2 +1,10 @@
-Orquesta SonarQube, Codecov y métricas de build. 
-2. Panel de calidad 
+name: Quality
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Quality workflow stub; ver docs/_imported/quality.yml.md"
