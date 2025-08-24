@@ -1485,6 +1485,34 @@ importers:
         specifier: ^2.0.5
         version: 2.1.9(@types/node@20.19.11)(terser@5.43.1)
 
+  apps/web:
+    dependencies:
+      '@gnew/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      next:
+        specifier: 14.2.3
+        version: 14.2.3(@opentelemetry/api@1.9.0)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+      react:
+        specifier: 18.2.0
+        version: 18.2.0
+      react-dom:
+        specifier: 18.2.0
+        version: 18.2.0(react@18.2.0)
+      swr:
+        specifier: ^2.2.5
+        version: 2.3.6(react@18.2.0)
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.10
+        version: 20.19.11
+      '@types/react':
+        specifier: ^18.3.5
+        version: 18.3.24
+      typescript:
+        specifier: ^5.5.4
+        version: 5.8.2
+
   packages/checkout-react:
     dependencies:
       react:
@@ -1497,6 +1525,8 @@ importers:
       typescript:
         specifier: ^5.5.4
         version: 5.8.2
+
+  packages/checkout-sdk: {}
 
   packages/contracts:
     dependencies:
@@ -1566,6 +1596,8 @@ importers:
         specifier: ^6.19.8
         version: 6.21.0
 
+  packages/sdk-client: {}
+
   packages/storage-sdk:
     dependencies:
       '@bundlr-network/client':
@@ -1623,6 +1655,28 @@ importers:
         version: 4.20.5
       typescript:
         specifier: ^5.6.3
+        version: 5.8.2
+
+  packages/ui:
+    dependencies:
+      '@gnew/sdk-client':
+        specifier: workspace:*
+        version: link:../sdk-client
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.5
+        version: 18.3.24
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.7(@types/react@18.3.24)
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      typescript:
+        specifier: ^5.8.2
         version: 5.8.2
 
   services/authz:
@@ -1827,6 +1881,9 @@ importers:
       express:
         specifier: ^4.19.2
         version: 4.21.2
+      jwk-to-pem:
+        specifier: ^2.0.5
+        version: 2.0.7
       nats:
         specifier: ^2.27.0
         version: 2.29.3
@@ -9072,6 +9129,9 @@ packages:
 
   jwa@2.0.1:
     resolution: {integrity: sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg==}
+
+  jwk-to-pem@2.0.7:
+    resolution: {integrity: sha512-cSVphrmWr6reVchuKQZdfSs4U9c5Y4hwZggPoz6cbVnTpAVgGRpEuQng86IyqLeGZlhTh+c4MAreB6KbdQDKHQ==}
 
   jws@3.2.2:
     resolution: {integrity: sha512-YHlZCB6lMTllWDtSPHz/ZXTsi8S00usEV6v1tjq8tOUZzw7DpSDWVXjXDre6ed1w/pd495ODpHZYSdkRTsa0HA==}
@@ -22515,6 +22575,12 @@ snapshots:
     dependencies:
       buffer-equal-constant-time: 1.0.1
       ecdsa-sig-formatter: 1.0.11
+      safe-buffer: 5.2.1
+
+  jwk-to-pem@2.0.7:
+    dependencies:
+      asn1.js: 5.4.1
+      elliptic: 6.6.1
       safe-buffer: 5.2.1
 
   jws@3.2.2:

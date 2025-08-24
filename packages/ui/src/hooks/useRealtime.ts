@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'; 
-import { RealtimeClient } from '@repo/sdk-client/realtime'; 
+import { RealtimeClient } from '@gnew/sdk-client/realtime'; 
  
 type UseRealtimeOpts = { url?: string; token: string; room: 
 'governance' | 'economy'; preferSSE?: boolean }; 

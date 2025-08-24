@@ -4,12 +4,12 @@ export type EventHandler = (evt: any) => void;
 export class RealtimeClient { 
   private ws?: WebSocket; 
   private sse?: EventSource; 
-  private token: string; 
-  private url: string; 
-  private handlers: Map<string, Set<EventHandler>> = new Map(); 
-  private joined: Set<string> = new Set(); 
+  private readonly token: string; 
+  private readonly url: string; 
+  private readonly handlers: Map<string, Set<EventHandler>> = new Map(); 
+  private readonly joined: Set<string> = new Set(); 
   private backoff = 500; 
-  private maxBackoff = 6000; 
+  private readonly maxBackoff = 6000; 
  
   constructor(url: string, token: string) { 
     this.url = url.replace(/\/$/, ''); 
@@ -17,25 +17,20 @@ export class RealtimeClient {
   } 
  
   async connect(preferSSE = false) { 
-    if (!preferSSE) return this.connectWS().catch(() => 
-this.connectSSE()); 
+    if (!preferSSE) return this.connectWS().catch(() => this.connectSSE()); 
     return this.connectSSE().catch(() => this.connectWS()); 
   } 
  
   private connectWS(): Promise<void> { 
     return new Promise((resolve, reject) => { 
-      const w = new WebSocket(`${this.url.replace(/^http/, 'ws')}/`, 
-['json']); 
-      // auth via query token if not supported by infra; here we use 
-header-less, so append 
-      (w as any).url = `${this.url.replace(/^http/, 
-'ws')}/?token=${encodeURIComponent(this.token)}`; 
+      const w = new WebSocket(`${this.url.replace(/^http/, 'ws')}/`, ['json']); 
+      // auth via query token if not supported by infra; here we use header-less, so append
+      (w as any).url = `${this.url.replace(/^http/, 'ws')}/?token=${encodeURIComponent(this.token)}`; 
       this.ws = new WebSocket((w as any).url); 
       this.ws.onopen = () => { 
         this.backoff = 500; 
-        // rejoin rooms 
-        this.joined.forEach(r => this.ws?.send(JSON.stringify({ type: 
-'join', room: r }))); 
+        // rejoin rooms
+        this.joined.forEach(r => this.ws?.send(JSON.stringify({ type: 'join', room: r }))); 
         resolve(); 
       }; 
       this.ws.onmessage = (m) => this.dispatch(m.data); 
@@ -53,18 +48,15 @@ header-less, so append
       this.sse = new EventSource(sseUrl, { withCredentials: false }); 
       this.sse.onopen = () => { this.backoff = 500; resolve(); }; 
       this.sse.onerror = () => this.reconnect('sse'); 
-      this.sse.addEventListener('event', (e: MessageEvent) => 
-this.dispatch(e.data)); 
-      this.sse.addEventListener('presence', (e: MessageEvent) => 
-this.dispatch(e.data)); 
+  this.sse.addEventListener('event', (e: MessageEvent) => this.dispatch(e.data)); 
+  this.sse.addEventListener('presence', (e: MessageEvent) => this.dispatch(e.data)); 
     }); 
   } 
  
   private reconnect(kind: 'ws'|'sse') { 
     setTimeout(() => { 
       this.backoff = Math.min(this.backoff * 2, this.maxBackoff); 
-      if (kind === 'ws') this.connectWS().catch(() => 
-this.connectSSE()); 
+  if (kind === 'ws') this.connectWS().catch(() => this.connectSSE()); 
       else this.connectSSE().catch(() => this.connectWS()); 
     }, this.backoff); 
   } 
@@ -76,7 +68,12 @@ this.connectSSE());
       for (const [key, hs] of this.handlers.entries()) { 
         if (key === room || key === '*') hs.forEach(h => h(evt)); 
       } 
-    } catch {} 
+    } catch (e) { 
+      // swallow invalid json but keep a breadcrumb for debug
+      if (typeof console !== 'undefined' && console.debug) {
+        console.debug('realtime dispatch parse error', e);
+      }
+    } 
   } 
  
   async subscribe(room: string, handler: EventHandler) { 
@@ -94,8 +91,7 @@ this.connectSSE());
       if (set.size === 0) { 
         this.handlers.delete(room); 
         this.joined.delete(room); 
-        if (this.ws?.readyState === WebSocket.OPEN) 
-this.ws.send(JSON.stringify({ type: 'leave', room })); 
+  if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'leave', room })); 
       } 
     }; 
   } 

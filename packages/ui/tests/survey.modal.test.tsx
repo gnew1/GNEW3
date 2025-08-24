@@ -25,7 +25,7 @@ Cómo integrar en el monorepo
 
 Uso in-app (ejemplo React):
 
- import { useSurveyTrigger, SurveyModal } from "@repo/ui/survey";
+ import { useSurveyTrigger, SurveyModal } from "@gnew/ui/survey";
 
 export default function PostVotePage({ userId }: { userId: string }) {
   const { survey, open, setOpen } = useSurveyTrigger("post-votacion", userId, "/feedback");

@@ -1,6 +1,7 @@
 import React from 'react'; 
-import { LiveEvents } from '@repo/ui/LiveEvents'; 
-import { ThemeProvider } from '@repo/ui/theme'; 
+import { LiveEvents } from '@gnew/ui/LiveEvents'; 
+// If a ThemeProvider exists later, update this import accordingly; using a passthrough for now
+const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => <>{children}</>;
 import { useSession } from 'next-auth/react'; 
  
 export default function LivePage() { 

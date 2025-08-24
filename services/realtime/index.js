@@ -1,3 +1,4 @@
+/* eslint-env node */
 import http from 'http'; 
 import express from 'express'; 
 import cors from 'cors'; 
@@ -8,13 +9,10 @@ import { createLogger } from '../common/logger.js';
 import { register, collectDefaultMetrics, Counter, Gauge, Histogram } from 'prom-client';
 import { v4 as uuid } from 'uuid'; 
 import url from 'url'; 
-import { TextDecoder } from 'util';
 import { Buffer } from 'buffer';
-import process from 'process';
 // Minimal auth shim: replace missing '@repo/auth-client' with a local verifier.
 // It expects RS256 JWTs and uses JWKS endpoint from AUTH_JWKS_URL if provided.
 import jwkToPem from 'jwk-to-pem';
-import https from 'https';
 import crypto from 'crypto';
 
 const JWKS_URL = process.env.AUTH_JWKS_URL || '';
@@ -22,21 +20,10 @@ let JWKS_CACHE = null;
 async function getPublicKeys() {
   if (JWKS_CACHE) return JWKS_CACHE;
   if (!JWKS_URL) throw new Error('AUTH_JWKS_URL not set');
-  JWKS_CACHE = await new Promise((resolve, reject) => {
-    https.get(JWKS_URL, (res) => {
-      let data = '';
-      res.on('data', (c) => (data += c));
-      res.on('end', () => {
-        try {
-          const jwks = JSON.parse(data);
-          const keys = Object.fromEntries(
-            (jwks.keys || []).map((j) => [j.kid, jwkToPem(j)])
-          );
-          resolve(keys);
-        } catch (e) { reject(e); }
-      });
-  }).on('error', (e) => reject(e));
-  });
+  const res = await fetch(JWKS_URL);
+  if (!res.ok) throw new Error(`JWKS HTTP ${res.status}`);
+  const jwks = await res.json();
+  JWKS_CACHE = Object.fromEntries((jwks.keys || []).map((j) => [j.kid, jwkToPem(j)]));
   return JWKS_CACHE;
 }
 
@@ -201,7 +188,8 @@ setInterval(() => {
       const data = c.queue.shift(); 
       try { 
         c.ws.send(data); 
-      } catch { 
+      } catch (e) { 
+        log.debug({ err: e }, 'ws send error during flush');
         c.queue.unshift(data); 
         break; 
       } 
@@ -216,9 +204,13 @@ setInterval(() => {
   for (const c of clients.values()) { 
     try { 
       c.ws.ping(); 
-    } catch (e) { /* ignore ping error */ } 
+    } catch (e) { 
+      log.debug({ err: e }, 'ws ping error');
+    } 
     if (now - c.lastPong > PING_INTERVAL + PONG_TIMEOUT) { 
-      try { c.ws.terminate(); } catch (e) { /* ignore terminate error */ } 
+      try { c.ws.terminate(); } catch (e) { 
+        log.debug({ err: e }, 'ws terminate error');
+      } 
     } 
   } 
 }, PING_INTERVAL); 

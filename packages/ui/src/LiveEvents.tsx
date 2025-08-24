@@ -23,8 +23,7 @@ aria-pressed={room === 'governance'}>Gobernanza</Button>
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, 
 display: 'grid', gap: 6 }}> 
           {events.map((e, i) => ( 
-            <li key={i} style={{ fontFamily: 'ui-monospace, 
-SFMono-Regular, Menlo, monospace' }}> 
+            <li key={i} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}> 
               <strong>{new Date(e.ts).toLocaleTimeString()}:</strong> 
 <code>{JSON.stringify(e.data)}</code> 
             </li> 
