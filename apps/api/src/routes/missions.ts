@@ -117,7 +117,11 @@ export function registerMissionsRoutes(app: Application) {
         if (Number.isNaN(+d)) return badRequest(res, "weekStart no es una fecha válida");
       }
 
-      const s = seed ? Math.abs(parseInt(seed, 10)) || undefined : undefined;
+        let s: number | undefined;
+        if (seed !== undefined) {
+          const n = Math.abs(parseInt(seed, 10));
+          if (!Number.isNaN(n)) s = n;
+        }
 
       // Plan con feedback mínimo de ejemplo (para que la UI tenga estructura)
       const demo: FeedbackItem[] = [
