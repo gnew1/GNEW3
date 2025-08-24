@@ -14,7 +14,7 @@
     "dev": "vitest"
   },
   "dependencies": {
-    "@bundlr-network/client": "^0.11.21",
+  "@bundlr-network/client": "^0.11.17",
     "ethers": "^6.12.2",
     "node-fetch": "^3.3.2"
   },

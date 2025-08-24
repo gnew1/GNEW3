@@ -6,15 +6,13 @@
   "scripts": { 
     "build": "tsc -p tsconfig.json", 
     "dev": "tsx src/server.ts", 
-    "deploy": "hardhat run scripts/deploy.ts --network 
-${NETWORK:-hardhat}", 
-    "simulate:fork": "hardhat run scripts/simulate-fork.ts --network 
-fork", 
+  "deploy": "hardhat run scripts/deploy.ts --network ${NETWORK:-hardhat}",
+  "simulate:fork": "hardhat run scripts/simulate-fork.ts --network fork",
     "test": "hardhat test" 
   }, 
   "dependencies": { 
     "@openzeppelin/contracts": "^5.0.2", 
-    "@snapshot-labs/snapshot.js": "^0.10.2", 
+  "@snapshot-labs/snapshot.js": "^0.14.9", 
     "arweave": "^1.14.4", 
     "dotenv": "^16.4.5", 
     "ethers": "^6.13.2", 

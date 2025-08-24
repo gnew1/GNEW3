@@ -12,5 +12,5 @@ export declare class Gnew {
     }>;
 }
 export default Gnew;
-export { AntiCollusionClient } from "./clients/antiCollusion";
-export { ReviewsClient, type ReviewPayload } from "./clients/reviews";
+export { AntiCollusionClient } from "./clients/antiCollusion.js";
+export { ReviewsClient, type ReviewPayload } from "./clients/reviews.js";

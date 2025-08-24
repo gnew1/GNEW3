@@ -11,8 +11,9 @@ Este índice rastrea módulos con stubs/ TODO y enlaza a diseños completados.
 - apps/wallet-recovery-service — Notifier: ver apps/wallet-recovery-service/DESIGN.md (Listo)
 - services/tax_engine — Withholding: ver services/tax_engine/DESIGN.md (Listo)
 - services/realtime — Test Harness: ver services/realtime/DESIGN.md (Listo)
+- gnew/packages/sdk — SDK: ver gnew/packages/sdk/DESIGN.md (Listo)
 
-Nota: El diseño de gnew/packages/sdk no existe aún; se eliminará el enlace hasta que se cree.
+Nota: Si algún módulo adicional necesita diseño, añádelo aquí.
 
 Siguientes candidatos (revisión rápida):
 - services/identity — MPC/TSS: ver services/identity/DESIGN.md (Listo)

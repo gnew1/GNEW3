@@ -1,4 +1,3 @@
-
 /**
  * GNEW · N326 — Conciliación multi-proveedor
  * Rol: Integraciones
@@ -46,7 +45,9 @@ function authOptional(req: any, _res: any, next: any) {
         issuer: JWT_ISSUER,
       }) as JwtPayload;
       (req as any).user = { sub: String(dec.sub), roles: dec.roles as string[] | undefined, email: dec.email as string | undefined };
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   next();
 }
@@ -64,8 +65,8 @@ app.use(httpLogger);
 app.use(authOptional);
 
 // ---- Health & migrations
-app.get("/healthz", async (_req, res) => res.json({ ok: true }));
-app.post("/admin/migrate", requireRole("recon:admin"), async (_req, res) => {
+app.get("/healthz", async (_req: express.Request, res: express.Response) => res.json({ ok: true }));
+app.post("/admin/migrate", requireRole("recon:admin"), async (_req: express.Request, res: express.Response) => {
   await ensureMigrations(pool);
   res.json({ ok: true });
 });
@@ -74,17 +75,187 @@ app.post("/admin/migrate", requireRole("recon:admin"), async (_req, res) => {
 const UploadSchema = z.object({
   provider: z.string().min(1),
   currency: z.string().min(3).max(8).default("EUR"),
-  format: z.enum(["csv","json"]).default("csv"),
+  format: z.enum(["csv", "json"]).default("csv"),
   // para CSV
-  csv: z.object({
-    delimiter: z.string().default(","),
-    headers: z.object({
-      id: z.string(),
-      amount: z.string(),
-      timestamp: z
+  csv: z
+    .object({
+      delimiter: z.string().default(",").optional(),
+      headers: z.object({
+        id: z.string(),
+        amount: z.string(),
+        timestamp: z.string(),
+        currency: z.string().optional(),
+        memo: z.string().optional(),
+        external_ref: z.string().optional(),
+      }),
+    })
+    .optional(),
+  // datos: CSV (string) o JSON (array de objetos)
+  data: z.union([z.string(), z.array(z.record(z.any()))]),
+  tz: z.string().optional(),
+});
 
-Tú dijiste:
-Como IA programadora de GNEW, ejecuta el siguiente prompt N del archivo "/mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt" empezando en N321 (N320 se ejecutó en la interacción actual) y avanza +1 en cada ejecución hasta N340, sin repetirte. Para cada prompt: 1) entrega exactamente lo pedido con código listo para producción; 2) empieza la respuesta con la RUTA COMPLETA del archivo de salida y debajo el código en el lenguaje indicado; 3) mantén coherencia con el monorepo (Node/TypeScript predominante, backend principal app.ts) y convenciones establecidas; 4) incluye pruebas y scripts de integración cuando proceda; 5) evita texto superfluo fuera de rutas+código salvo breves notas de uso; 6) conserva y actualiza un puntero interno de progreso para continuar en N+1 y detenerse al llegar a N340.
-ChatGPT Plus
-Pensó durante 54s
+// ---- Ingesta de movimientos del proveedor
+app.post("/provider/upload", requireRole("recon:ingest"), async (req: express.Request, res: express.Response) => {
+  try {
+    const body = UploadSchema.parse(req.body);
+    const rows = parseCsvOrJson({
+      format: body.format,
+      data: body.data as any,
+      csv: body.csv as any,
+      defaultCurrency: body.currency,
+      tz: body.tz,
+    });
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const st = await client.query(
+        `insert into provider_statements(provider, currency, raw) values($1,$2,$3) returning id`,
+        [body.provider, body.currency, body as any]
+      );
+      const statementId = st.rows[0].id as number;
+      for (const r of rows) {
+        await client.query(
+          `insert into provider_tx(statement_id, provider, ext_id, amount, currency, ts, memo, external_ref)
+           values($1,$2,$3,$4,$5,$6,$7,$8)
+           on conflict (provider, ext_id) do nothing`,
+          [
+            statementId,
+            body.provider,
+            r.ext_id,
+            r.amount,
+            r.currency,
+            r.timestamp,
+            r.memo ?? null,
+            r.external_ref ?? null,
+          ]
+        );
+      }
+      await client.query("commit");
+      res.json({ ok: true, provider: body.provider, inserted: rows.length, statementId });
+    } catch (e: any) {
+      await client.query("rollback");
+      logger.error({ err: e }, "provider_upload_failed");
+      res.status(500).json({ error: "upload_failed", detail: String(e?.message ?? e) });
+    } finally {
+      client.release();
+    }
+  } catch (e: any) {
+    res.status(400).json({ error: "bad_request", detail: String(e?.message ?? e) });
+  }
+});
+
+// ---- ETL: ledger (CSV o JSON array)
+const LedgerUploadSchema = z.object({
+  source: z.string().min(1),
+  currency: z.string().min(3).max(8).default("EUR"),
+  format: z.enum(["csv", "json"]).default("csv"),
+  csv: z
+    .object({
+      delimiter: z.string().default(",").optional(),
+      headers: z.object({
+        id: z.string(),
+        amount: z.string(),
+        timestamp: z.string(),
+        currency: z.string().optional(),
+        memo: z.string().optional(),
+        external_ref: z.string().optional(),
+      }),
+    })
+    .optional(),
+  data: z.union([z.string(), z.array(z.record(z.any()))]),
+  tz: z.string().optional(),
+});
+
+app.post("/ledger/upload", requireRole("recon:ingest"), async (req: express.Request, res: express.Response) => {
+  try {
+    const body = LedgerUploadSchema.parse(req.body);
+    const rows = parseCsvOrJson({
+      format: body.format,
+      data: body.data as any,
+      csv: body.csv as any,
+      defaultCurrency: body.currency,
+      tz: body.tz,
+    });
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      const imp = await client.query(
+        `insert into ledger_imports(source, currency, raw) values($1,$2,$3) returning id`,
+        [body.source, body.currency, body as any]
+      );
+      const importId = imp.rows[0].id as number;
+      for (const r of rows) {
+        await client.query(
+          `insert into ledger_tx(import_id, source, ext_id, amount, currency, ts, memo, external_ref)
+           values($1,$2,$3,$4,$5,$6,$7,$8)
+           on conflict (source, ext_id) do nothing`,
+          [importId, body.source, r.ext_id, r.amount, r.currency, r.timestamp, r.memo ?? null, r.external_ref ?? null]
+        );
+      }
+      await client.query("commit");
+      res.json({ ok: true, source: body.source, inserted: rows.length, importId });
+    } catch (e: any) {
+      await client.query("rollback");
+      logger.error({ err: e }, "ledger_upload_failed");
+      res.status(500).json({ error: "upload_failed", detail: String(e?.message ?? e) });
+    } finally {
+      client.release();
+    }
+  } catch (e: any) {
+    res.status(400).json({ error: "bad_request", detail: String(e?.message ?? e) });
+  }
+});
+
+// ---- Ejecutar conciliación
+const RunSchema = z.object({
+  provider: z.string().min(1),
+  currency: z.string().min(3).max(8).default("EUR"),
+  tolerance: z.number().min(0).max(1).default(DEFAULT_TOLERANCE),
+  dateWindowDays: z.number().int().min(0).max(30).default(DEFAULT_DATE_WINDOW_DAYS),
+  tag: z.string().optional(),
+});
+
+app.post("/reconcile/run", requireRole("recon:run"), async (req: express.Request, res: express.Response) => {
+  try {
+    const p = RunSchema.parse(req.body);
+    const out = await runReconciliation(pool, p);
+    if (out.diffRatio >= ALERT_DIFF_THRESHOLD) {
+      await pool.query(
+        `insert into recon_alerts(run_id, level, message, meta) values($1,$2,$3,$4)`,
+        [out.runId, "warning", "diff_ratio_threshold_exceeded", out]
+      );
+    }
+    res.json(out);
+  } catch (e: any) {
+    res.status(400).json({ error: "bad_request", detail: String(e?.message ?? e) });
+  }
+});
+
+// ---- Consultar run
+app.get("/reconcile/runs/:id", requireRole("recon:read"), async (req: express.Request, res: express.Response) => {
+  const id = String(req.params.id);
+  const r = await pool.query(`select id, provider, currency, params, summary, created_at from recon_runs where id=$1`, [id]);
+  if (!r.rowCount) return res.status(404).json({ error: "not_found" });
+  res.json(r.rows[0]);
+});
+
+// ---- Health listing simple
+app.get("/reconcile/runs", requireRole("recon:read"), async (_req: express.Request, res: express.Response) => {
+  const r = await pool.query(`select id, provider, currency, created_at, summary from recon_runs order by created_at desc limit 50`);
+  res.json(r.rows);
+});
+
+// ---- Error handler básico
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error({ err }, "unhandled");
+  res.status(500).json({ error: "internal_error" });
+});
+
+// ---- Boot
+app.listen(PORT, () => {
+  logger.info({ port: PORT }, "recon-service_started");
+});
+
+export default app;
 

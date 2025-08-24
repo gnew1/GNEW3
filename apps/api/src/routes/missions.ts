@@ -1,4 +1,3 @@
-
 /**
  * GNEW • N264 — API de Misiones Semanales (basado en feedback)
  * Monorepo: apps/api  (backend principal con Express 4.x)
@@ -16,13 +15,6 @@
  *  - Requiere el módulo de IA creado en N263:
  *      packages/ai/quests/src/feedback-2-weekly-missions.ts
  *    Importamos: planWeeklyMissions, tipos públicos.
- *
- * Cómo usar desde app.ts:
- *  import express from "express";
- *  import { registerMissionsRoutes } from "./routes/missions";
- *  const app = express();
- *  app.use(express.json({ limit: "1mb" }));
- *  registerMissionsRoutes(app);
  */
 
 import type { Application, Request, Response } from "express";
@@ -104,7 +96,7 @@ export function registerMissionsRoutes(app: Application) {
 
   /**
    * GET /api/missions/weekly?weekStart=YYYY-MM-DD&seed=number
-   * Genera un plan determinista vacío (útil para UI/preview) o basado en feedback opcional en query (?ids=... no implementado aquí).
+   * Genera un plan determinista vacío (útil para UI/preview) o basado en feedback opcional en query.
    */
   app.get("/api/missions/weekly", (req: Request, res: Response) => {
     try {
@@ -142,7 +134,6 @@ function badRequest(res: Response, message: string) {
 }
 
 function internalError(res: Response, message: string, err?: unknown) {
-  // Nota: no filtramos el error en producción; ajustar logger real en app.ts
   return res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message, detail: String(err || "") } });
 }
 
@@ -178,8 +169,4 @@ function validateFeedbackItem(it: any, index: number): string | null {
 
 // Export default para conveniencia en algunos estilos de import
 export default registerMissionsRoutes;
-
-Tú dijiste:
-Ejecuta el siguiente prompt N del archivo "/mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N251. En cada ejecución incrementa N en +1 hasta N420, sin repetir. Como IA programadora, entrega exactamente lo indicado por el prompt con máxima precisión, empezando tu respuesta con la ruta completa del archivo de salida y, a continuación, el programa/artefacto en el lenguaje o formato especificado, coherente con todo el proyecto GNEW (monorepo Node/TS, Solidity, Terraform, CI/CD, seguridad). Mantén consistencia con estándares y DoD del documento y conserva un puntero interno de progreso para continuar en N+1 en la siguiente ejecución.
-ChatGPT Plus
 

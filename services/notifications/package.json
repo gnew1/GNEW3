@@ -3,15 +3,14 @@
   "version": "1.0.0", 
   "type": "module", 
   "private": true, 
-  "scripts": { 
-    "dev": "node index.js", 
-    "test": "vitest run", 
-    "migrate": "alembic upgrade head || node 
-./scripts/sql-migrate.js", 
-    "lint": "echo 'ok'" 
-  }, 
-  "dependencies": { 
-    "apn": "^3.0.0", 
+  "scripts": {
+    "dev": "node index.js",
+    "test": "vitest run",
+    "migrate": "alembic upgrade head || node ./scripts/sql-migrate.js",
+    "lint": "echo 'ok'"
+  },
+  "dependencies": {
+    "apn": "^2.2.0",
     "express": "^4.21.2", 
     "jsonwebtoken": "^9.0.1", 
     "node-cron": "^3.0.3", 

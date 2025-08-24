@@ -1,4 +1,3 @@
-
 /**
  * GNEW • N265 — Componente UI para mostrar misiones semanales
  * Monorepo: apps/web (Next.js + React 18)
@@ -86,17 +85,13 @@ export const WeeklyMissionsBoard: React.FC = () => {
 
   if (error) {
     return (
-      <div className="p-4 text-red-600">
-        Error al cargar misiones: {error}
-      </div>
+      <div className="p-4 text-red-600">Error al cargar misiones: {error}</div>
     );
   }
 
   if (!data || !data.missions.length) {
     return (
-      <div className="p-4 text-gray-500">
-        No hay misiones planificadas para esta semana.
-      </div>
+      <div className="p-4 text-gray-500">No hay misiones planificadas para esta semana.</div>
     );
   }
 
@@ -110,28 +105,19 @@ export const WeeklyMissionsBoard: React.FC = () => {
       </header>
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {data.missions.map((m) => (
-          <li
-            key={m.id}
-            className="bg-white rounded-2xl shadow p-4 flex flex-col justify-between border border-gray-200"
-          >
+          <li key={m.id} className="bg-white rounded-2xl shadow p-4 flex flex-col justify-between border border-gray-200">
             <div>
               <h3 className="text-lg font-semibold mb-2">{m.title}</h3>
               <p className="text-sm text-gray-600 mb-2">{m.description}</p>
-              <span className="inline-block text-xs rounded px-2 py-1 bg-gray-100 text-gray-700 mb-1">
-                Tema: {m.theme}
-              </span>
-              <span className="inline-block text-xs rounded px-2 py-1 bg-indigo-100 text-indigo-700 ml-1 mb-1">
-                Dificultad: {m.difficulty}
-              </span>
+              <span className="inline-block text-xs rounded px-2 py-1 bg-gray-100 text-gray-700 mb-1">Tema: {m.theme}</span>
+              <span className="inline-block text-xs rounded px-2 py-1 bg-indigo-100 text-indigo-700 ml-1 mb-1">Dificultad: {m.difficulty}</span>
             </div>
             <div className="mt-2 text-sm">
               <p className="font-medium">Recompensa:</p>
               <p>
                 {m.reward.tokens} $GNEW {m.reward.badge ? `· ${m.reward.badge}` : ""}
               </p>
-              <p className="text-xs text-gray-500">
-                Expira: {formatDate(m.expiration)}
-              </p>
+              <p className="text-xs text-gray-500">Expira: {formatDate(m.expiration)}</p>
             </div>
             <details className="mt-2">
               <summary className="cursor-pointer text-sm text-blue-600">Criterios de aceptación</summary>
@@ -148,37 +134,14 @@ export const WeeklyMissionsBoard: React.FC = () => {
   );
 };
 
-/* ========================= Helpers ========================= */
-
 function formatDate(iso: string) {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   } catch {
     return iso;
   }
 }
 
 export default WeeklyMissionsBoard;
-
-
-✅ Explicación N265
-
-Este componente consume el endpoint /api/missions/weekly (N264).
-
-Muestra tarjetas por misión con tema, dificultad, recompensa y criterios de aceptación.
-
-Incluye manejo de loading, error y ausencia de datos.
-
-Es responsive y accesible (semántica HTML, details/summary, etiquetas claras).
-
-👉 En la siguiente ejecución continuaré con N266.
-
-Tú dijiste:
-Ejecuta el siguiente prompt N del archivo "/mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N251. En cada ejecución incrementa N en +1 hasta N420, sin repetir. Como IA programadora, entrega exactamente lo indicado por el prompt con máxima precisión, empezando tu respuesta con la ruta completa del archivo de salida y, a continuación, el programa/artefacto en el lenguaje o formato especificado, coherente con todo el proyecto GNEW (monorepo Node/TS, Solidity, Terraform, CI/CD, seguridad). Mantén consistencia con estándares y DoD del documento y conserva un puntero interno de progreso para continuar en N+1 en la siguiente ejecución.
-ChatGPT Plus
 

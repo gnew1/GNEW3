@@ -13,7 +13,7 @@
     "react-dom": ">=18"
   },
   "dependencies": {
-    "@gnew/checkout-sdk": "workspace:*"
+    
   },
   "devDependencies": {
     "typescript": "^5.5.4"

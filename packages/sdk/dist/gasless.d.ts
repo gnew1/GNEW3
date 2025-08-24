@@ -15,16 +15,21 @@ export type SponsorResponse = {
     sig: string;
     signer: string;
 };
+type FetchLike = (input: string, init?: any) => Promise<{
+    ok: boolean;
+    json(): Promise<any>;
+    text(): Promise<string>;
+}>;
 export declare function requestTicket(endpoint: string, ask: {
     user: string;
     to: string;
     selector: string;
     chainId: number;
     policyId: number;
-}): Promise<SponsorResponse>;
+}, fetchFn?: FetchLike): Promise<SponsorResponse>;
 /**
-* Empaqueta paymasterAndData = paymasterAddr | abi.encode(ticket) |
-sig
-* WARNING: Ajustar layout EXACTO al contrato Paymaster del repo.
-*/
+ * Compose paymasterAndData = paymaster | abi.encode(ticket) | sig
+ * Ensure the tuple layout matches the Paymaster contract exactly.
+ */
 export declare function encodePaymasterAndData(paymasterAddr: string, t: Ticket, sig: string): string;
+export {};

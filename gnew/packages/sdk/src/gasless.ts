@@ -1,45 +1,60 @@
-(incluido arriba) 
-11) Guía de integración (frontend) 
-1. Detecta chainId y userAA. 
-2. Llama a /ticket con {user, to, selector, chainId, policyId}. 
-3. Crea UserOperation y asigna paymasterAndData = 
-encodePaymasterAndData(...). 
-4. Envía al Bundler; si falla por política/red, reintenta vía GSN. 
-5. Mostrar “Patrocinado por GNEW” + enlace a política aplicada. 
-12) Runbooks (extracto) 
-● Reponer depósito: cast send entryPoint depositTo(paymaster) --value 
-X → verificar en dashboard. 
-● Actualizar allowlist: PR + propuesta DAO → timelock → setRule(...) → anuncio. 
-● Rotar signer: generar PK en Vault → setSponsorSigner(new) → invalidar tickets 
-(>validUntil). 
-● Pausar: owner.pause() (si se añade Pausable) o fijar política vacía en Sponsor y 
-cortar tickets. 
-13) Riesgos clave y mitigaciones 
-● Griefing por micro‑tx: caps por usuario/ventana + costo mínimo por acción + detección 
-de patrón. 
-● Firma filtrada: rotación y hot‑cut; tickets de vida corta (≤5 min). 
-● Desalineación políticas on/off chain: versionado policyId y pruebas de humo en CI 
-que validan paridad. 
-● Out‑of‑deposit: alertas umbral y auto‑top‑up (job opcional con límites). 
-14) Check de DoD (cerrado al entregar) 
-● UX sin fricción en 3 flujos críticos 
-✅
- 
-● Límites activos y observables 
-✅
- 
-● Alertas/metrics operativas 
-✅
- 
-● Documentación y demo reproducible 
-✅
- 
-Siguientes pasos: enlazar con el módulo de Presupuestos DAO (N108) para 
-ejecutar top‑ups automáticos controlados por governance y publicar el dashboard 
-de gasto por guild en la app “Mi economía” (N29). 
-Tú dijiste: 
-programa a nivel de detalle para GNEW N121 13.1 Registro DID y anclaje (Prompt 121) 
-Objetivo: Resolver/emitir DIDs con anclaje en GNEW. Roles: Identidad, Back. Stack: DID Core, 
-Ceramic/ION; anchoring. DoD: CRUD de DID; pruebas interop. 
-ChatGPT Plus 
-Pensó durante 1m 51s 
+import { AbiCoder } from "ethers";
+
+export type Ticket = {
+	user: string;
+	to: string;
+	selector: string; // 0x-prefixed 4-byte selector
+	maxValueWei: string; // uint256 as decimal string
+	maxGasLimit: number; // uint256, safe number for typical limits
+	nonce: number; // uint256
+	validUntil: number; // uint48
+	validAfter: number; // uint48
+	policyId: number; // uint256
+	chainId: number; // uint256
+};
+
+export type SponsorResponse = { ticket: Ticket; sig: string; signer: string };
+
+type FetchLike = (input: string, init?: any) => Promise<{
+	ok: boolean;
+	json(): Promise<any>;
+	text(): Promise<string>;
+}>;
+
+export async function requestTicket(
+	endpoint: string,
+	ask: { user: string; to: string; selector: string; chainId: number; policyId: number },
+	fetchFn?: FetchLike
+): Promise<SponsorResponse> {
+	const f = fetchFn ?? (globalThis as any).fetch;
+	if (!f) throw new Error("fetch_not_available");
+	const r = await f(`${endpoint}/ticket`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(ask),
+	});
+	if (!r.ok) throw new Error(await r.text());
+	return (await r.json()) as SponsorResponse;
+}
+
+/**
+ * Compose paymasterAndData = paymaster | abi.encode(ticket) | sig
+ * Ensure the tuple layout matches the Paymaster contract exactly.
+ */
+export function encodePaymasterAndData(paymasterAddr: string, t: Ticket, sig: string): string {
+	const abi = new AbiCoder();
+	const tupleType = "tuple(address,address,bytes4,uint256,uint256,uint256,uint48,uint48,uint256,uint256)";
+	const data = abi.encode([tupleType, "bytes"], [[
+		t.user,
+		t.to,
+		t.selector,
+		t.maxValueWei,
+		t.maxGasLimit,
+		t.nonce,
+		t.validUntil,
+		t.validAfter,
+		t.policyId,
+		t.chainId,
+	], sig]);
+	return paymasterAddr + data.slice(2);
+}
