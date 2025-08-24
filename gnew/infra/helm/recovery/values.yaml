@@ -1,27 +1,11 @@
 image: 
-repository: gnew/recovery-service 
-tag: v0.1.0 
+  repository: gnew/recovery-service 
+  tag: v0.1.0 
 env: 
-GNEW_RPC_URL: https://rpc.gnew.example 
+  GNEW_RPC_URL: https://rpc.gnew.example 
 resources: 
-requests: { cpu: "50m", memory: "128Mi" } 
-limits: { cpu: "300m", memory: "256Mi" } 
+  requests: { cpu: "50m", memory: "128Mi" } 
+  limits: { cpu: "300m", memory: "256Mi" } 
 ingress: 
-enabled: true 
-hosts: [ "recovery.api.gnew.example" ] 
-DoD — Checklist 
-● Consenso N‑of‑M (on‑chain y batch EIP‑712). 
-● Timelock + expiry + cancelación. 
-● Rotación segura de guardianes con churnDelay. 
-● Servicio/SDK/UI operativos para el flujo. 
-● Tests de éxito, cancelación y tiempos. 
-Próximos pasos 
-● Añadir EIP‑1271 nativo en contrato (verificación multi‑tipo de guardian). 
-● Modo escrow temporal del smart account durante timelock (limitación de acciones 
-críticas). 
-● Panel de guardians con 2FA y registro de actividad; métricas de intento/éxito. 
-Tú dijiste: 
-continua programando para gnew N128 13.8 Portabilidad reputación (Prompt 128) Objetivo: 
-Export/import a otros ecosistemas. Roles: Back, DevRel. DoD: compatibilidad con estándares. 
-ChatGPT Plus 
-Pensó durante 49s 
+  enabled: true 
+  hosts: [ "recovery.api.gnew.example" ] 

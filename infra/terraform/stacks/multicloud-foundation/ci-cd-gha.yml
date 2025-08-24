@@ -1,4 +1,3 @@
-
 ###############################################################################
 # GNEW • N252
 # GitHub Actions workflow for Terraform multicloud stack
@@ -122,24 +121,5 @@ jobs:
       - name: Terraform apply
         run: terraform -chdir=${{ env.TF_DIR }} apply -auto-approve -input=false
 
-
-✔️ Explicación del artefacto (N252)
-
-Implementa el pipeline de CI/CD para la foundation multicloud (AWS+GCP) creado en N251.
-
-Usa OIDC seguro para evitar secretos persistentes.
-
-Validaciones de estilo, sintaxis y seguridad (tfsec) antes de plan/apply.
-
-plan se ejecuta en Pull Requests.
-
-apply solo en main (push).
-
-Compatible con backends local, S3, GCS (no fija ninguno, se puede pasar -backend-config).
-
-👉 En la siguiente ejecución avanzaré a N253.
-
-Tú dijiste:
-Ejecuta el siguiente prompt N del archivo "/mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N251. En cada ejecución incrementa N en +1 hasta N420, sin repetir. Como IA programadora, entrega exactamente lo indicado por el prompt con máxima precisión, empezando tu respuesta con la ruta completa del archivo de salida y, a continuación, el programa/artefacto en el lenguaje o formato especificado, coherente con todo el proyecto GNEW (monorepo Node/TS, Solidity, Terraform, CI/CD, seguridad). Mantén consistencia con estándares y DoD del documento y conserva un puntero interno de progreso para continuar en N+1 en la siguiente ejecución.
-ChatGPT Plus
+# note: narrative content removed; see docs/_imported/ci-cd-gha-notes.md
 

@@ -1,75 +1,22 @@
-image: 
-repository: gnew/vc-service 
-tag: v0.1.0 
-env: 
-GNEW_RPC_URL: https://rpc.gnew.example 
-STATUS_LIST_REGISTRY: "0xStatusListRegistry" 
-ISSUER_PRIVATE_KEY: "vault://kv/identity/issuer" 
-IPFS_NODE_URL: http://ipfs:5001 
-resources: 
-requests: { cpu: "100m", memory: "256Mi" } 
-limits: { cpu: "500m", memory: "512Mi" } 
-ingress: 
-enabled: true 
-hosts: [ "vc.api.gnew.example" ] 
-Guía de integraciones (Frontend/Apps) 
-● Issuance (Back‑office/Legal/Identidad): 
-1. Identidad valida sujeto (KYC/VCs previas/roles). 
-2. Llama issueVC() con method: "sd-jwt" (por defecto) o "bbs". 
-3. Entrega al holder: 
-■ SD‑JWT: sdJwt + disclosures[] + metadatos status (URI, index). 
-■ BBS+: credential JSON‑LD. 
-● Presentation (Holder): 
-1. SD‑JWT: selecciona disclosures a revelar según el caso de uso. 
-2. BBS+: genera VerifiablePresentation con frame (reveal doc). 
-● Verification (Relying Party): 
-1. Resuelve DID del issuer vía N121 (caché local). 
-2. Obtiene status list (o usa caché local ya validada contra contentHash 
-on‑chain). 
-3. Llama /v1/vp/verify offline pasándole cache (encodedList + contentHash). 
-4. Si ok===true y revoked===false → acceso/concesión de rol. 
-Runbooks (extracto) 
-● Publicar/rotar Status List: 
-○ Job nocturno consolida revocaciones, recalcula bitstring, publica a IPFS y llama 
-anchorList(...). 
-○ Alertas cuando el gap de anclaje > 1h o tamaño > 65 k bits (rotar lista). 
-● Revocar VC: 
-○ Panel admin llama /v1/status/revoke {listName,index}. 
-○ Verificar en dashboard que el contentHash anclado cambió (versión +1). 
-● Claves de issuer: 
-○ Rotación semestral; publicar nueva verificationMethod en DID (N121), preservar 
-métodos viejos con revoked en DID Doc si procede. 
-Seguridad y cumplimiento (con Legal) 
-● Minimización de datos: emitir solo claims necesarios; favorecer SD‑JWT/BBS+ con 
-divulgación selectiva. 
-● Trazabilidad: guardar eventLogs de emisión/revocación (hash del VC, no PII). 
-● Consentimiento: termsOfUse con URL de política de privacidad y retención. 
-● Auditoría: hash de listas y de VCs (truncado) en almacenamiento WORM. 
-DoD — Checklist 
-● Emisión SD‑JWT y BBS+ para roles/logros. 
-● Selective disclosure de claims en ambos métodos (interfaces implementadas; usar libs 
-en prod). 
-● Verificación local: firma + estado con caché y contentHash on‑chain. 
-● Revocation list: IPFS + StatusListRegistry anclado y API de revocación. 
-● Pruebas base (unitarias) + e2e guía (rellenar fetch IPFS real). 
-Roadmap incremental 
-1. v0.1 (MVP): SD‑JWT completo con lib estándar; Status List funcional; verificación local 
-con caché. 
-2. v0.2: BBS+ con @mattrglobal/*, JSON‑LD canon + proof; Presentation Exchange. 
-3. v0.3: Panel de emisión y gestión (UI), alertas, dashboards; integración con N120 
-gas‑less para emisiones patrocinadas (onboarding). 
-4. v0.4: Soporte VC revocation reasons, suspensión temporal, CRLs por guild/proyecto. 
-Notas finales 
-● Sustituir los stubs criptográficos por librerías: 
-○ SD‑JWT: @sd-jwt (o equivalente conforme a RFC). 
-○ BBS+: @mattrglobal/bbs-signatures, 
-@mattrglobal/jsonld-signatures-bbs. 
-○ Hash Keccak: ethers o js-sha3. 
-● Reutilizar el DID Registry (N121) para extraer claves del issuer/holder y verificar 
-binding. 
-● Mantener compatibilidad JSON‑LD para futuros bridges con ION/Ceramic. 
-Tú dijiste: 
-programa a nivel de detalle para gnew N123 13.3 Soulbound badges (Prompt 123) Objetivo: 
-Reconocimiento no transferible. Roles: SC, Producto. DoD: mint no transferible; UI de logros. 
-ChatGPT Plus 
-Pensó durante 57s 
+image:
+	repository: gnew/vc-service
+	tag: v0.1.0
+
+env:
+	GNEW_RPC_URL: https://rpc.gnew.example
+	STATUS_LIST_REGISTRY: "0xStatusListRegistry"
+	ISSUER_PRIVATE_KEY: "vault://kv/identity/issuer"
+	IPFS_NODE_URL: http://ipfs:5001
+
+resources:
+	requests:
+		cpu: 100m
+		memory: 256Mi
+	limits:
+		cpu: 500m
+		memory: 512Mi
+
+ingress:
+	enabled: true
+	hosts:
+		- vc.api.gnew.example
