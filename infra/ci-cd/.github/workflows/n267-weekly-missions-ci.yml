@@ -2,100 +2,10 @@
 # GNEW • N267
 # CI/CD pipeline para validar generación de misiones semanales
 # - Ejecuta pruebas unitarias del módulo feedback→misiones (N266).
-# - Asegura calidad del API de misiones (N264) y UI (N265).
-# - Corre lint y type-check.
-# - Genera artefactos de cobertura.
-# - Seguridad: usa dependabot + caching seguro de pnpm.
-
-name: Weekly Missions CI
-
-on:
-  push:
-    branches: ["main"]
-    paths:
-      - "packages/ai/quests/**"
-      - "apps/api/src/routes/missions.ts"
-      - "apps/web/components/missions/**"
-      - ".github/workflows/n267-weekly-missions-ci.yml"
-  pull_request:
-    branches: ["main"]
-
+name: Weekly Missions CI (archived)
+on: { workflow_dispatch: {} }
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-          cache: "pnpm"
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-          run_install: false
-
-      - name: Install deps
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Type check
-        run: pnpm tsc -b
-
-      - name: Run unit tests (Vitest)
-        run: pnpm test -- --coverage
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage/
-
-  # Auditoría de dependencias
-  dependency-review:
+  noop:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
-
-  # Job opcional: Build de UI de misiones para verificar que renderiza correctamente
-  build-web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-          cache: "pnpm"
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 9
-          run_install: false
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @gnew/web build
-
-
-✅ Explicación N267
-
-Se define un workflow CI en GitHub Actions que valida los artefactos de N263–N266.
-
-Incluye lint, type-check, pruebas unitarias con cobertura y build de UI.
-
-Se ejecuta en cada push o PR sobre main y solo cuando afectan rutas relevantes.
-
-Añade dependency-review como medida de seguridad contra vulnerabilidades.
-
-👉 En la siguiente ejecución continuaré con N268.
-
+      - run: echo "Archived. See docs/_imported/.github-workflows-n267-weekly-missions-ci.yml.md"

@@ -40,9 +40,29 @@ formulaHash; anclar nuevo root con version.
 ● Rollback: anclar epoch nuevo con versión previa; UI muestra versión activa. 
 ● Sanidad: dashboard de distribución de scores, drift por cohorte, % penalizaciones. 
 ● Privacidad: evitar incluir PII en scores.jsonl; usar IDs on‑chain / DIDs. 
-7) DoD — Checklist 
-● Decay exponencial por tipo con half‑life configurable. 
-● Anti‑gaming: velocidad, diversidad, anti‑colusión, calidad, identidad (caps). 
-● Auditoría: formulaHash, codeHash, artefactos en IPFS, Merkle root on‑chain. 
-● SDK/UI para lectura y explicación local. 
-● Tests: decay, spam/colusión, reproducibilidad de hashes. 
+image:
+  repository: gnew/reputation-service
+  tag: v0.1.0
+env:
+  GNEW_RPC_URL: https://rpc.gnew.example
+  REPUTATION_REGISTRY: "0xReputationRootRegistry"
+  REP_UPDATER_KEY: "vault://kv/reputation/updater"
+ingress:
+  enabled: true
+  hosts:
+    - rep.api.gnew.example
+cron:
+  schedule: "0 2 * * *"
+  args:
+    - "--config=/app/config/formula.v1.yaml"
+    - "--epoch=$(date +%Y%m%d)"
+    - "--out=/data/out"
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+# Note: original contaminated notes archived at docs/_imported/gnew-infra-helm-reputation-values.yaml.md

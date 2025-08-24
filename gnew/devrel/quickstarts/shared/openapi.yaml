@@ -1,52 +1,22 @@
-```yaml
-openapi: 3.0.3
+openapi: 3.1.0
 info:
-  title: GNEW Public API (Quickstart Subset)
+  title: GNEW Public API (Quickstarts)
   version: 0.1.0
 servers:
   - url: https://api.gnew.example.com
 paths:
   /auth/api-key/verify:
     get:
-      openapi: 3.0.3
-      info:
-        title: GNEW Public API (Quickstart Subset)
-        version: 0.1.0
-      servers:
-        - url: https://api.gnew.example.com
-      paths:
-        /auth/api-key/verify:
-          get:
-            summary: Verifica API Key
-            security:
-              - ApiKeyAuth: []
-            responses:
-              '200':
-                description: OK
-        /v1/projects:
-          get:
-            summary: Lista proyectos visibles para el usuario
-            security:
-              - ApiKeyAuth: []
-            responses:
-              '200':
-                description: OK
-        /v1/tokens/balance:
-          get:
-            summary: Balance de tokens del usuario
-            security:
-              - ApiKeyAuth: []
-            responses:
-              '200':
-                description: OK
-      components:
-        securitySchemes:
-          ApiKeyAuth:
-            type: apiKey
-            in: header
-            name: X-GNEW-API-KEY
-## Requisitos
-
-- Docker o Node.js ≥ 18 (recomendado: usar Docker para entorno limpio)
-
-
+      summary: Verify API Key
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: OK
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-GNEW-API-KEY
+# Note: original contaminated content archived at docs/_imported/gnew-devrel-quickstarts-shared-openapi.yaml.md
