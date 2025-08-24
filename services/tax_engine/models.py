@@ -4,13 +4,11 @@ from typing import Optional, Literal, List, Dict
 class Tx(BaseModel): 
     txid: str 
     date: str                 # ISO date 
-    country_code: str         # ISO-3166 alpha-2 
-    type: 
-Literal["sale","service","grant","interest","royalty","expense"] 
+    country_code: str         # ISO-3166 alpha-2
+    type: Literal["sale","service","grant","interest","royalty","expense"]
     customer_tax_id: Optional[str] = None 
     customer_is_business: bool = False 
-    category: Optional[str] = None   # para mapear a tipos con tasa 
-reducida 
+    category: Optional[str] = None   # para mapear a tipos con tasa reducida
     currency: str 
     amount_net: float 
     vat_rate: Optional[float] = None 
@@ -29,9 +27,9 @@ class WithholdingInput(BaseModel):
     jurisdiction: str 
     payee_id: str 
     payee_tin: Optional[str] = None 
-    amount_gross: float 
-    context: Dict[str,str] = Field(default_factory=dict)  # e.g., 
-{"freelance":"true","reduced":"false"} 
+    amount_gross: float
+    context: Dict[str,str] = Field(default_factory=dict)  # e.g.,
+    # {"freelance":"true","reduced":"false"}
  
 class WithholdingResult(BaseModel): 
     amount_gross: float 
