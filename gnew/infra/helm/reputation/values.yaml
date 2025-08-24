@@ -50,19 +50,29 @@ env:
 ingress:
   enabled: true
   hosts:
-    - rep.api.gnew.example
-cron:
-  schedule: "0 2 * * *"
-  args:
-    - "--config=/app/config/formula.v1.yaml"
-    - "--epoch=$(date +%Y%m%d)"
-    - "--out=/data/out"
-resources:
-  requests:
-    cpu: 200m
-    memory: 512Mi
-  limits:
-    cpu: "1"
-    memory: 1Gi
+    image:
+      repository: gnew/reputation-service
+      tag: v0.1.0
+    env:
+      GNEW_RPC_URL: https://rpc.gnew.example
+      REPUTATION_REGISTRY: "0xReputationRootRegistry"
+      REP_UPDATER_KEY: "vault://kv/reputation/updater"
+    ingress:
+      enabled: true
+      hosts:
+        - rep.api.gnew.example
+    cron:
+      schedule: "0 2 * * *" # diario 02:00 UTC
+      args:
+        - "--config=/app/config/formula.v1.yaml"
+        - "--epoch=$(date +%Y%m%d)"
+        - "--out=/data/out"
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
 
-# Note: original contaminated notes archived at docs/_imported/gnew-infra-helm-reputation-values.yaml.md
+    # Note: original contaminated notes were removed. If needed, see docs/_imported/gnew-infra-helm-reputation-values.yaml.md

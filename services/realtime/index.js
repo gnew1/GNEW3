@@ -5,12 +5,58 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { connectNats, publishWithTrace } from '../common/nats.js'; 
 import { startOtel } from '../common/otel.js'; 
 import { createLogger } from '../common/logger.js'; 
-import { register, collectDefaultMetrics, Counter, Gauge, Histogram } 
-from 'prom-client'; 
+import { register, collectDefaultMetrics, Counter, Gauge, Histogram } from 'prom-client';
 import { v4 as uuid } from 'uuid'; 
 import url from 'url'; 
-import { getPublicKeys, verify as verifyJwt } from 
-'@repo/auth-client'; 
+import { TextDecoder } from 'util';
+import { Buffer } from 'buffer';
+import process from 'process';
+// Minimal auth shim: replace missing '@repo/auth-client' with a local verifier.
+// It expects RS256 JWTs and uses JWKS endpoint from AUTH_JWKS_URL if provided.
+import jwkToPem from 'jwk-to-pem';
+import https from 'https';
+import crypto from 'crypto';
+
+const JWKS_URL = process.env.AUTH_JWKS_URL || '';
+let JWKS_CACHE = null;
+async function getPublicKeys() {
+  if (JWKS_CACHE) return JWKS_CACHE;
+  if (!JWKS_URL) throw new Error('AUTH_JWKS_URL not set');
+  JWKS_CACHE = await new Promise((resolve, reject) => {
+    https.get(JWKS_URL, (res) => {
+      let data = '';
+      res.on('data', (c) => (data += c));
+      res.on('end', () => {
+        try {
+          const jwks = JSON.parse(data);
+          const keys = Object.fromEntries(
+            (jwks.keys || []).map((j) => [j.kid, jwkToPem(j)])
+          );
+          resolve(keys);
+        } catch (e) { reject(e); }
+      });
+  }).on('error', (e) => reject(e));
+  });
+  return JWKS_CACHE;
+}
+
+async function verifyJwt(token) {
+  const [h, p, s] = token.split('.');
+  if (!h || !p || !s) throw new Error('invalid token');
+  const header = JSON.parse(Buffer.from(h, 'base64url').toString('utf8'));
+  const payload = JSON.parse(Buffer.from(p, 'base64url').toString('utf8'));
+  const keys = await getPublicKeys();
+  const pem = keys[header.kid];
+  if (!pem) throw new Error('unknown kid');
+  const verifier = crypto.createVerify('RSA-SHA256');
+  verifier.update(`${h}.${p}`);
+  verifier.end();
+  const ok = verifier.verify(pem, s, 'base64url');
+  if (!ok) throw new Error('bad signature');
+  // exp check
+  if (payload.exp && Date.now() / 1000 > payload.exp) throw new Error('token expired');
+  return payload;
+}
 const SERVICE = 'realtime'; 
 startOtel(SERVICE); 
 const log = createLogger(SERVICE); 
@@ -30,15 +76,10 @@ economy: process.env.ROOM_ECO_SUBJECT || 'economy.events'
 }; 
 // --- Metrics --- 
 collectDefaultMetrics(); 
-const connectionsGauge = new Gauge({ name: 'rt_connections', help: 
-'Active WS connections' }); 
-const roomGauge = new Gauge({ name: 'rt_room_members', help: 'Members 
-per room', labelNames: ['room'] }); 
-const queueGauge = new Gauge({ name: 'rt_send_queue', help: 'Queued 
-messages per client' }); 
-const dropCounter = new Counter({ name: 'rt_dropped_messages_total', 
-help: 'Messages dropped due to backpressure', labelNames: ['reason'] 
-}); 
+const connectionsGauge = new Gauge({ name: 'rt_connections', help: 'Active WS connections' });
+const roomGauge = new Gauge({ name: 'rt_room_members', help: 'Members per room', labelNames: ['room'] });
+const queueGauge = new Gauge({ name: 'rt_send_queue', help: 'Queued messages per client' });
+const dropCounter = new Counter({ name: 'rt_dropped_messages_total', help: 'Messages dropped due to backpressure', labelNames: ['reason'] });
 const broadcastLatency = new Histogram({ 
 name: 'rt_broadcast_latency_seconds', 
 help: 'End-to-end latency from NATS ingest to client send', 
@@ -114,22 +155,18 @@ function removePresence(userId, room) {
   broadcastPresence(room); 
 } 
 function broadcastPresence(room) { 
-  const list = Array.from((presence.rooms.get(room) || new 
-Map()).entries()).map(([id, v]) => ({ id, ...v })); 
+  const list = Array.from((presence.rooms.get(room) || new Map()).entries()).map(([id, v]) => ({ id, ...v }));
   roomGauge.set({ room }, list.length); 
-  const msg = JSON.stringify({ type: 'presence', room, members: list, 
-ts: Date.now() }); 
+  const msg = JSON.stringify({ type: 'presence', room, members: list, ts: Date.now() });
   for (const c of clients.values()) { 
     if (c.rooms.has(room)) safeSend(c, msg); 
   } 
   for (const [, sse] of sseClients) { 
-    if (sse.rooms.has(room)) sse.res.write(`event: presence\ndata: 
-${msg}\n\n`); 
+    if (sse.rooms.has(room)) sse.res.write(`event: presence\ndata: ${msg}\n\n`); 
   } 
 } 
  
-const clients = new Map(); // id -> { ws, userId, rooms:Set, queue:[], 
-lastPong:number } 
+const clients = new Map(); // id -> { ws, userId, rooms:Set, queue:[], lastPong:number }
 function safeSend(client, data) { 
   // backpressure: cola con shedding de más antiguos 
   if (client.ws.readyState !== WebSocket.OPEN) return; 
@@ -179,9 +216,9 @@ setInterval(() => {
   for (const c of clients.values()) { 
     try { 
       c.ws.ping(); 
-    } catch {} 
+    } catch (e) { /* ignore ping error */ } 
     if (now - c.lastPong > PING_INTERVAL + PONG_TIMEOUT) { 
-      try { c.ws.terminate(); } catch {} 
+      try { c.ws.terminate(); } catch (e) { /* ignore terminate error */ } 
     } 
   } 
 }, PING_INTERVAL); 
