@@ -20,9 +20,16 @@ export default function DSARAdminPage() {
     <div className="p-6 space-y-6"> 
       <h1 className="text-2xl font-semibold">DSAR Console</h1> 
       <table className="w-full"> 
-        <thead><tr><th 
-className="text-left">ID</th><th>Sujeto</th><th>Tipo</th><th>Estado</t
- h><th>Vence</th><th></th></tr></thead> 
+        <thead>
+          <tr>
+            <th className="text-left">ID</th>
+            <th>Sujeto</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Vence</th>
+            <th></th>
+          </tr>
+        </thead> 
         <tbody> 
           {rows.map(r=>( 
             <tr key={r.id} className="border-t"> 
@@ -31,12 +38,17 @@ className="text-left">ID</th><th>Sujeto</th><th>Tipo</th><th>Estado</t
               <td>{r.type}</td> 
               <td>{r.status}</td> 
               <td>{new Date(r.dueAt).toLocaleDateString()}</td> 
-              <td><button className="px-2 py-1 border rounded" 
-onClick={async ()=>{ 
-                const d = await 
-fetch(`/api/dsar/requests/${r.id}`).then(r=>r.json()); 
-                setSel(d); 
-              }}>Ver</button></td> 
+              <td>
+                <button
+                  className="px-2 py-1 border rounded"
+                  onClick={async () => {
+                    const d = await fetch(`/api/dsar/requests/${r.id}`).then(r=>r.json());
+                    setSel(d);
+                  }}
+                >
+                  Ver
+                </button>
+              </td> 
             </tr> 
           ))} 
         </tbody> 
@@ -45,24 +57,34 @@ fetch(`/api/dsar/requests/${r.id}`).then(r=>r.json());
       {sel && ( 
         <div className="p-4 border rounded space-y-3"> 
           <div className="flex items-center justify-between"> 
-            <h2 className="text-xl font-medium">Solicitud 
-{sel.id}</h2> 
-            <span className="text-sm 
-text-gray-500">{sel.status}</span> 
+            <h2 className="text-xl font-medium">Solicitud {sel.id}</h2> 
+            <span className="text-sm text-gray-500">{sel.status}</span> 
           </div> 
           <div className="flex gap-2"> 
-            <button className="px-3 py-2 border rounded" 
-onClick={()=>fetch(`/api/dsar/requests/${sel.id}/verify`,{method:"POST
- "}).then(load)}>Verificar</button> 
-            <button className="px-3 py-2 border rounded" 
-onClick={()=>fetch(`/api/dsar/requests/${sel.id}/approve`,{method:"POS
- T"}).then(load)}>Aprobar</button> 
-            <button className="px-3 py-2 border rounded" 
-onClick={()=>fetch(`/api/dsar/requests/${sel.id}/export`,{method:"POST
- "}).then(load)}>Export</button> 
-            <button className="px-3 py-2 border rounded" 
-onClick={()=>fetch(`/api/dsar/requests/${sel.id}/erase`,{method:"POST"
- }).then(load)}>Borrar/Anon</button> 
+            <button
+              className="px-3 py-2 border rounded"
+              onClick={() => fetch(`/api/dsar/requests/${sel.id}/verify`, { method: "POST" }).then(load)}
+            >
+              Verificar
+            </button> 
+            <button
+              className="px-3 py-2 border rounded"
+              onClick={() => fetch(`/api/dsar/requests/${sel.id}/approve`, { method: "POST" }).then(load)}
+            >
+              Aprobar
+            </button> 
+            <button
+              className="px-3 py-2 border rounded"
+              onClick={() => fetch(`/api/dsar/requests/${sel.id}/export`, { method: "POST" }).then(load)}
+            >
+              Export
+            </button> 
+            <button
+              className="px-3 py-2 border rounded"
+              onClick={() => fetch(`/api/dsar/requests/${sel.id}/erase`, { method: "POST" }).then(load)}
+            >
+              Borrar/Anon
+            </button> 
           </div> 
           <div> 
             <h3 className="font-semibold">Artefactos</h3> 
@@ -77,36 +99,25 @@ onClick={()=>fetch(`/api/dsar/requests/${sel.id}/erase`,{method:"POST"
 function Artifacts({ id }: { id: string }) { 
   const [items, setItems] = React.useState<any[]>([]); 
   useEffect(()=>{ 
-fetch(`/api/dsar/requests/${id}/artifacts`).then(r=>r.json()).then(j=>
- setItems(j.items)); }, [id]); 
+    fetch(`/api/dsar/requests/${id}/artifacts`)
+      .then(r=>r.json())
+      .then(j=> setItems(j.items));
+  }, [id]); 
   return ( 
     <ul className="list-disc pl-6"> 
       {items.map(a=>( 
         <li key={a.id}> 
           {a.name} — {a.sha256.slice(0,12)}… 
-          <a className="ml-2 underline" 
-href={`/files?path=${encodeURIComponent(a.path)}`} 
-target="_blank">Descargar</a> 
+          <a
+            className="ml-2 underline"
+            href={`/files?path=${encodeURIComponent(a.path)}`}
+            target="_blank"
+          >
+            Descargar
+          </a> 
         </li> 
       ))} 
     </ul> 
   ); 
 } 
  
-API proxy en web (para unificar dominios) 
-/apps/web/pages/api/dsar/[...path].ts 
-import type { NextApiRequest, NextApiResponse } from "next"; 
-export default async function 
-handler(req:NextApiRequest,res:NextApiResponse){ 
-  const url = `${process.env.DSAR_API}/v1/dsar/${(req.query.path as 
-string[]).join("/")}`; 
-  const r = await fetch(url, { method: req.method, headers: { 
-"Content-Type":"application/json" }, body: 
-["POST","PUT","PATCH"].includes(req.method!) ? 
-JSON.stringify(req.body): undefined, credentials:"include" as any }); 
-  const buf = await r.arrayBuffer(); 
-  res.status(r.status).send(Buffer.from(buf)); 
-} 
- 
- 
-CI/CD (GitHub Actions) 

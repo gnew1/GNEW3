@@ -1,10 +1,10 @@
 import { create } from "zustand"; 
  
-type Catalog = { uses:any[]; dataCategories:any[]; purposes:any[]; 
-matrixVersion:string }; 
-type Record = { dataCategoryKey:string; processingUseKey:string; 
-state:"granted"|"denied"|"limited"|"withdrawn"; policyVersion:string 
-}; 
+type Use = { key:string; title:string };
+type DataCategory = { key:string; title:string };
+type Purpose = { key:string; title:string };
+type Catalog = { uses:Use[]; dataCategories:DataCategory[]; purposes:Purpose[]; matrixVersion:string };
+type Record = { dataCategoryKey:string; processingUseKey:string; state:"granted"|"denied"|"limited"|"withdrawn"; policyVersion:string };
 type State = { 
   catalog?: Catalog; 
   state?: { records: Record[] }; 
@@ -19,14 +19,13 @@ export const useConsentStore = create<State>((set, get) => ({
     const res = await fetch("/api/consent/catalog"); set({ catalog: 
 await res.json() }); 
   }, 
-  loadState: async (subjectId) => { 
+  loadState: async (subjectId: string) => { 
     const res = await fetch(`/api/consent/${subjectId}`); set({ state: 
 await res.json() }); 
   }, 
-  toggle: (dcKey, useKey) => { 
+  toggle: (dcKey: string, useKey: string) => { 
     const st = get().state!; 
-    const rec = st.records.find(r => r.dataCategoryKey===dcKey && 
-r.processingUseKey===useKey); 
+    const rec = st.records.find((r: Record) => r.dataCategoryKey===dcKey && r.processingUseKey===useKey); 
     if (rec) rec.state = rec.state === "granted" ? "denied" : 
 "granted"; 
     else st.records.push({ dataCategoryKey: dcKey, processingUseKey: 
@@ -34,10 +33,10 @@ useKey, state: "granted", policyVersion: get().catalog!.matrixVersion
 }); 
     set({ state: { ...st } }); 
   }, 
-  save: async (subjectId) => { 
+  save: async (subjectId: string) => { 
     const st = get().state!; 
     const body = { 
-      decisions: st.records.map(r => ({ 
+  decisions: st.records.map((r: Record) => ({ 
         purposeKey: "user_control", // ejemplo: según matriz activa 
         dataCategoryKey: r.dataCategoryKey, 
         processingUseKey: r.processingUseKey, 
@@ -52,5 +51,3 @@ JSON.stringify(body) });
   } 
 })); 
  
- 
-OpenAPI (extracto) 

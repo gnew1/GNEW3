@@ -1,20 +1,28 @@
 "use client"; 
 import React, { useEffect, useState } from "react"; 
  
-// Flujo granular para “gestión por finalidad y canal” 
-(email/sms/push/onchain) 
-export default function ChannelFlowModal({ subjectId, open, onClose 
-}:{ subjectId:string; open:boolean; onClose:()=>void }) { 
+// Flujo granular para “gestión por finalidad y canal” (email/sms/push/onchain)
+type ConsentState = {
+  email: { marketing: boolean };
+  sms: { notifications: boolean };
+  push: { notifications: boolean };
+  onchain: { marketing: boolean };
+};
+
+export default function ChannelFlowModal({ subjectId, open, onClose }:{ subjectId:string; open:boolean; onClose:()=>void }) { 
   const [mv, setMv] = useState<string>("v1"); 
-  const [state, setState] = useState<any>({ email: { marketing: false 
-}, sms: { notifications: false }, push: { notifications: false }, 
-onchain: { marketing: false } }); 
+  const [state, setState] = useState<ConsentState>({
+    email: { marketing: false },
+    sms: { notifications: false },
+    push: { notifications: false },
+    onchain: { marketing: false },
+  }); 
  
   useEffect(() => { 
     if (!open) return; 
-    
-fetch("/api/consent/catalog").then(r=>r.json()).then((c)=>setMv(c.matr
- ixVersion)); 
+    fetch("/api/consent/catalog")
+      .then(r=>r.json())
+      .then((c)=>setMv(c.matrixVersion)); 
   }, [open]); 
  
   const save = async () => { 
@@ -59,22 +67,30 @@ space-y-4">
         <h2 className="text-xl font-semibold">Preferencias por 
 canal</h2> 
         <Section title="Email"> 
-          <Toggle label="Marketing (boletines/ofertas)" 
-checked={state.email.marketing} onChange={(v)=>setState((s:any)=>({ 
-...s, email: { ...s.email, marketing: v } }))}/> 
+          <Toggle
+            label="Marketing (boletines/ofertas)"
+            checked={state.email.marketing}
+            onChange={(v)=>setState((s)=>({ ...s, email: { ...s.email, marketing: v } }))}
+          /> 
         </Section> 
         <Section title="SMS / Push"> 
-          <Toggle label="Notificaciones de seguridad y cuenta" 
-checked={state.sms.notifications} onChange={(v)=>setState((s:any)=>({ 
-...s, sms: { notifications: v } }))}/> 
-          <Toggle label="Notificaciones push en app" 
-checked={state.push.notifications} onChange={(v)=>setState((s:any)=>({ 
-...s, push: { notifications: v } }))}/> 
+          <Toggle
+            label="Notificaciones de seguridad y cuenta"
+            checked={state.sms.notifications}
+            onChange={(v)=>setState((s)=>({ ...s, sms: { notifications: v } }))}
+          /> 
+          <Toggle
+            label="Notificaciones push en app"
+            checked={state.push.notifications}
+            onChange={(v)=>setState((s)=>({ ...s, push: { notifications: v } }))}
+          /> 
         </Section> 
         <Section title="On‑chain"> 
-          <Toggle label="Marketing (airdrops/POAPs)" 
-checked={state.onchain.marketing} onChange={(v)=>setState((s:any)=>({ 
-...s, onchain: { marketing: v } }))}/> 
+          <Toggle
+            label="Marketing (airdrops/POAPs)"
+            checked={state.onchain.marketing}
+            onChange={(v)=>setState((s)=>({ ...s, onchain: { marketing: v } }))}
+          /> 
         </Section> 
         <div className="flex justify-end gap-2"> 
           <button className="px-4 py-2 border rounded" 

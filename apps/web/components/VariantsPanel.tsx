@@ -29,8 +29,8 @@ boolean }) {
     ]; 
     const voters = Array.from({ length: 120 }, (_, i) => ({ 
       id: `v${i + 1}`, 
-      weight: i < 12 ? 10 : i < 40 ? 3 : 1, // 10% whales (peso 10), 
-28% mid (peso 3), resto 1 
+      // 10% whales (peso 10), 28% mid (peso 3), resto 1
+      weight: i < 12 ? 10 : i < 40 ? 3 : 1,
       credits: 9, 
       segment: i < 40 ? "core" : "new", 
     })); 
@@ -235,42 +235,3 @@ votantes más influyentes se dividen en identidades.
     </section> 
   ); 
 } 
- 
-/apps/web/app/(dashboard)/governance/variants/page.tsx 
-import VariantsPanel from "@/components/VariantsPanel"; 
- 
-export default function Page() { 
-  return ( 
-    <main className="p-6 max-w-5xl mx-auto"> 
-      <h1 className="text-2xl font-bold mb-4">Panel: Comparar 
-variantes de voto</h1> 
-      <VariantsPanel demo /> 
-    </main> 
-  ); 
-} 
- 
- 
-Cómo usarlo (rápido) 
-1. Backend: expone POST /governance/variants/compare (gateway). 
- 
-2. Frontend: página /governance/variants con el panel “Comparador de variantes”; 
-dataset demo incluido. 
- 
-3. Métricas entregadas (DoD): 
- 
-○ Participación (turnoutRate). 
-○ Concentración/Equidad (giniByOption, top10Share). 
-○ Robustez (estabilidad, flip rate, sensibilidad Sybil). 
-○ Margen decisivo y desacuerdo. 
-Latencia: cálculo es O(n) por variante + simulaciones (configurable, default 200–250). Para 
-proyectos reales, puedes: 
-● Bajar perturbations a 100 para P95 < 2s en ~5–10k balotas. 
-● Hacer thinning de balotas históricas (últimas N por usuario). 
-● Cachear por hash de entrada en un LRU (si quieres, replicar el patrón del N18). 
-¿Quieres que añada tests (Vitest) y un seed real del monorrepo (JSON) para CI y 
-benchmarking? 
-Tú dijiste: 
-N20 Objetivo: Métricas clave: participación, tiempos, delegación. Roles: Data/Frontend, 
-DevOps. Entregables: dashboard React + API métricas. DoD: refresh ≤ 10 s, export CSV. 
-ChatGPT Plus 
-Pensó durante 46s 
