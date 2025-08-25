@@ -16,7 +16,6 @@ import pinoHttp from "pino-http";
 import { Pool } from "pg";
 import { z } from "zod";
 import jwt, { JwtPayload } from "jsonwebtoken";
-import { ensureMigrations } from "./db/migrate";
 import { parseCsvOrJson } from "./etl/parser";
 import { runReconciliation } from "./engine/reconcile";
 
@@ -31,20 +30,20 @@ const ALERT_DIFF_THRESHOLD = Number(process.env.ALERT_DIFF_THRESHOLD ?? 0.05); /
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const httpLogger = pinoHttp({ logger });
-// Create DB pool: real Postgres by default; fallback to in-memory pg-mem for local dev/tests
-let pool: Pool;
-if (process.env.PG_MEM === "1" || DATABASE_URL === "pgmem" || DATABASE_URL === "mem") {
-  // Lazy import to avoid bundling in production
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  const { newDb } = await import("pg-mem");
-  // Disable strict AST coverage to tolerate common DDL features not fully supported
-  const db = newDb({ noAstCoverageCheck: true });
-  const pgMem = db.adapters.createPg();
-  const MemPool = pgMem.Pool as unknown as typeof Pool;
-  pool = new MemPool() as unknown as Pool;
-} else {
-  pool = new Pool({ connectionString: DATABASE_URL });
+
+async function createPool(): Promise<Pool> {
+  if (process.env.PG_MEM === "1" || DATABASE_URL === "pgmem" || DATABASE_URL === "mem") {
+    // Lazy import to avoid bundling in production
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    const { newDb } = await import("pg-mem");
+    // Disable strict AST coverage to tolerate common DDL features not fully supported
+    const db = newDb({ noAstCoverageCheck: true });
+    const pgMem = db.adapters.createPg();
+    const MemPool = pgMem.Pool as unknown as typeof Pool;
+    return new MemPool() as unknown as Pool;
+  }
+  return new Pool({ connectionString: DATABASE_URL });
 }
 
 type User = { sub: string; roles?: string[]; email?: string };
@@ -75,17 +74,21 @@ function requireRole(role: string) {
   };
 }
 
-const app: express.Express = express();
-app.use(express.json({ limit: "10mb" }));
-app.use(httpLogger);
-app.use(authOptional);
+export async function createApp(): Promise<{ app: express.Express; pool: Pool }> {
+  const pool = await createPool();
+  const app: express.Express = express();
+  app.use(express.json({ limit: "10mb" }));
+  app.use(httpLogger);
+  app.use(authOptional);
 
 // ---- Health & migrations
-app.get("/healthz", async (_req: express.Request, res: express.Response) => res.json({ ok: true }));
-app.post("/admin/migrate", requireRole("recon:admin"), async (_req: express.Request, res: express.Response) => {
-  await ensureMigrations(pool);
-  res.json({ ok: true });
-});
+  app.get("/healthz", async (_req: express.Request, res: express.Response) => res.json({ ok: true }));
+  // Lazy import ensureMigrations to avoid circulars when used by e2e
+  app.post("/admin/migrate", requireRole("recon:admin"), async (_req: express.Request, res: express.Response) => {
+    const { ensureMigrations } = await import("./db/migrate");
+    await ensureMigrations(pool);
+    res.json({ ok: true });
+  });
 
 // ---- ETL: proveedores (CSV o JSON array)
 const UploadSchema = z.object({
@@ -112,7 +115,7 @@ const UploadSchema = z.object({
 });
 
 // ---- Ingesta de movimientos del proveedor
-app.post("/provider/upload", requireRole("recon:ingest"), async (req: express.Request, res: express.Response) => {
+  app.post("/provider/upload", requireRole("recon:ingest"), async (req: express.Request, res: express.Response) => {
   try {
     const body = UploadSchema.parse(req.body);
     const rows = parseCsvOrJson({
@@ -159,7 +162,7 @@ app.post("/provider/upload", requireRole("recon:ingest"), async (req: express.Re
   } catch (e: unknown) {
     res.status(400).json({ error: "bad_request", detail: errorMessage(e) });
   }
-});
+  });
 
 // ---- ETL: ledger (CSV o JSON array)
 const LedgerUploadSchema = z.object({
@@ -183,7 +186,7 @@ const LedgerUploadSchema = z.object({
   tz: z.string().optional(),
 });
 
-app.post("/ledger/upload", requireRole("recon:ingest"), async (req: express.Request, res: express.Response) => {
+  app.post("/ledger/upload", requireRole("recon:ingest"), async (req: express.Request, res: express.Response) => {
   try {
     const body = LedgerUploadSchema.parse(req.body);
     const rows = parseCsvOrJson({
@@ -221,7 +224,7 @@ app.post("/ledger/upload", requireRole("recon:ingest"), async (req: express.Requ
   } catch (e: unknown) {
     res.status(400).json({ error: "bad_request", detail: errorMessage(e) });
   }
-});
+  });
 
 // ---- Ejecutar conciliación
 const RunSchema = z.object({
@@ -232,7 +235,7 @@ const RunSchema = z.object({
   tag: z.string().optional(),
 });
 
-app.post("/reconcile/run", requireRole("recon:run"), async (req: express.Request, res: express.Response) => {
+  app.post("/reconcile/run", requireRole("recon:run"), async (req: express.Request, res: express.Response) => {
   try {
     const p = RunSchema.parse(req.body);
     const out = await runReconciliation(pool, p);
@@ -246,38 +249,33 @@ app.post("/reconcile/run", requireRole("recon:run"), async (req: express.Request
   } catch (e: unknown) {
     res.status(400).json({ error: "bad_request", detail: errorMessage(e) });
   }
-});
+  });
 
 // ---- Consultar run
-app.get("/reconcile/runs/:id", requireRole("recon:read"), async (req: express.Request, res: express.Response) => {
+  app.get("/reconcile/runs/:id", requireRole("recon:read"), async (req: express.Request, res: express.Response) => {
   const id = String(req.params.id);
   const r = await pool.query(`select id, provider, currency, params, summary, created_at from recon_runs where id=$1`, [id]);
   if (!r.rowCount) return res.status(404).json({ error: "not_found" });
   res.json(r.rows[0]);
-});
+  });
 
 // ---- Health listing simple
-app.get("/reconcile/runs", requireRole("recon:read"), async (_req: express.Request, res: express.Response) => {
-  const r = await pool.query(`select id, provider, currency, created_at, summary from recon_runs order by created_at desc limit 50`);
-  res.json(r.rows);
-});
+  app.get("/reconcile/runs", requireRole("recon:read"), async (_req: express.Request, res: express.Response) => {
+    const r = await pool.query(`select id, provider, currency, created_at, summary from recon_runs order by created_at desc limit 50`);
+    res.json(r.rows);
+  });
 
 // ---- Error handler básico
-app.use((err: unknown, _req: express.Request, res: express.Response) => {
-  logger.error({ err }, "unhandled");
-  res.status(500).json({ error: "internal_error", detail: errorMessage(err) });
-  // no further middleware
-});
+  app.use((err: unknown, _req: express.Request, res: express.Response) => {
+    logger.error({ err }, "unhandled");
+    res.status(500).json({ error: "internal_error", detail: errorMessage(err) });
+    // no further middleware
+  });
 
-// ---- Boot
-// Ensure DB schema on boot (best-effort)
-ensureMigrations(pool).catch((err) => logger.warn({ err }, "migrations_on_boot_failed"));
+  return { app, pool };
+}
 
-app.listen(PORT, () => {
-  logger.info({ port: PORT, mem: process.env.PG_MEM === "1" || DATABASE_URL === "pgmem" || DATABASE_URL === "mem" }, "recon-service_started");
-});
-
-export default app;
+export default createApp;
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);

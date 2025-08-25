@@ -10,5 +10,9 @@
  * Despliegue: Iterativo.
  */
 import express from "express";
-declare const app: express.Express;
-export default app;
+import { Pool } from "pg";
+export declare function createApp(): Promise<{
+    app: express.Express;
+    pool: Pool;
+}>;
+export default createApp;

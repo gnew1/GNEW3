@@ -2,6 +2,13 @@ import { randomUUID } from "crypto";
 export async function runReconciliation(pool, p) {
     const client = await pool.connect();
     const runId = randomUUID();
+    function toMs(t) {
+        return t instanceof Date ? t.getTime() : new Date(t).getTime();
+    }
+    function pickExternalRef(row) {
+        const v = row["external_ref"];
+        return typeof v === "string" ? v : v;
+    }
     try {
         await client.query("begin");
         await client.query(`insert into recon_runs(id, provider, currency, params) values($1,$2,$3,$4)`, [runId, p.provider, p.currency, p]);
@@ -15,13 +22,28 @@ export async function runReconciliation(pool, p) {
         const max = new Date(w.rows[0].max_ts);
         const from = new Date(min.getTime() - p.dateWindowDays * 86400 * 1000);
         const to = new Date(max.getTime() + p.dateWindowDays * 86400 * 1000);
-        const prov = await client.query(`select id, amount::float8 as amount, currency, ts::text as ts, external_ref from provider_tx
+        const prov = await client.query(`select id, amount, currency, ts, external_ref from provider_tx
        where provider=$1 and currency=$2 and ts between $3 and $4 order by ts asc`, [p.provider, p.currency, from.toISOString(), to.toISOString()]);
-        const ledg = await client.query(`select id, amount::float8 as amount, currency, ts::text as ts, external_ref from ledger_tx
+        const ledg = await client.query(`select id, amount, currency, ts, external_ref from ledger_tx
        where currency=$1 and ts between $2 and $3 order by ts asc`, [p.currency, from.toISOString(), to.toISOString()]);
+        // Coerce numeric strings to numbers for computations
+        const provRows = prov.rows.map((r) => ({
+            id: r.id,
+            amount: Number(r.amount),
+            currency: r.currency,
+            ts: r.ts,
+            external_ref: pickExternalRef(r),
+        }));
+        const ledgRows = ledg.rows.map((r) => ({
+            id: r.id,
+            amount: Number(r.amount),
+            currency: r.currency,
+            ts: r.ts,
+            external_ref: pickExternalRef(r),
+        }));
         const ledgerByTxid = new Map();
         const ledgerUnused = new Set();
-        for (const l of ledg.rows) {
+        for (const l of ledgRows) {
             if (l.external_ref)
                 ledgerByTxid.set(l.external_ref, l);
             ledgerUnused.add(l.id);
@@ -30,7 +52,7 @@ export async function runReconciliation(pool, p) {
         let providerTotal = 0;
         let matchedTotal = 0;
         // Pass 1: txid exact
-        for (const r of prov.rows) {
+        for (const r of provRows) {
             providerTotal += r.amount;
             let matched = false;
             if (r.external_ref && ledgerByTxid.has(r.external_ref)) {
@@ -46,7 +68,7 @@ export async function runReconciliation(pool, p) {
             }
         }
         // Build quick index for amount/date matches among unused ledger tx
-        const ledgerRest = ledg.rows.filter((x) => ledgerUnused.has(x.id));
+        const ledgerRest = ledgRows.filter((x) => ledgerUnused.has(x.id));
         const provUnmatchedIdx = new Map(); // index in matches array
         matches.forEach((m, i) => { if (m.status === "unmatched")
             provUnmatchedIdx.set(m.provider_tx_id, i); });
@@ -56,13 +78,13 @@ export async function runReconciliation(pool, p) {
             // Find closest provider unmatched by abs(amount diff) then date diff
             let best = null;
             for (const [provId, i] of provUnmatchedIdx.entries()) {
-                const pr = prov.rows.find((r) => r.id === provId);
+                const pr = provRows.find((r) => r.id === provId);
                 if (pr.currency !== l.currency)
                     continue;
                 const amtDiff = Math.abs(pr.amount - l.amount);
                 const rel = Math.abs(amtDiff) / Math.max(Math.abs(pr.amount), 1);
                 if (rel <= tolerance) {
-                    const dateDiff = Math.abs(new Date(pr.ts).getTime() - new Date(l.ts).getTime());
+                    const dateDiff = Math.abs(toMs(pr.ts) - toMs(l.ts));
                     if (dateDiff <= windowMs) {
                         const score = 1 - (rel + dateDiff / (windowMs + 1)) / 2;
                         if (!best || score > best.score)

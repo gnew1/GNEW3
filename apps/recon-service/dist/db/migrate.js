@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 export async function ensureMigrations(pool) {
     const client = await pool.connect();
     try {
@@ -16,6 +17,7 @@ export async function ensureMigrations(pool) {
     }
 }
 async function execFile(client, fname) {
-    const sql = fs.readFileSync(path.join(__dirname, "migrations", fname), "utf-8");
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const sql = fs.readFileSync(path.join(here, "migrations", fname), "utf-8");
     await client.query(sql);
 }
