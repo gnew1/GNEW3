@@ -1,7 +1,11 @@
 import { ethers } from "ethers";
 export type Delegation = ethers.Contract;
 export declare const scopes: {
-    TOKEN_VOTES: any;
-    REPUTATION_VOTES: any;
+    readonly TOKEN_VOTES: string;
+    readonly REPUTATION_VOTES: string;
 };
-export declare function getDelegation(address: string, signerOrProvider: ethers.Signer | ethers.Provider): Delegation;
+/**
+ * Return a Delegation contract instance using a provided ABI.
+ * This removes any hard dependency on @gnew/contracts artifacts.
+ */
+export declare function getDelegation(address: string, signerOrProvider: ethers.Signer | ethers.Provider, abi: ethers.InterfaceAbi): Delegation;

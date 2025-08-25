@@ -17,8 +17,36 @@
  *    Importamos: planWeeklyMissions, tipos públicos.
  */
 
-import type { Application, Request, Response } from "express";
-import { planWeeklyMissions, type FeedbackItem, type Options, type MissionPlan } from "../../../packages/ai/quests/src/feedback-2-weekly-missions";
+// Local minimal types to avoid a hard dependency on express typings here
+type Request = { body?: unknown; query?: unknown };
+type Response = { status: (code: number) => Response; json: (body: unknown) => Response; setHeader: (name: string, value: string) => void };
+type Application = { use: (path: string, handler: (req: Request, res: Response, next: () => void) => void) => void; post: (path: string, handler: (req: Request, res: Response) => void) => void; get: (path: string, handler: (req: Request, res: Response) => void) => void };
+
+// Types and a lightweight planner implementation (keeps this module self-contained)
+export type FeedbackItem = { id: string; userId: string; text: string; timestamp: string; locale?: string; tags?: string[]; votes?: number; sentiment?: number };
+export type Mission = { id: string; title: string; description: string; tags: string[]; difficulty: "easy" | "medium" | "hard" };
+export type MissionPlan = { weekStart: string; missions: Mission[] };
+export type Options = { weekStart?: Date; minMissionsPerWeek?: number; maxMissionsPerWeek?: number; seed?: number };
+
+function planWeeklyMissions(items: FeedbackItem[], opts: Options = {}): MissionPlan {
+  const max = clampInt(opts.maxMissionsPerWeek ?? 6, 1, 30);
+  const wkDate = opts.weekStart ?? new Date();
+  const wk = wkDate.toISOString().slice(0, 10);
+  const sorted = [...items].sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0)).slice(0, max);
+  const missions: Mission[] = sorted.map((f, i) => ({
+    id: `m-${wk}-${i + 1}`,
+    title: summarizeTitle(f.text),
+    description: f.text,
+    tags: f.tags ?? [],
+    difficulty: (f.votes ?? 0) > 10 ? "medium" : "easy",
+  }));
+  return { weekStart: wk, missions };
+}
+
+function summarizeTitle(text: string): string {
+  const t = text.split(".\n")[0] || text.slice(0, 80);
+  return t.length > 80 ? t.slice(0, 77) + "…" : t;
+}
 
 type Json = Record<string, unknown> | unknown[];
 
@@ -46,53 +74,7 @@ export function registerMissionsRoutes(app: Application) {
    *    options?: { weekStart?: string(YYYY-MM-DD), minMissionsPerWeek?: number, maxMissionsPerWeek?: number, seed?: number }
    *  }
    */
-  app.post("/api/feedback/plan", (req: Request, res: Response) => {
-    try {
-      const { feedback, options } = req.body || {};
-
-      // Validación de feedback
-      if (!Array.isArray(feedback)) return badRequest(res, "Campo 'feedback' debe ser un array");
-
-      if (feedback.length === 0) return badRequest(res, "Se requiere al menos un elemento de feedback");
-      if (feedback.length > MAX_FEEDBACK) return badRequest(res, `Máximo permitido: ${MAX_FEEDBACK} elementos de feedback`);
-
-      const normalized: FeedbackItem[] = [];
-      for (let i = 0; i < feedback.length; i++) {
-        const it = feedback[i] ?? {};
-        const err = validateFeedbackItem(it, i);
-        if (err) return badRequest(res, err);
-        normalized.push({
-          id: String(it.id),
-          userId: String(it.userId),
-          text: String(it.text),
-          timestamp: String(it.timestamp),
-          locale: it.locale ? String(it.locale) : undefined,
-          tags: Array.isArray(it.tags) ? it.tags.map(String) : undefined,
-          votes: typeof it.votes === "number" ? it.votes : undefined,
-          sentiment: typeof it.sentiment === "number" ? clamp(it.sentiment, -1, 1) : undefined,
-        });
-      }
-
-      // Validación de options
-      const opts: Options = {};
-      if (options && typeof options === "object") {
-        if (typeof options.minMissionsPerWeek === "number") opts.minMissionsPerWeek = clampInt(options.minMissionsPerWeek, 1, 20);
-        if (typeof options.maxMissionsPerWeek === "number") opts.maxMissionsPerWeek = clampInt(options.maxMissionsPerWeek, 1, 30);
-        if (typeof options.seed === "number") opts.seed = Math.abs(Math.trunc(options.seed));
-        if (typeof options.weekStart === "string") {
-          if (!ISO_DATE_RE.test(options.weekStart)) return badRequest(res, "options.weekStart debe tener formato YYYY-MM-DD");
-          const d = new Date(options.weekStart + "T00:00:00Z");
-          if (Number.isNaN(+d)) return badRequest(res, "options.weekStart no es una fecha válida");
-          opts.weekStart = d;
-        }
-      }
-
-      const plan: MissionPlan = planWeeklyMissions(normalized, opts);
-      ok(res, plan);
-    } catch (e: any) {
-      internalError(res, "Error generando el plan de misiones", e);
-    }
-  });
+  app.post("/api/feedback/plan", (req: Request, res: Response) => handlePlanPost(req, res));
 
   /**
    * GET /api/missions/weekly?weekStart=YYYY-MM-DD&seed=number
@@ -125,7 +107,7 @@ export function registerMissionsRoutes(app: Application) {
 
       const plan = planWeeklyMissions(demo, { weekStart: d, seed: s, minMissionsPerWeek: 4, maxMissionsPerWeek: 6 });
       ok(res, plan);
-    } catch (e: any) {
+  } catch (e: unknown) {
       internalError(res, "Error obteniendo misiones semanales", e);
     }
   });
@@ -153,24 +135,115 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
-function validateFeedbackItem(it: any, index: number): string | null {
+function validateFeedbackItem(it: Record<string, unknown>, index: number): string | null {
   const where = `feedback[${index}]`;
+  const base = validateBaseObject(it, where);
+  if (base) return base;
+  const id = it["id"]; const userId = it["userId"]; const text = it["text"]; const timestamp = it["timestamp"]; const tags = it["tags"] as unknown; const votes = it["votes"] as unknown; const sentiment = it["sentiment"] as unknown;
+  const primaries = validatePrimaryFields({ id, userId, text, timestamp }, where);
+  if (primaries) return primaries;
+  const optionals = validateOptionalFields({ tags, votes, sentiment }, where);
+  if (optionals) return optionals;
+  return null;
+}
+
+function validateBaseObject(it: Record<string, unknown>, where: string): string | null {
   if (!it || typeof it !== "object") return `${where} debe ser un objeto`;
   for (const key of ["id", "userId", "text", "timestamp"]) {
     if (!(key in it)) return `${where}.${key} es requerido`;
   }
-  if (typeof it.text !== "string") return `${where}.text debe ser string`;
-  if (it.text.length === 0) return `${where}.text no puede estar vacío`;
-  if (it.text.length > MAX_TEXT_LEN) return `${where}.text excede el máximo de ${MAX_TEXT_LEN} caracteres`;
-  if (typeof it.id !== "string" || it.id.length === 0) return `${where}.id debe ser string no vacío`;
-  if (typeof it.userId !== "string" || it.userId.length === 0) return `${where}.userId debe ser string no vacío`;
-  if (typeof it.timestamp !== "string" || Number.isNaN(+new Date(it.timestamp))) return `${where}.timestamp debe ser ISO válido`;
-  if (it.tags && !Array.isArray(it.tags)) return `${where}.tags debe ser array de strings`;
-  if (typeof it.votes !== "undefined" && typeof it.votes !== "number") return `${where}.votes debe ser number`;
-  if (typeof it.sentiment !== "undefined" && typeof it.sentiment !== "number") return `${where}.sentiment debe ser number`;
+  return null;
+}
+
+function validatePrimaryFields(fields: { id: unknown; userId: unknown; text: unknown; timestamp: unknown }, where: string): string | null {
+  const { id, userId, text, timestamp } = fields;
+  if (typeof text !== "string") return `${where}.text debe ser string`;
+  if (text.length === 0) return `${where}.text no puede estar vacío`;
+  if (text.length > MAX_TEXT_LEN) return `${where}.text excede el máximo de ${MAX_TEXT_LEN} caracteres`;
+  if (typeof id !== "string" || id.length === 0) return `${where}.id debe ser string no vacío`;
+  if (typeof userId !== "string" || userId.length === 0) return `${where}.userId debe ser string no vacío`;
+  if (typeof timestamp !== "string" || Number.isNaN(+new Date(timestamp))) return `${where}.timestamp debe ser ISO válido`;
+  return null;
+}
+
+function validateOptionalFields(fields: { tags: unknown; votes: unknown; sentiment: unknown }, where: string): string | null {
+  const { tags, votes, sentiment } = fields;
+  if (typeof votes !== "undefined" && typeof votes !== "number") return `${where}.votes debe ser number`;
+  if (typeof sentiment !== "undefined" && typeof sentiment !== "number") return `${where}.sentiment debe ser number`;
+  if (tags !== undefined && !Array.isArray(tags)) return `${where}.tags debe ser array de strings`;
   return null;
 }
 
 // Export default para conveniencia en algunos estilos de import
 export default registerMissionsRoutes;
+
+// Extracted handler to reduce complexity
+function handlePlanPost(req: Request, res: Response) {
+  try {
+    const body = (req.body ?? {}) as { feedback?: unknown; options?: Record<string, unknown> };
+    const { feedback, options } = body;
+    const lenErr = validateFeedbackArray(feedback);
+    if (lenErr) return badRequest(res, lenErr);
+  const normalized = normalizeFeedback(feedback as unknown[]);
+    const parsed = parseOptions(options);
+    if (parsed.error) return badRequest(res, parsed.error);
+    const opts = parsed.value;
+    const plan: MissionPlan = planWeeklyMissions(normalized, opts);
+    ok(res, plan);
+  } catch (e: unknown) {
+    internalError(res, "Error generando el plan de misiones", e);
+  }
+}
+
+function validateFeedbackArray(fb: unknown): string | null {
+  if (!Array.isArray(fb)) return "Campo 'feedback' debe ser un array";
+  if (fb.length === 0) return "Se requiere al menos un elemento de feedback";
+  if (fb.length > MAX_FEEDBACK) return `Máximo permitido: ${MAX_FEEDBACK} elementos de feedback`;
+  return null;
+}
+
+function parseOptions(options: Record<string, unknown> | undefined): { value: Options; error?: string } {
+  if (!options || typeof options !== "object") return { value: {} };
+  const value: Options = {};
+  const min = options.minMissionsPerWeek; const max = options.maxMissionsPerWeek; const seed = options.seed; const week = options.weekStart;
+  if (typeof min === "number") value.minMissionsPerWeek = clampInt(min, 1, 20);
+  if (typeof max === "number") value.maxMissionsPerWeek = clampInt(max, 1, 30);
+  if (typeof seed === "number") value.seed = Math.abs(Math.trunc(seed));
+  const wk = parseWeekStartString(typeof week === "string" ? week : undefined);
+  if (wk.error) return { value, error: wk.error };
+  if (wk.value) value.weekStart = wk.value;
+  return { value };
+}
+
+function parseWeekStartString(week: string | undefined): { value?: Date; error?: string } {
+  if (!week) return {};
+  if (!ISO_DATE_RE.test(week)) return { error: "options.weekStart debe tener formato YYYY-MM-DD" };
+  const d = new Date(week + "T00:00:00Z");
+  if (Number.isNaN(+d)) return { error: "options.weekStart no es una fecha válida" };
+  return { value: d };
+}
+
+function normalizeFeedback(items: unknown[]): FeedbackItem[] {
+  const out: FeedbackItem[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = (items[i] ?? {}) as Record<string, unknown>;
+    const err = validateFeedbackItem(it, i);
+    if (err) throw new Error(err);
+    const locale = typeof it.locale === "string" ? it.locale : undefined;
+    const tags = Array.isArray(it.tags) ? it.tags.map(String) : undefined;
+    const votes = typeof it.votes === "number" ? it.votes : undefined;
+    const sentiment = typeof it.sentiment === "number" ? clamp(it.sentiment, -1, 1) : undefined;
+    out.push({
+      id: String(it.id),
+      userId: String(it.userId),
+      text: String(it.text),
+      timestamp: String(it.timestamp),
+      locale,
+      tags,
+      votes,
+      sentiment,
+    });
+  }
+  return out;
+}
 

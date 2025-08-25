@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
-import type { GnewGovToken } from "@gnew/contracts/typechain-types";
-export type { GnewGovToken } from "@gnew/contracts/typechain-types";
-export declare function getGnewGovToken(address: string, signerOrProvider: ethers.Signer | ethers.Provider): GnewGovToken;
-export declare const GNEW_GOV_TOKEN_ADDRESS: Partial<Record<number, `0x${string}`>>;
-import "forge-std/Test.sol";
-import "forge-std/StdInvariant.sol";
+export type GnewGovToken = ethers.Contract;
+/**
+ * Return a GnewGovToken contract instance using a provided ABI.
+ * This avoids a hard dependency on @gnew/contracts.
+ */
+export declare function getGnewGovToken(address: string, signerOrProvider: ethers.Signer | ethers.Provider, abi: ethers.InterfaceAbi): GnewGovToken;

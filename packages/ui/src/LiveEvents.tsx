@@ -3,7 +3,7 @@ import { useRealtime } from './hooks/useRealtime';
 import { Button } from './button'; 
 import { Card } from './card'; 
  
-export function LiveEvents({ token }: { token: string }) { 
+export function LiveEvents({ token }: Readonly<{ token: string }>) { 
   const [room, setRoom] = React.useState<'governance' | 
 'economy'>('governance'); 
   const { connected, presence, events } = useRealtime({ token, room 
@@ -22,8 +22,8 @@ aria-pressed={room === 'governance'}>Gobernanza</Button>
       <Card title={`Eventos en ${room}`}> 
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, 
 display: 'grid', gap: 6 }}> 
-          {events.map((e, i) => ( 
-            <li key={i} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}> 
+          {events.map((e) => ( 
+            <li key={JSON.stringify(e)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}> 
               <strong>{new Date(e.ts).toLocaleTimeString()}:</strong> 
 <code>{JSON.stringify(e.data)}</code> 
             </li> 
