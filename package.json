@@ -42,5 +42,8 @@
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mts,cts,json,md,yml,yaml}": "prettier --write",
     "*.{ts,tsx,mts,cts}": "eslint --fix"
+  },
+  "dependencies": {
+    "next-auth": "^4.24.11"
   }
 }
