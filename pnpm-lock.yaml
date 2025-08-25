@@ -81,9 +81,15 @@ importers:
       '@types/node':
         specifier: ^20.12.12
         version: 20.19.11
+      '@types/pg':
+        specifier: ^8.15.5
+        version: 8.15.5
       '@types/supertest':
         specifier: ^2.0.16
         version: 2.0.16
+      '@types/uuid':
+        specifier: ^10.0.0
+        version: 10.0.0
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.11)(ts-node@10.9.2(@types/node@20.19.11)(typescript@5.8.2))
@@ -193,6 +199,12 @@ importers:
       '@types/node':
         specifier: ^20.12.12
         version: 20.19.11
+      '@types/pg':
+        specifier: ^8.15.5
+        version: 8.15.5
+      '@types/uuid':
+        specifier: ^10.0.0
+        version: 10.0.0
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.11)(ts-node@10.9.2(@types/node@20.19.11)(typescript@5.8.2))
@@ -18127,7 +18139,7 @@ snapshots:
 
   '@types/pg-pool@2.0.4':
     dependencies:
-      '@types/pg': 8.6.1
+      '@types/pg': 8.15.5
 
   '@types/pg@8.15.5':
     dependencies:

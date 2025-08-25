@@ -10,7 +10,7 @@
  * Despliegue: Gradual (mode: "shadow"|"enforced").
  */
 
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import pino from "pino";
 import pinoHttp from "pino-http";
 import { Pool } from "pg";
@@ -32,7 +32,7 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const pool = new Pool({ connectionString: DATABASE_URL });
 
 type User = { sub: string; roles?: string[]; email?: string };
-function authOptional(req: any, _res: any, next: any) {
+function authOptional(req: express.Request, res: express.Response, next: express.NextFunction) {
   const h = req.headers.authorization;
   if (h?.startsWith("Bearer ") && JWT_PUBLIC_KEY) {
     try {
@@ -42,20 +42,20 @@ function authOptional(req: any, _res: any, next: any) {
         audience: JWT_AUDIENCE,
         issuer: JWT_ISSUER,
       }) as JwtPayload;
-      (req as any).user = { sub: String(dec.sub), roles: dec.roles as string[] | undefined, email: dec.email as string | undefined };
+      res.locals.user = { sub: String(dec.sub), roles: dec.roles as string[] | undefined, email: dec.email as string | undefined };
     } catch { /* ignore */ }
   }
   next();
 }
 function requireRole(role: string) {
-  return (req: any, res: any, next: any) => {
-    const u: User | undefined = (req as any).user;
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const u: User | undefined = res.locals.user;
     if (!u?.roles?.includes(role)) return res.status(403).json({ error: "forbidden" });
     next();
   };
 }
 
-const app = express();
+const app: express.Express = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(pinoHttp({ logger }));
 app.use(authOptional);
@@ -112,9 +112,9 @@ app.post("/admin/sanctions", requireRole("aml:admin"), async (req, res) => {
     }
     await client.query("commit");
     res.json({ ok: true, upserted: arr.length });
-  } catch (e:any) {
+  } catch (e: unknown) {
     await client.query("rollback");
-    res.status(400).json({ error: e?.message ?? "sanctions_error" });
+    res.status(400).json({ error: e instanceof Error ? e.message : "sanctions_error" });
   } finally {
     client.release();
   }
@@ -161,7 +161,7 @@ app.post("/ingest/tx", requireRole("aml:ingest"), async (req, res) => {
           or (lower(name)=lower($3) or lower(name)=lower($4)) limit 1`,
       [body.walletFrom ?? "", body.walletTo ?? "", body.userId, body.counterparty ?? ""]
     );
-    const sanctionHit = sMatch.rowCount > 0;
+    const sanctionHit = (sMatch.rowCount ?? 0) > 0;
 
     // Load model
     const mrow = await client.query("select cfg from aml_model where id='active'");
@@ -226,9 +226,9 @@ app.post("/ingest/tx", requireRole("aml:ingest"), async (req, res) => {
       alertId,
       evidenceHash: evidence.hash
     });
-  } catch (e:any) {
+  } catch (e: unknown) {
     await client.query("rollback");
-    res.status(500).json({ error: e?.message ?? "ingest_error" });
+    res.status(500).json({ error: e instanceof Error ? e.message : "ingest_error" });
   } finally {
     client.release();
   }

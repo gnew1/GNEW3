@@ -8,10 +8,14 @@
     "outDir": "dist",
     "lib": ["ES2022", "DOM"],
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["jest", "node"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["tests/**/*.ts", "dist/**"]
 }
 
 

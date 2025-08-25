@@ -8,10 +8,13 @@
     "moduleResolution": "Node",
     "lib": ["ES2022", "DOM"],
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
-    "strict": true
+    "strict": true,
+    "types": ["jest", "node"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["tests/**/*.ts", "dist/**"]
 }
 
 

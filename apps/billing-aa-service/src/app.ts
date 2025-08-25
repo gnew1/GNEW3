@@ -13,7 +13,9 @@ import { Scheduler } from "./scheduler";
 import { BundlerClient } from "./bundler";
 import { JobsMemStore } from "./store";
 import { ethers } from "ethers";
-import abi from "./abi/Subscription.json" assert { type: "json" };
+import * as abiData from "./abi/Subscription.json";
+
+const abi = abiData as ethers.InterfaceAbi;
 
 const PORT = Number(process.env.PORT ?? 8092);
 const ENTRY_POINT = process.env.ERC4337_ENTRYPOINT ?? "0x0000000000000000000000000000000000000000"; // config real en .env
@@ -26,7 +28,7 @@ const SUBSCRIPTION_ADDRESS = process.env.SUBSCRIPTION_ADDRESS!; // requerido
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const httpLogger = pinoHttp({ logger });
 
-const app = express();
+const app: express.Express = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(httpLogger);
 
@@ -105,8 +107,8 @@ scheduler.start(async (job) => {
       await tx.wait();
     }
     await scheduler.complete(job);
-  } catch (e: any) {
-    await scheduler.fail(job, e?.message ?? String(e));
+  } catch (e: unknown) {
+    await scheduler.fail(job, e instanceof Error ? e.message : String(e));
   }
 });
 
