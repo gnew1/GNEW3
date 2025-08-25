@@ -2,9 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "types": ["node", "react", "react-dom"],
-  "strict": true,
-  "lib": ["ES2023", "DOM"]
+    "types": ["node", "react", "react-dom", "next"],
+    "strict": true,
+    "lib": ["ES2023", "DOM"]
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
