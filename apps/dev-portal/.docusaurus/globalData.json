@@ -1,0 +1,90 @@
+{
+  "docusaurus-plugin-content-docs": {
+    "default": {
+      "path": "/docs",
+      "versions": [
+        {
+          "name": "current",
+          "label": "Next",
+          "isLast": true,
+          "path": "/docs",
+          "mainDocId": "quickstarts/index",
+          "docs": [
+            {
+              "id": "guides/auth",
+              "path": "/docs/guides/auth",
+              "sidebar": "guides"
+            },
+            {
+              "id": "guides/index",
+              "path": "/docs/guides/",
+              "sidebar": "guides"
+            },
+            {
+              "id": "guides/testing",
+              "path": "/docs/guides/testing",
+              "sidebar": "guides"
+            },
+            {
+              "id": "guides/webhooks",
+              "path": "/docs/guides/webhooks",
+              "sidebar": "guides"
+            },
+            {
+              "id": "quickstarts/hello-gnew-js",
+              "path": "/docs/quickstarts/hello-gnew-js",
+              "sidebar": "quickstart"
+            },
+            {
+              "id": "quickstarts/hello-gnew-py",
+              "path": "/docs/quickstarts/hello-gnew-py",
+              "sidebar": "quickstart"
+            },
+            {
+              "id": "quickstarts/index",
+              "path": "/docs/quickstarts/",
+              "sidebar": "quickstart"
+            },
+            {
+              "id": "sdk/index",
+              "path": "/docs/sdk/",
+              "sidebar": "sdk"
+            },
+            {
+              "id": "sdk/python",
+              "path": "/docs/sdk/python",
+              "sidebar": "sdk"
+            },
+            {
+              "id": "sdk/typescript",
+              "path": "/docs/sdk/typescript",
+              "sidebar": "sdk"
+            }
+          ],
+          "draftIds": [],
+          "sidebars": {
+            "quickstart": {
+              "link": {
+                "path": "/docs/quickstarts/",
+                "label": "quickstarts/index"
+              }
+            },
+            "sdk": {
+              "link": {
+                "path": "/docs/sdk/",
+                "label": "sdk/index"
+              }
+            },
+            "guides": {
+              "link": {
+                "path": "/docs/guides/",
+                "label": "guides/index"
+              }
+            }
+          }
+        }
+      ],
+      "breadcrumbs": true
+    }
+  }
+}

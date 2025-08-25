@@ -1,0 +1,19 @@
+{
+  "id": "guides/testing",
+  "title": "Testing",
+  "description": "- E2E quickstart tests via t2d-check.js in CI.",
+  "source": "@site/docs/guides/testing.mdx",
+  "sourceDirName": "guides",
+  "slug": "/guides/testing",
+  "permalink": "/docs/guides/testing",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "guides",
+  "previous": {
+    "title": "Webhooks",
+    "permalink": "/docs/guides/webhooks"
+  }
+}

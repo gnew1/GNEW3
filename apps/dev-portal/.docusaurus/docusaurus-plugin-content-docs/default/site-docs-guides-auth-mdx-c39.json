@@ -1,0 +1,23 @@
+{
+  "id": "guides/auth",
+  "title": "Auth (JWT/DID)",
+  "description": "- Local dev uses a pre-issued developer token.",
+  "source": "@site/docs/guides/auth.mdx",
+  "sourceDirName": "guides",
+  "slug": "/guides/auth",
+  "permalink": "/docs/guides/auth",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "guides",
+  "previous": {
+    "title": "Guides",
+    "permalink": "/docs/guides/"
+  },
+  "next": {
+    "title": "Webhooks",
+    "permalink": "/docs/guides/webhooks"
+  }
+}

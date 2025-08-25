@@ -1,0 +1,19 @@
+{
+  "id": "quickstarts/hello-gnew-py",
+  "title": "Hello GNEW (Python)",
+  "description": "Coming soon. For now, see the TypeScript quickstart.",
+  "source": "@site/docs/quickstarts/hello-gnew-py.mdx",
+  "sourceDirName": "quickstarts",
+  "slug": "/quickstarts/hello-gnew-py",
+  "permalink": "/docs/quickstarts/hello-gnew-py",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "quickstart",
+  "previous": {
+    "title": "Hello GNEW (Node/TypeScript)",
+    "permalink": "/docs/quickstarts/hello-gnew-js"
+  }
+}

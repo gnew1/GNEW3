@@ -1,0 +1,23 @@
+{
+  "id": "sdk/typescript",
+  "title": "TypeScript SDK",
+  "description": "Install:",
+  "source": "@site/docs/sdk/typescript.mdx",
+  "sourceDirName": "sdk",
+  "slug": "/sdk/typescript",
+  "permalink": "/docs/sdk/typescript",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "sdk",
+  "previous": {
+    "title": "SDKs",
+    "permalink": "/docs/sdk/"
+  },
+  "next": {
+    "title": "Python SDK",
+    "permalink": "/docs/sdk/python"
+  }
+}

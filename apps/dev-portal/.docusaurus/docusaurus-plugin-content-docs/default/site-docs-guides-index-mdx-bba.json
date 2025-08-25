@@ -1,0 +1,19 @@
+{
+  "id": "guides/index",
+  "title": "Guides",
+  "description": "- Auth",
+  "source": "@site/docs/guides/index.mdx",
+  "sourceDirName": "guides",
+  "slug": "/guides/",
+  "permalink": "/docs/guides/",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "guides",
+  "next": {
+    "title": "Auth (JWT/DID)",
+    "permalink": "/docs/guides/auth"
+  }
+}

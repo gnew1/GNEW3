@@ -1,0 +1,19 @@
+{
+  "id": "sdk/python",
+  "title": "Python SDK",
+  "description": "Coming soon.",
+  "source": "@site/docs/sdk/python.mdx",
+  "sourceDirName": "sdk",
+  "slug": "/sdk/python",
+  "permalink": "/docs/sdk/python",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "sdk",
+  "previous": {
+    "title": "TypeScript SDK",
+    "permalink": "/docs/sdk/typescript"
+  }
+}

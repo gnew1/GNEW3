@@ -1,0 +1,23 @@
+{
+  "id": "guides/webhooks",
+  "title": "Webhooks",
+  "description": "- Sign payloads with HMAC-SHA256 (header X-GNEW-Signature).",
+  "source": "@site/docs/guides/webhooks.mdx",
+  "sourceDirName": "guides",
+  "slug": "/guides/webhooks",
+  "permalink": "/docs/guides/webhooks",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "guides",
+  "previous": {
+    "title": "Auth (JWT/DID)",
+    "permalink": "/docs/guides/auth"
+  },
+  "next": {
+    "title": "Testing",
+    "permalink": "/docs/guides/testing"
+  }
+}

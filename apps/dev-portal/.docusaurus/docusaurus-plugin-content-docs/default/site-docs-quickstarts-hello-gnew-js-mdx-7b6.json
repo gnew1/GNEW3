@@ -1,0 +1,23 @@
+{
+  "id": "quickstarts/hello-gnew-js",
+  "title": "Hello GNEW (Node/TypeScript)",
+  "description": "Goal: call GNEW Sandbox health and echo endpoints using the TS SDK.",
+  "source": "@site/docs/quickstarts/hello-gnew-js.mdx",
+  "sourceDirName": "quickstarts",
+  "slug": "/quickstarts/hello-gnew-js",
+  "permalink": "/docs/quickstarts/hello-gnew-js",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "quickstart",
+  "previous": {
+    "title": "Quickstarts",
+    "permalink": "/docs/quickstarts/"
+  },
+  "next": {
+    "title": "Hello GNEW (Python)",
+    "permalink": "/docs/quickstarts/hello-gnew-py"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "sdk/index",
+  "title": "SDKs",
+  "description": "- TypeScript SDK",
+  "source": "@site/docs/sdk/index.mdx",
+  "sourceDirName": "sdk",
+  "slug": "/sdk/",
+  "permalink": "/docs/sdk/",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "sdk",
+  "next": {
+    "title": "TypeScript SDK",
+    "permalink": "/docs/sdk/typescript"
+  }
+}

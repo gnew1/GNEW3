@@ -1,0 +1,19 @@
+{
+  "id": "quickstarts/index",
+  "title": "Quickstarts",
+  "description": "These are zero‑friction paths to get a working demo in < 10 minutes on a clean machine.",
+  "source": "@site/docs/quickstarts/index.mdx",
+  "sourceDirName": "quickstarts",
+  "slug": "/quickstarts/",
+  "permalink": "/docs/quickstarts/",
+  "draft": false,
+  "unlisted": false,
+  "tags": [],
+  "version": "current",
+  "frontMatter": {},
+  "sidebar": "quickstart",
+  "next": {
+    "title": "Hello GNEW (Node/TypeScript)",
+    "permalink": "/docs/quickstarts/hello-gnew-js"
+  }
+}
