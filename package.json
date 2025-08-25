@@ -1,46 +1,46 @@
-{ 
-  "name": "gnew-monorepo", 
-  "private": true, 
-  "version": "0.1.0", 
-  "packageManager": "pnpm@9.0.0", 
-  "engines": { 
-    "node": ">=20" 
-  }, 
-  "workspaces": [ 
-    "apps/*", 
-    "packages/*" 
-  ], 
-  "scripts": { 
-    "prepare": "husky install", 
-    "build": "pnpm -r build", 
-    "clean": "pnpm -r clean || true", 
-    "lint": "eslint . --ext .ts,.tsx,.mts,.cts --max-warnings=0", 
-    "format": "prettier --write .", 
-    "typecheck": "tsc -b", 
-    "test": "pnpm -r test", 
-    "test:contracts:hh": "pnpm --filter @gnew/contracts test:hh", 
-  "test:contracts:forge": "pnpm --filter @gnew/contracts test:forge", 
-    "contracts:compile": "pnpm --filter @gnew/contracts compile", 
-    "contracts:deploy": "pnpm --filter @gnew/contracts deploy", 
-    "coverage": "pnpm --filter @gnew/contracts coverage" 
-  }, 
-  "devDependencies": { 
-    "@commitlint/cli": "^19.4.0", 
-    "@commitlint/config-conventional": "^19.4.0", 
-    "@types/node": "^20.14.9", 
-  "undici-types": "^6.19.8",
-    "@typescript-eslint/eslint-plugin": "^7.17.0", 
-    "@typescript-eslint/parser": "^7.17.0", 
-    "eslint": "^8.57.0", 
-    "eslint-config-prettier": "^9.1.0", 
-    "husky": "^9.0.11", 
-    "lint-staged": "^15.2.8", 
-    "prettier": "^3.3.3", 
-    "typescript": "^5.5.4" 
-  }, 
-  "lint-staged": { 
-    "*.{ts,tsx,js,jsx,mts,cts,json,md,yml,yaml}": "prettier --write", 
-    "*.{ts,tsx,mts,cts}": "eslint --fix" 
-  } 
-} 
- 
+{
+  "name": "gnew-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "prepare": "husky install",
+    "build": "pnpm -r build",
+    "clean": "pnpm -r clean || true",
+    "lint": "eslint . --ext .ts,.tsx,.mts,.cts --max-warnings=0",
+    "format": "prettier --write .",
+    "typecheck": "tsc -b",
+    "test": "pnpm -r test",
+    "test:contracts:hh": "pnpm --filter @gnew/contracts test:hh",
+    "test:contracts:forge": "pnpm --filter @gnew/contracts test:forge",
+    "contracts:compile": "pnpm --filter @gnew/contracts compile",
+    "contracts:deploy": "pnpm --filter @gnew/contracts deploy",
+    "coverage": "pnpm --filter @gnew/contracts coverage"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.4.0",
+    "@commitlint/config-conventional": "^19.4.0",
+    "@types/node": "^20.14.9",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^7.17.0",
+    "@typescript-eslint/parser": "^7.17.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.8",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "undici-types": "^6.19.8"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mts,cts,json,md,yml,yaml}": "prettier --write",
+    "*.{ts,tsx,mts,cts}": "eslint --fix"
+  }
+}
