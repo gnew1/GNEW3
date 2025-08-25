@@ -11,6 +11,7 @@ export function useRealtime({ url = process.env.NEXT_PUBLIC_REALTIME_URL || 'htt
         let unsub;
         client.connect(!!preferSSE).then(async () => {
             setConnected(true);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             unsub = await client.subscribe(room, (evt) => {
                 if (evt.type === 'presence') {
                     setPresence((evt.members || []).map((m) => m.id));

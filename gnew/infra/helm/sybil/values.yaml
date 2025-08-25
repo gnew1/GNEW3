@@ -1,16 +1,27 @@
-image: 
-  repository: gnew/sybil-api 
-  tag: v0.1.0 
-env: 
-  SYBIL_DATA_DIR: /data/sybil 
-  SYBIL_EPOCH: "20250819" 
-ingress: 
-  enabled: true 
-  hosts: [ "sybil.api.gnew.example" ] 
-cron: 
-  schedule: "0 * * * *" # horario de recomputo (cada hora o diario 
-  según costos) 
-  args: - "--config=/app/config/formula.v1.yaml" - "--epoch=$(date +%Y%m%d)" - "--out=/data/sybil/$(date +%Y%m%d)" 
-resources: 
-  requests: { cpu: "300m", memory: "512Mi" } 
-  limits: { cpu: "2", memory: "2Gi" }
+image:
+  repository: gnew/sybil-api
+  tag: v0.1.0
+
+env:
+  SYBIL_DATA_DIR: /data/sybil
+  SYBIL_EPOCH: "20250819"
+
+ingress:
+  enabled: true
+  hosts:
+    - sybil.api.gnew.example
+
+cron:
+  schedule: "0 * * * *" # hourly recompute (adjust as needed)
+  args:
+    - "--config=/app/config/formula.v1.yaml"
+    - "--epoch=$(date +%Y%m%d)"
+    - "--out=/data/sybil/$(date +%Y%m%d)"
+
+resources:
+  requests:
+    cpu: "300m"
+    memory: "512Mi"
+  limits:
+    cpu: "2"
+    memory: "2Gi"

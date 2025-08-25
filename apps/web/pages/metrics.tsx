@@ -5,13 +5,13 @@ import { Card } from "@gnew/ui/card";
 import { LineChart } from "@gnew/ui/LineChart"; 
 const API_URL = process.env.NEXT_PUBLIC_METRICS_API || 
 "http://localhost:8007"; 
-const fetcher = (url: string) => fetch(url).then((r) => r.json()); 
 function number(n: number | undefined) { 
 return typeof n === "number" ? n.toLocaleString() : "-"; 
 } 
+type Summary = { participation?: { active_users?: number; posts?: number; votes?: number }; times?: { avg_first_response_seconds?: number; p50_seconds?: number; p90_seconds?: number }; delegation?: { active_delegations?: number; top_delegates?: { user: string }[] }; generated_at?: string };
 export default function MetricsPage() { 
-const { data, isLoading } = useSWR(`${API_URL}/metrics/summary`, 
-fetcher, { 
+const { data = {} as Summary, isLoading } = useSWR<Summary>(`${API_URL}/metrics/summary`, 
+  (url: string) => fetch(url).then(res => res.json() as Promise<Summary>), { 
 refreshInterval: 10_000, // DoD: refresh ≤ 10 s 
 }); 
 const series = useMemo(() => { 
@@ -27,10 +27,14 @@ x: new Date(now - (7 - i) * 60_000).toISOString(),
  
   const download = (kind: string) => { 
     const url = `${API_URL}/metrics/${kind}?format=csv`; 
-    const a = document.createElement("a"); 
-    a.href = url; 
-    a.download = `${kind}.csv`; 
-    a.click(); 
+    if (typeof document !== 'undefined') {
+      const a = document.createElement("a"); 
+      a.href = url; 
+      a.download = `${kind}.csv`; 
+      a.click(); 
+    } else {
+      location.assign(url);
+    }
   }; 
  
   if (isLoading) return <div style={{ padding: 16 }}>Cargando métricas…</div>; 

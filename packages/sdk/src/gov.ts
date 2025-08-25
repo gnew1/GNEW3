@@ -1,16 +1,16 @@
 import { ethers } from "ethers";
-import type { GnewGovToken } from "@gnew/contracts/typechain-types";
-import GnewGovTokenAbi from "@gnew/contracts/artifacts/src/governance/GnewGovToken.sol/GnewGovToken.json" assert { type: "json" };
 
-export type { GnewGovToken } from "@gnew/contracts/typechain-types";
+export type GnewGovToken = ethers.Contract;
 
 /**
- * Return a typed GnewGovToken contract instance.
+ * Return a GnewGovToken contract instance using a provided ABI.
+ * This avoids a hard dependency on @gnew/contracts.
  */
 export function getGnewGovToken(
   address: string,
-  signerOrProvider: ethers.Signer | ethers.Provider
+  signerOrProvider: ethers.Signer | ethers.Provider,
+  abi: ethers.InterfaceAbi
 ): GnewGovToken {
-  return new ethers.Contract(address, GnewGovTokenAbi.abi, signerOrProvider) as unknown as GnewGovToken;
+  return new ethers.Contract(address, abi, signerOrProvider);
 }
 

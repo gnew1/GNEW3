@@ -1,22 +1,22 @@
 image:
-	repository: gnew/vc-service
-	tag: v0.1.0
+  repository: gnew/vc-service
+  tag: v0.1.0
 
 env:
-	GNEW_RPC_URL: https://rpc.gnew.example
-	STATUS_LIST_REGISTRY: "0xStatusListRegistry"
-	ISSUER_PRIVATE_KEY: "vault://kv/identity/issuer"
-	IPFS_NODE_URL: http://ipfs:5001
+  GNEW_RPC_URL: https://rpc.gnew.example
+  STATUS_LIST_REGISTRY: "0xStatusListRegistry"
+  ISSUER_PRIVATE_KEY: "vault://kv/identity/issuer"
+  IPFS_NODE_URL: http://ipfs:5001
 
 resources:
-	requests:
-		cpu: 100m
-		memory: 256Mi
-	limits:
-		cpu: 500m
-		memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
 
 ingress:
-	enabled: true
-	hosts:
-		- vc.api.gnew.example
+  enabled: true
+  hosts:
+    - vc.api.gnew.example

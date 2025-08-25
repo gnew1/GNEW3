@@ -18,7 +18,8 @@ token]);
     let unsub: (() => void) | undefined; 
     client.connect(!!preferSSE).then(async () => { 
       setConnected(true); 
-      unsub = await client.subscribe(room, (evt) => { 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  unsub = await client.subscribe(room, (evt: any) => { 
         if (evt.type === 'presence') { 
           setPresence((evt.members || []).map((m: any) => m.id)); 
         } else { 

@@ -1,78 +1,28 @@
-image: 
-  repository: gnew/reputation-service 
-  tag: v0.1.0 
-env: 
-  GNEW_RPC_URL: https://rpc.gnew.example 
-  REPUTATION_REGISTRY: "0xReputationRootRegistry" 
-  REP_UPDATER_KEY: "vault://kv/reputation/updater" 
-ingress: 
-  enabled: true 
-  hosts: [ "rep.api.gnew.example" ] 
-cron: 
-  schedule: "0 2 * * *" # diario 02:00 UTC 
-  args: 
-- "--config=/app/config/formula.v1.yaml" - "--epoch=$(date +%Y%m%d)" - "--out=/data/out" 
-resources: 
-requests: { cpu: "200m", memory: "512Mi" } 
-limits: { cpu: "1", memory: "1Gi" } 
-4) Flujo E2E 
-1. Ingesta: consolidar eventos (on‑chain indexers + off‑chain webhooks) a 
-ingest.jsonl. 
-2. Scoring (cron): python -m services.reputation.src.cli ingest.jsonl --config formula.v1.yaml --epoch YYYYMMDD --out out/. 
-3. Empaquetado: publicar scores.jsonl, meta.json, config.yml, README.audit a 
-IPFS → ipfs://CID. 
-4. Anclaje: node scripts/anchor_scores.js out/meta.json ipfs://CID → 
-guarda Merkle root + formulaHash + codeHash. 
-5. Consumo: SDK obtiene meta de epoch, UI muestra ScoreCard con breakdown. 
-6. Verificación local: Relying party verifica prueba Merkle y no depende del servicio. 
-5) Seguridad / Robustez anti‑gaming 
-● Rate‑limit y saturación: límites por ventana y logística por tipo. 
-● Diversidad: bonifica variedad y penaliza repetición monótona. 
-● Anti‑colusión: penalización por concentración de contrapartes/reviews. 
-● Outlier clipping: recorte por percentil (config). 
-● Identidad y stake: multiplicadores acotados usando DIDs/VCs (N121–N122) y SBTs 
-(N123). 
-● Transparencia/Auditoría: fórmula versionada, hashes on‑chain, artefactos IPFS, 
-breakdown por contribución. 
-6) Runbooks 
-● Actualización de fórmula: PR + revisión DAO → version+1; recalcular 
-formulaHash; anclar nuevo root con version. 
-● Rollback: anclar epoch nuevo con versión previa; UI muestra versión activa. 
-● Sanidad: dashboard de distribución de scores, drift por cohorte, % penalizaciones. 
-● Privacidad: evitar incluir PII en scores.jsonl; usar IDs on‑chain / DIDs. 
 image:
   repository: gnew/reputation-service
   tag: v0.1.0
+
 env:
   GNEW_RPC_URL: https://rpc.gnew.example
   REPUTATION_REGISTRY: "0xReputationRootRegistry"
   REP_UPDATER_KEY: "vault://kv/reputation/updater"
+
 ingress:
   enabled: true
   hosts:
-    image:
-      repository: gnew/reputation-service
-      tag: v0.1.0
-    env:
-      GNEW_RPC_URL: https://rpc.gnew.example
-      REPUTATION_REGISTRY: "0xReputationRootRegistry"
-      REP_UPDATER_KEY: "vault://kv/reputation/updater"
-    ingress:
-      enabled: true
-      hosts:
-        - rep.api.gnew.example
-    cron:
-      schedule: "0 2 * * *" # diario 02:00 UTC
-      args:
-        - "--config=/app/config/formula.v1.yaml"
-        - "--epoch=$(date +%Y%m%d)"
-        - "--out=/data/out"
-    resources:
-      requests:
-        cpu: 200m
-        memory: 512Mi
-      limits:
-        cpu: "1"
-        memory: 1Gi
+    - rep.api.gnew.example
 
-    # Note: original contaminated notes were removed. If needed, see docs/_imported/gnew-infra-helm-reputation-values.yaml.md
+cron:
+  schedule: "0 2 * * *" # daily at 02:00 UTC
+  args:
+    - "--config=/app/config/formula.v1.yaml"
+    - "--epoch=$(date +%Y%m%d)"
+    - "--out=/data/out"
+
+resources:
+  requests:
+    cpu: "200m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
