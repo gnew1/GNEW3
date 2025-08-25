@@ -4,6 +4,8 @@
 		"target": "ES2022",
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
+		"resolveJsonModule": true,
+		"allowSyntheticDefaultImports": true,
 		"declaration": true,
 		"outDir": "dist",
 		"rootDir": "src",

@@ -2,6 +2,7 @@
 import { Pool } from "pg";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
 export async function ensureMigrations(pool: Pool) {
   const client = await pool.connect();
@@ -17,8 +18,10 @@ export async function ensureMigrations(pool: Pool) {
   }
 }
 
-async function execFile(client: any, fname: string) {
-  const sql = fs.readFileSync(path.join(__dirname, "migrations", fname), "utf-8");
+type Queryable = { query: (sql: string, params?: unknown[]) => Promise<unknown> };
+async function execFile(client: Queryable, fname: string) {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const sql = fs.readFileSync(path.join(here, "migrations", fname), "utf-8");
   await client.query(sql);
 }
 

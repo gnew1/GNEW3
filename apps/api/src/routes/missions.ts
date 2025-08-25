@@ -17,10 +17,7 @@
  *    Importamos: planWeeklyMissions, tipos públicos.
  */
 
-// Local minimal types to avoid a hard dependency on express typings here
-type Request = { body?: unknown; query?: unknown };
-type Response = { status: (code: number) => Response; json: (body: unknown) => Response; setHeader: (name: string, value: string) => void };
-type Application = { use: (path: string, handler: (req: Request, res: Response, next: () => void) => void) => void; post: (path: string, handler: (req: Request, res: Response) => void) => void; get: (path: string, handler: (req: Request, res: Response) => void) => void };
+import type { Application, Request, Response } from "express";
 
 // Types and a lightweight planner implementation (keeps this module self-contained)
 export type FeedbackItem = { id: string; userId: string; text: string; timestamp: string; locale?: string; tags?: string[]; votes?: number; sentiment?: number };
@@ -60,7 +57,7 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  */
 export function registerMissionsRoutes(app: Application) {
   // Middleware de headers comunes
-  app.use("/api/", (_req, res, next) => {
+  app.use("/api/", (_req: Request, res: Response, next: () => void) => {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
     next();
@@ -120,7 +117,10 @@ function badRequest(res: Response, message: string) {
 }
 
 function internalError(res: Response, message: string, err?: unknown) {
-  return res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message, detail: String(err || "") } });
+  let detail = '';
+  if (err instanceof Error) detail = err.message;
+  else if (typeof err === 'string') detail = err;
+  return res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message, detail } });
 }
 
 function ok(res: Response, data: Json) {
@@ -139,7 +139,7 @@ function validateFeedbackItem(it: Record<string, unknown>, index: number): strin
   const where = `feedback[${index}]`;
   const base = validateBaseObject(it, where);
   if (base) return base;
-  const id = it["id"]; const userId = it["userId"]; const text = it["text"]; const timestamp = it["timestamp"]; const tags = it["tags"] as unknown; const votes = it["votes"] as unknown; const sentiment = it["sentiment"] as unknown;
+  const id = it["id"]; const userId = it["userId"]; const text = it["text"]; const timestamp = it["timestamp"]; const tags = it["tags"]; const votes = it["votes"]; const sentiment = it["sentiment"];
   const primaries = validatePrimaryFields({ id, userId, text, timestamp }, where);
   if (primaries) return primaries;
   const optionals = validateOptionalFields({ tags, votes, sentiment }, where);

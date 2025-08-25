@@ -70,7 +70,7 @@ export async function runReconciliation(pool: Pool, p: Params) {
     }
 
     // Build quick index for amount/date matches among unused ledger tx
-    const ledgerRest = ledg.rows.filter((x) => ledgerUnused.has(x.id));
+  const ledgerRest = ledg.rows.filter((x: Tx) => ledgerUnused.has(x.id));
     const provUnmatchedIdx = new Map<number, number>(); // index in matches array
     matches.forEach((m, i) => { if (m.status === "unmatched") provUnmatchedIdx.set(m.provider_tx_id, i); });
 
@@ -81,7 +81,7 @@ export async function runReconciliation(pool: Pool, p: Params) {
       // Find closest provider unmatched by abs(amount diff) then date diff
       let best: { idx: number; score: number } | null = null;
       for (const [provId, i] of provUnmatchedIdx.entries()) {
-        const pr = prov.rows.find((r) => r.id === provId)!;
+  const pr = prov.rows.find((r: Tx) => r.id === provId)!;
         if (pr.currency !== l.currency) continue;
         const amtDiff = Math.abs(pr.amount - l.amount);
         const rel = Math.abs(amtDiff) / Math.max(Math.abs(pr.amount), 1);

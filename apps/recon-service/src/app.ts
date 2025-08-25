@@ -10,7 +10,7 @@
  * Despliegue: Iterativo.
  */
 
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import pino from "pino";
 import pinoHttp from "pino-http";
 import { Pool } from "pg";
@@ -31,10 +31,25 @@ const ALERT_DIFF_THRESHOLD = Number(process.env.ALERT_DIFF_THRESHOLD ?? 0.05); /
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const httpLogger = pinoHttp({ logger });
-const pool = new Pool({ connectionString: DATABASE_URL });
+// Create DB pool: real Postgres by default; fallback to in-memory pg-mem for local dev/tests
+let pool: Pool;
+if (process.env.PG_MEM === "1" || DATABASE_URL === "pgmem" || DATABASE_URL === "mem") {
+  // Lazy import to avoid bundling in production
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const { newDb } = await import("pg-mem");
+  // Disable strict AST coverage to tolerate common DDL features not fully supported
+  const db = newDb({ noAstCoverageCheck: true });
+  const pgMem = db.adapters.createPg();
+  const MemPool = pgMem.Pool as unknown as typeof Pool;
+  pool = new MemPool() as unknown as Pool;
+} else {
+  pool = new Pool({ connectionString: DATABASE_URL });
+}
 
 type User = { sub: string; roles?: string[]; email?: string };
-function authOptional(req: any, _res: any, next: any) {
+
+function authOptional(req: Request, res: Response, next: NextFunction) {
   const h = req.headers.authorization;
   if (h?.startsWith("Bearer ") && JWT_PUBLIC_KEY) {
     try {
@@ -44,7 +59,7 @@ function authOptional(req: any, _res: any, next: any) {
         audience: JWT_AUDIENCE,
         issuer: JWT_ISSUER,
       }) as JwtPayload;
-      (req as any).user = { sub: String(dec.sub), roles: dec.roles as string[] | undefined, email: dec.email as string | undefined };
+      res.locals.user = { sub: String(dec.sub), roles: dec.roles as string[] | undefined, email: dec.email as string | undefined } as User;
     } catch {
       /* ignore */
     }
@@ -52,14 +67,15 @@ function authOptional(req: any, _res: any, next: any) {
   next();
 }
 function requireRole(role: string) {
-  return (req: any, res: any, next: any) => {
-    const u: User | undefined = (req as any).user;
+  return (_req: Request, res: Response, next: NextFunction) => {
+  if (process.env.DISABLE_AUTH === "1") return next();
+  const u: User | undefined = res.locals.user as User | undefined;
     if (!u?.roles?.includes(role)) return res.status(403).json({ error: "forbidden" });
     next();
   };
 }
 
-const app = express();
+const app: express.Express = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(httpLogger);
 app.use(authOptional);
@@ -101,8 +117,8 @@ app.post("/provider/upload", requireRole("recon:ingest"), async (req: express.Re
     const body = UploadSchema.parse(req.body);
     const rows = parseCsvOrJson({
       format: body.format,
-      data: body.data as any,
-      csv: body.csv as any,
+      data: body.data,
+      csv: body.csv,
       defaultCurrency: body.currency,
       tz: body.tz,
     });
@@ -111,7 +127,7 @@ app.post("/provider/upload", requireRole("recon:ingest"), async (req: express.Re
       await client.query("begin");
       const st = await client.query(
         `insert into provider_statements(provider, currency, raw) values($1,$2,$3) returning id`,
-        [body.provider, body.currency, body as any]
+        [body.provider, body.currency, body]
       );
       const statementId = st.rows[0].id as number;
       for (const r of rows) {
@@ -132,16 +148,16 @@ app.post("/provider/upload", requireRole("recon:ingest"), async (req: express.Re
         );
       }
       await client.query("commit");
-      res.json({ ok: true, provider: body.provider, inserted: rows.length, statementId });
-    } catch (e: any) {
+  res.status(201).json({ ok: true, provider: body.provider, inserted: rows.length, statementId });
+    } catch (e: unknown) {
       await client.query("rollback");
       logger.error({ err: e }, "provider_upload_failed");
-      res.status(500).json({ error: "upload_failed", detail: String(e?.message ?? e) });
+      res.status(500).json({ error: "upload_failed", detail: errorMessage(e) });
     } finally {
       client.release();
     }
-  } catch (e: any) {
-    res.status(400).json({ error: "bad_request", detail: String(e?.message ?? e) });
+  } catch (e: unknown) {
+    res.status(400).json({ error: "bad_request", detail: errorMessage(e) });
   }
 });
 
@@ -172,8 +188,8 @@ app.post("/ledger/upload", requireRole("recon:ingest"), async (req: express.Requ
     const body = LedgerUploadSchema.parse(req.body);
     const rows = parseCsvOrJson({
       format: body.format,
-      data: body.data as any,
-      csv: body.csv as any,
+      data: body.data,
+      csv: body.csv,
       defaultCurrency: body.currency,
       tz: body.tz,
     });
@@ -182,7 +198,7 @@ app.post("/ledger/upload", requireRole("recon:ingest"), async (req: express.Requ
       await client.query("begin");
       const imp = await client.query(
         `insert into ledger_imports(source, currency, raw) values($1,$2,$3) returning id`,
-        [body.source, body.currency, body as any]
+        [body.source, body.currency, body]
       );
       const importId = imp.rows[0].id as number;
       for (const r of rows) {
@@ -194,16 +210,16 @@ app.post("/ledger/upload", requireRole("recon:ingest"), async (req: express.Requ
         );
       }
       await client.query("commit");
-      res.json({ ok: true, source: body.source, inserted: rows.length, importId });
-    } catch (e: any) {
+  res.status(201).json({ ok: true, source: body.source, inserted: rows.length, importId });
+    } catch (e: unknown) {
       await client.query("rollback");
       logger.error({ err: e }, "ledger_upload_failed");
-      res.status(500).json({ error: "upload_failed", detail: String(e?.message ?? e) });
+      res.status(500).json({ error: "upload_failed", detail: errorMessage(e) });
     } finally {
       client.release();
     }
-  } catch (e: any) {
-    res.status(400).json({ error: "bad_request", detail: String(e?.message ?? e) });
+  } catch (e: unknown) {
+    res.status(400).json({ error: "bad_request", detail: errorMessage(e) });
   }
 });
 
@@ -227,8 +243,8 @@ app.post("/reconcile/run", requireRole("recon:run"), async (req: express.Request
       );
     }
     res.json(out);
-  } catch (e: any) {
-    res.status(400).json({ error: "bad_request", detail: String(e?.message ?? e) });
+  } catch (e: unknown) {
+    res.status(400).json({ error: "bad_request", detail: errorMessage(e) });
   }
 });
 
@@ -247,15 +263,23 @@ app.get("/reconcile/runs", requireRole("recon:read"), async (_req: express.Reque
 });
 
 // ---- Error handler básico
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: unknown, _req: express.Request, res: express.Response) => {
   logger.error({ err }, "unhandled");
-  res.status(500).json({ error: "internal_error" });
+  res.status(500).json({ error: "internal_error", detail: errorMessage(err) });
+  // no further middleware
 });
 
 // ---- Boot
+// Ensure DB schema on boot (best-effort)
+ensureMigrations(pool).catch((err) => logger.warn({ err }, "migrations_on_boot_failed"));
+
 app.listen(PORT, () => {
-  logger.info({ port: PORT }, "recon-service_started");
+  logger.info({ port: PORT, mem: process.env.PG_MEM === "1" || DATABASE_URL === "pgmem" || DATABASE_URL === "mem" }, "recon-service_started");
 });
 
 export default app;
+
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 

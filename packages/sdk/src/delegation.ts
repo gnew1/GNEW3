@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import DelegationAbi from "./abis/Delegation.json";
 
 export type Delegation = ethers.Contract;
 
@@ -17,6 +18,15 @@ export function getDelegation(
   signerOrProvider: ethers.Signer | ethers.Provider,
   abi: ethers.InterfaceAbi
 ): Delegation {
+  return new ethers.Contract(address, abi, signerOrProvider);
+}
+
+/** Convenience: returns contract using bundled minimal ABI. */
+export function getDelegationDefault(
+  address: string,
+  signerOrProvider: ethers.Signer | ethers.Provider
+): Delegation {
+  const abi: ethers.InterfaceAbi = (DelegationAbi as { abi?: ethers.InterfaceAbi }).abi ?? (DelegationAbi as unknown as ethers.InterfaceAbi);
   return new ethers.Contract(address, abi, signerOrProvider);
 }
  

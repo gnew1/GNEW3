@@ -103,6 +103,19 @@ importers:
         specifier: ^5.4.5
         version: 5.8.2
 
+  apps/api:
+    dependencies:
+      express:
+        specifier: ^4.19.2
+        version: 4.21.2
+    devDependencies:
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.23
+      typescript:
+        specifier: ^5.5.4
+        version: 5.8.2
+
   apps/audit-finance:
     dependencies:
       express:
@@ -1141,6 +1154,9 @@ importers:
       '@types/node':
         specifier: ^20.12.12
         version: 20.19.11
+      '@types/pg':
+        specifier: ^8.15.5
+        version: 8.15.5
       '@types/supertest':
         specifier: ^2.0.16
         version: 2.0.16
@@ -5587,6 +5603,9 @@ packages:
 
   '@types/pg-pool@2.0.4':
     resolution: {integrity: sha512-qZAvkv1K3QbmHHFYSNRYPkRjOWRLBYrL4B9c+wG0GSVGBw0NtJwPcgx/DSddeDJvRGMHCEQ4VMEVfuJ/0gZ3XQ==}
+
+  '@types/pg@8.15.5':
+    resolution: {integrity: sha512-LF7lF6zWEKxuT3/OR8wAZGzkg4ENGXFNyiV/JeOt9z5B+0ZVwbql9McqX5c/WStFq1GaGso7H1AzP/qSzmlCKQ==}
 
   '@types/pg@8.6.1':
     resolution: {integrity: sha512-1Kc4oAGzAl7uqUStZCDvaLFqZrW9qWSjXOmBfdgyBP5La7Us6Mg4GBvRlSoaZMhQF/zSj1C8CtKMBkoiT8eL8w==}
@@ -18109,6 +18128,12 @@ snapshots:
   '@types/pg-pool@2.0.4':
     dependencies:
       '@types/pg': 8.6.1
+
+  '@types/pg@8.15.5':
+    dependencies:
+      '@types/node': 20.19.11
+      pg-protocol: 1.10.3
+      pg-types: 2.2.0
 
   '@types/pg@8.6.1':
     dependencies:
