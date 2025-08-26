@@ -11,6 +11,7 @@ import pino from "pino";
 import pinoHttp from "pino-http";
 import { z } from "zod";
 import { verifyTypedData, getAddress, isAddress } from "ethers";
+import type { TypedDataDomain, TypedDataField } from "ethers";
 
 const PORT = Number(process.env.PORT ?? 8095);
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
@@ -52,14 +53,21 @@ app.post("/settlement/build", (req, res) => {
   res.json({ domain, types, value });
 });
 
+const TypedDataFieldSchema: z.ZodType<TypedDataField> = z.object({
+  name: z.string(),
+  type: z.string()
+});
+
+const DomainSchema: z.ZodType<TypedDataDomain> = z.object({
+  name: z.string(),
+  version: z.string(),
+  chainId: z.number(),
+  verifyingContract: z.string().refine(isAddress, "bad_address")
+});
+
 const VerifyIn = z.object({
-  domain: z.object({
-    name: z.string(),
-    version: z.string(),
-    chainId: z.number(),
-    verifyingContract: z.string()
-  }),
-  types: z.any(),
+  domain: DomainSchema,
+  types: z.record(z.array(TypedDataFieldSchema)),
   value: z.object({
     dealId: z.number(),
     buyerAmount: z.string(),
@@ -68,15 +76,20 @@ const VerifyIn = z.object({
   }),
   sigBuyer: z.string(),
   sigSeller: z.string(),
-  buyer: z.string(),
-  seller: z.string()
+  buyer: z.string().refine(isAddress, "bad_address"),
+  seller: z.string().refine(isAddress, "bad_address")
 });
 
 app.post("/settlement/verify", (req, res) => {
-  const b = VerifyIn.parse(req.body);
-  const r1 = getAddress(verifyTypedData(b.domain as any, b.types as any, b.value as any, b.sigBuyer));
-  const r2 = getAddress(verifyTypedData(b.domain as any, b.types as any, b.value as any, b.sigSeller));
-  const ok = (r1 === getAddress(b.buyer) && r2 === getAddress(b.seller)) || (r2 === getAddress(b.buyer) && r1 === getAddress(b.seller));
+  const parsed = VerifyIn.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const b = parsed.data;
+  const r1 = getAddress(verifyTypedData(b.domain, b.types, b.value, b.sigBuyer));
+  const r2 = getAddress(verifyTypedData(b.domain, b.types, b.value, b.sigSeller));
+  const ok = (r1 === getAddress(b.buyer) && r2 === getAddress(b.seller)) ||
+             (r2 === getAddress(b.buyer) && r1 === getAddress(b.seller));
   res.json({ ok, recovered: [r1, r2] });
 });
 
@@ -118,7 +131,7 @@ app.get("/queue", (_req, res) => {
 
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 
-if (require.main === module) {
+if (typeof require !== "undefined" && require.main === module) {
   app.listen(PORT, () => logger.info({ msg: `escrow-disputes-service listening on :${PORT}` }));
 }
 
