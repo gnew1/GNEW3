@@ -15,8 +15,8 @@ interface FieldPolicy {
 const ALGORITHM = "aes-256-gcm";
 
 export class FieldEncryptor {
-  private key: Buffer;
-  private policies: Record<string, FieldPolicy> = {};
+  private readonly key: Buffer;
+  private readonly policies: Record<string, FieldPolicy> = {};
 
   constructor(secret: string) {
     this.key = crypto.createHash("sha256").update(secret).digest();

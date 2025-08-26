@@ -3,7 +3,7 @@ import { Http } from "./http.js";
 import type { QuoteReq, Quote, CreateOrderParams, Order } from "./types.js";
 
 export class FiatRampClient {
-  private http: Http;
+  private readonly http: Http;
   constructor(opts: { baseUrl: string; timeoutMs?: number }) {
     this.http = new Http(opts.baseUrl, opts.timeoutMs);
   }

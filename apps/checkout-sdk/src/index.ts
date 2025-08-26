@@ -16,7 +16,7 @@ import { signIntent, verifyWebhook } from "./utils/crypto";
 import type { CheckoutIntent, CheckoutOptions } from "./types";
 
 export class GnewCheckout {
-  private apiBase: string;
+  private readonly apiBase: string;
   constructor(apiBase: string) {
     this.apiBase = apiBase;
   }
