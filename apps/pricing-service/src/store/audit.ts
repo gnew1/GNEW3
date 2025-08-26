@@ -11,8 +11,8 @@ export type AuditEvent = {
 };
 
 export class AuditStore {
-  private file?: string;
-  private buf: AuditEvent[] = [];
+  private readonly file?: string;
+  private readonly buf: AuditEvent[] = [];
 
   constructor(filePath?: string) {
     if (filePath && filePath.trim().length > 0) {

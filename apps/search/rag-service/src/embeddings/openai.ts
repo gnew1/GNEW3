@@ -3,7 +3,7 @@ import { EmbeddingProvider } from "./provider.js";
 import https from "node:https";
 
 export class OpenAIEmbedding implements EmbeddingProvider {
-  constructor(private apiKey: string) {}
+  constructor(private readonly apiKey: string) {}
   dim() { return 1536; }
   async embed(texts: string[]) {
     const body = JSON.stringify({ input: texts, model: "text-embedding-3-small" });

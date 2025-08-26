@@ -1,21 +1,40 @@
 "use client"; 
  
-import { useMemo, useState } from "react"; 
-import { compareVariants, ComparePayload } from 
-"@/app/lib/voteCompareClient"; 
+import { useMemo, useState } from "react";
+import { compareVariants, ComparePayload } from
+"@/app/lib/voteCompareClient";
+
+interface CompareSummary {
+  variant: string;
+  result: { normTotals: Record<string, number>; winner: string };
+  metrics: {
+    turnoutRate: number;
+    giniByOption: number;
+    top10Share: number;
+    decisiveMargin: number;
+    disagreementRate: number;
+    sybilSensitivity: number;
+  };
+  robustness: {
+    stability: number;
+    flipRate: number;
+  };
+}
+
+interface CompareResult {
+  options: Array<{ id: string; title: string }>;
+  summary: CompareSummary[];
+}
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, 
 LineChart, Line, CartesianGrid, 
 } from "recharts"; 
  
-type VariantKey = "one_person_one_vote" | "token_weighted" | 
-"quadratic_voting"; 
- 
-export default function VariantsPanel({ demo = false }: { demo?: 
-boolean }) { 
+export default function VariantsPanel({ demo = false }: { demo?:
+boolean }) {
   const [loading, setLoading] = useState(false); 
   const [err, setErr] = useState<string | null>(null); 
-  const [data, setData] = useState<any | null>(null); 
+  const [data, setData] = useState<CompareResult | null>(null);
  
   const payload: ComparePayload = useMemo(() => { 
     if (!demo) return { options: [], voters: [], ballots: [] } as any; 
@@ -65,8 +84,8 @@ Math.random() * 86400e3 };
     try { 
       setErr(null); 
       setLoading(true); 
-      const r = await compareVariants(payload); 
-      setData(r); 
+      const r = await compareVariants(payload);
+      setData(r as CompareResult);
     } catch (e: any) { 
       setErr(e?.message ?? "Error"); 
     } finally { 
@@ -77,21 +96,21 @@ Math.random() * 86400e3 };
   const barsData = useMemo(() => { 
     if (!data) return []; 
     // dataset para barras: score normalizado por opción y variante 
-    const rows: Array<any> = []; 
-    for (const op of data.options) { 
-      const row: any = { option: op.title }; 
+    const rows: Array<Record<string, number | string>> = [];
+    for (const op of data.options) {
+      const row: Record<string, number | string> = { option: op.title };
       for (const s of data.summary) { 
         row[s.variant] = Number((s.result.normTotals[op.id] * 
 100).toFixed(2)); 
       } 
       rows.push(row); 
     } 
-    return rows; 
-  }, [data]); 
+    return rows;
+  }, [data]);
  
   const metricsData = useMemo(() => { 
     if (!data) return []; 
-    return data.summary.map((s: any) => ({ 
+    return data.summary.map((s) => ({
       variant: s.variant, 
       turnout: Number((s.metrics.turnoutRate * 100).toFixed(1)), 
       gini: Number(s.metrics.giniByOption.toFixed(3)), 
@@ -205,8 +224,8 @@ name="Sensibilidad Sybil (p.p.)" />
                 </tr> 
               </thead> 
               <tbody> 
-                {data.summary.map((s: any) => ( 
-                  <tr key={s.variant} className="border-t"> 
+                {data.summary.map((s) => (
+                  <tr key={s.variant} className="border-t">
                     <td className="p-2">{s.variant === 
 "one_person_one_vote" ? "1p=1v" : s.variant === "token_weighted" ? 
 "Token-weighted" : "Quadratic"}</td> 

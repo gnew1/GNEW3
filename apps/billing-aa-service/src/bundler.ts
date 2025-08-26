@@ -4,7 +4,6 @@
  * NOTA: Firmas de userOp y de paymasterAndData deben resolverse con vuestro stack AA.
  * Este cliente asume que ya recibimos el userOp firmado del sender y del paymaster.
  */
-import { ethers } from "ethers";
 
 type AACharge = {
   sender: string;      // smart account del collector autorizado
@@ -14,7 +13,7 @@ type AACharge = {
 };
 
 export class BundlerClient {
-  constructor(private bundlerRpc: string, private entryPoint: string) {}
+  constructor(private readonly bundlerRpc: string, private readonly entryPoint: string) {}
 
   async chargeViaAA(req: AACharge) {
     // Monta una userOp mínima de ejemplo con callData directo al target a través del smart account del sender.

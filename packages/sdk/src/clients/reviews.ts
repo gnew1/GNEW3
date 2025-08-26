@@ -9,7 +9,7 @@ export type ReviewPayload = {
 };
 
 export class ReviewsClient {
-  constructor(private baseUrl: string, private token?: string) {}
+  constructor(private readonly baseUrl: string, private readonly token?: string) {}
   private h() {
     return {
       "Content-Type": "application/json",

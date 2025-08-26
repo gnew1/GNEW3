@@ -2,11 +2,11 @@
 import { Http } from "./http.js";
 import type {
   CreatePlanParams, Plan,
-  CreateSubscriptionParams, Subscription
+  CreateSubscriptionParams
 } from "./types.js";
 
 export class SubscriptionsClient {
-  private http: Http;
+  private readonly http: Http;
   constructor(opts: { baseUrl: string; timeoutMs?: number }) {
     this.http = new Http(opts.baseUrl, opts.timeoutMs);
   }

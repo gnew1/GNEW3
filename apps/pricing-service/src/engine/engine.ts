@@ -1,12 +1,12 @@
 
 import { LRU } from "./lru";
 import { qkey } from "../util/hash";
-import { Ruleset, QuoteInput, QuoteResult, Rule, DiscountEffect } from "./types";
+import { QuoteInput, QuoteResult, Rule, DiscountEffect } from "./types";
 import { RulesStore } from "../store/rules";
 
 export class PriceEngine {
-  private cache: LRU<string, QuoteResult>;
-  constructor(private store: RulesStore) {
+  private readonly cache: LRU<string, QuoteResult>;
+  constructor(private readonly store: RulesStore) {
     const size = Number(process.env.CACHE_SIZE ?? 10_000);
     const ttl = Number(process.env.CACHE_TTL_MS ?? 60_000);
     this.cache = new LRU(size, ttl);

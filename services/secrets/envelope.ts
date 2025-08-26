@@ -8,7 +8,7 @@ export interface KMS {
 }
 
 export class Envelope {
-  constructor(private kms: KMS) {}
+  constructor(private readonly kms: KMS) {}
 
   async encrypt(plaintext: Uint8Array) {
     const { plaintext: dek, ciphertext: dekWrapped } = await this.kms.generateDataKey();

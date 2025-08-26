@@ -14,7 +14,7 @@ export interface GasEstimation {
 }
 
 export class GasOptimizer {
-  private provider: ethers.JsonRpcProvider;
+  private readonly provider: ethers.JsonRpcProvider;
 
   constructor(rpcUrl: string) {
     this.provider = new ethers.JsonRpcProvider(rpcUrl);

@@ -41,12 +41,12 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<ethers.ContractFactory>;
     getContractFactory(
-      abi: any[],
+      abi: ethers.InterfaceAbi,
       bytecode: ethers.BytesLike,
       signer?: ethers.Signer
     ): Promise<ethers.ContractFactory>;
     getContractAt(
-      nameOrAbi: string | any[],
+      nameOrAbi: string | ethers.InterfaceAbi,
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<ethers.Contract>;

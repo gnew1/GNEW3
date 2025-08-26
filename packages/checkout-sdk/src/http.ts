@@ -1,6 +1,6 @@
 
 export class Http {
-  constructor(private baseUrl: string, private timeoutMs = 15000) {}
+  constructor(private readonly baseUrl: string, private readonly timeoutMs = 15000) {}
 
   async get<T>(path: string, params?: Record<string, any>): Promise<T> {
     const url = new URL(path, this.baseUrl);

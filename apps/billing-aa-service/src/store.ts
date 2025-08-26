@@ -10,9 +10,9 @@ export type Job = {
 };
 
 export class JobsMemStore {
-  private watched = new Set<number>();
-  private q: Job[] = [];
-  private progress = new Set<string>();
+  private readonly watched = new Set<number>();
+  private readonly q: Job[] = [];
+  private readonly progress = new Set<string>();
   private done = 0;
   private failed = 0;
 
@@ -48,14 +48,16 @@ export class JobsMemStore {
     this.done++;
   }
 
-  async retryLater(job: Job, backoffMs: number, _reason: string) {
+  async retryLater(job: Job, backoffMs: number, reason: string) {
+    void reason;
     job.retries = (job.retries ?? 0) + 1;
     job.nextRunAt = Date.now() + backoffMs;
     if (!job.id) job.id = `${job.subId}:${Date.now()}:${Math.random()}`;
     this.q.push(job);
   }
 
-  async giveUp(job: Job, _reason: string) {
+  async giveUp(job: Job, reason: string) {
+    void reason;
     if (job.id) this.progress.delete(job.id);
     this.failed++;
   }

@@ -19,9 +19,9 @@ export interface TelemetryEvent {
 }
 
 export class TelemetryCollector {
-  private events: TelemetryEvent[] = [];
+  private readonly events: TelemetryEvent[] = [];
 
-  constructor(private serviceName: string) {}
+  constructor(private readonly serviceName: string) {}
 
   log(event: string, data: Record<string, any>, traceId?: string, spanId?: string) {
     const evt: TelemetryEvent = {
@@ -38,7 +38,7 @@ export class TelemetryCollector {
     return evt.traceId;
   }
 
-  async logOnChain(providerUrl: string, contractAddress: string, abi: any, fromBlock: number) {
+  async logOnChain(providerUrl: string, contractAddress: string, abi: any) {
     const provider = new ethers.JsonRpcProvider(providerUrl);
     const contract = new ethers.Contract(contractAddress, abi, provider);
 

@@ -1,7 +1,7 @@
 export type LabelItem = { kind: "group" | "user"; key: string | number; y: 0 | 1 };
 
 export class AntiCollusionClient {
-  constructor(private baseUrl: string, private token?: string) {}
+  constructor(private readonly baseUrl: string, private readonly token?: string) {}
   private h() {
     return {
       "Content-Type": "application/json",

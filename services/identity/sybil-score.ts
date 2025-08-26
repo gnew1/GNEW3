@@ -15,7 +15,7 @@ interface SybilSignal {
 }
 
 export class SybilScorer {
-  private driver: Driver;
+  private readonly driver: Driver;
 
   constructor(uri: string, user: string, password: string) {
     this.driver = neo4j.driver(uri, neo4j.auth.basic(user, password));

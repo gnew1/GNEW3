@@ -18,7 +18,7 @@ export class Scheduler {
   private chargedToday = 0;
   private lastResetDay = new Date().getUTCDate();
 
-  constructor(private store: JobsMemStore, private logger: Logger, private opt: Options) {}
+  constructor(private readonly store: JobsMemStore, private readonly logger: Logger, private readonly opt: Options) {}
 
   start(executor: (job: Job) => Promise<void>) {
     if (this.running) return;

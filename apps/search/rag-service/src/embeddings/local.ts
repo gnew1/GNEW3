@@ -4,7 +4,7 @@ import { EmbeddingProvider } from "./provider.js";
 
 /** Embeddings locales deterministas, 384-d, estilo hashing bag-of-words */
 export class LocalEmbedding implements EmbeddingProvider {
-  private D = 384;
+  private readonly D = 384;
   dim() { return this.D; }
   async embed(texts: string[]) {
     return texts.map((t) => this.embedOne(t));
