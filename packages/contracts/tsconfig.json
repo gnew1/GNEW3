@@ -1,9 +1,10 @@
 { 
   "extends": "../../tsconfig.base.json", 
-  "compilerOptions": { 
-    "outDir": "dist", 
-    "sourceMap": true 
-  }, 
+  "compilerOptions": {
+    "outDir": "dist",
+    "sourceMap": true,
+    "types": ["node", "hardhat"]
+  },
   "include": ["hardhat.config.ts", "scripts", "test/**/*.{ts,tsx}"] 
 } 
  
