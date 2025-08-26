@@ -1,24 +1,19 @@
 
 import request from "supertest";
-import app from "../src/app";
 import jwt from "jsonwebtoken";
+import { generateKeyPairSync } from "crypto";
+import type { Express } from "express";
 
-const PRIV = `-----BEGIN RSA PRIVATE KEY-----
-MIICXAIBAAKBgQCqQ9vC0v/8Hk6kqJvP3kz7qvA1oXc4oYwz2m8QpU7q6rjJb8jJ
-9c1X7o2mFzQb4L9o2jvQ6j9bJvJqQv1mR9YH7yJ6zC8qj3PqvF3e6Q5yN2o3k4qL
-b8m7o2nFz6q7u8p1w2x3y4z5A6B7C8D9E0F1G2H3I4J5K6L7M8N9O0P1Q2R3S4T5
-IDAQABAoGBAI+e2wB9j5J7tYc8sYJg1dp1vQm1lP7H2b9QmYz2x3c4v5b6n7m8p9
-q0r1s2t3u4v5w6x7y8z9A0B1C2D3E4F5G6H7I8J9K0L1M2N3O4P5Q6R7S8T9U0V1
-W2X3Y4Z5a6b7c8d9e0f1g2h3
------END RSA PRIVATE KEY-----`;
+const { privateKey: PRIV, publicKey: PUB } = generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: "spki", format: "pem" },
+  privateKeyEncoding: { type: "pkcs1", format: "pem" },
+});
 
-const PUB = `-----BEGIN PUBLIC KEY-----
-MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAKpD28LS//weTqSom8/eTPuq8DWhdzih
-jDPabxClTurquMlvymn1zVfujacXOrq7inXDbHf3Q7kN8m7iBq0eK1sCAwEAAQ==
------END PUBLIC KEY-----`;
-
-beforeAll(() => {
+let app: Express;
+beforeAll(async () => {
   process.env.JWT_PUBLIC_KEY = PUB;
+  app = (await import("../src/app")).default;
 });
 
 function sign(payload: any) {
