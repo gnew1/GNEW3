@@ -11,8 +11,9 @@ const model = {
 
 describe("model scoring & explain", () => {
   it("sanction dominates score", () => {
-    const s1 = scoreTx({ amount: 50, velocity: 0, crossBorder: 0, channelCrypto: 0, kycLow: 0, pep: 0, sanction: 1 }, model as any);
-    const s0 = scoreTx({ amount: 50, velocity: 0, crossBorder: 0, channelCrypto: 0, kycLow: 0, pep: 0, sanction: 0 }, model as any);
+    const base = { amount: 100, velocity: 1, crossBorder: 0.1, channelCrypto: 0.1, kycLow: 0.1, pep: 0.05 };
+    const s1 = scoreTx({ ...base, sanction: 1 }, model as any);
+    const s0 = scoreTx({ ...base, sanction: 0 }, model as any);
     expect(s1).toBeGreaterThan(0.9);
     expect(s0).toBeLessThan(0.5);
     const ex = explainTx({ amount: 1000, velocity: 3, crossBorder: 1, channelCrypto: 1, kycLow: 1, pep: 1, sanction: 1 }, model as any);

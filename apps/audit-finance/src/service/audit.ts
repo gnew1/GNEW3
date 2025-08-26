@@ -12,7 +12,7 @@ export async function runAuditChecks(): Promise<AuditReport> {
 
   for (const tx of fakeLedger) {
     const diff = Math.abs(tx.amountEUR - tx.onchain);
-    if (diff > 0.5) {
+    if (diff >= 0.5) {
       findings.push({
         txid: tx.id,
         severity: "CRITICAL",
