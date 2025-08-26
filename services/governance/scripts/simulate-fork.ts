@@ -1,6 +1,11 @@
 import { ethers } from "hardhat";
+
+import type { AddressLike, EventLog } from "ethers";
+import { GnewGovernor, GnewGovToken } from "../../../packages/contracts/types";
+
 import type { EventLog, Signer } from "ethers";
 import type { GnewGovernor, GnewGovToken } from "../typechain";
+
 
 type ProposalId = bigint;
 enum VoteType {
@@ -44,21 +49,46 @@ async function castVote(
  */
 async function main() {
   const [proposer, voterA, voterB] = await ethers.getSigners();
-  const governor = (await ethers.getContractAt(
+  const governor = await ethers.getContractAt<GnewGovernor>(
     "GnewGovernor",
-    process.env.GOVERNOR!
-  )) as unknown as GnewGovernor;
-  const token = (await ethers.getContractAt(
+    process.env.GOVERNOR as AddressLike
+  );
+  const token = await ethers.getContractAt<GnewGovToken>(
     "GnewGovToken",
+
+    process.env.TOKEN as AddressLike
+  );
+
+  // Delegar poder de voto
+  await (await token.connect(voterA).delegate(voterA.address)).wait();
+  await (await token.connect(voterB).delegate(voterB.address)).wait();
+
     process.env.TOKEN!
   )) as unknown as GnewGovToken;
   await delegate(token, voterA);
   await delegate(token, voterB);
 
+
   // Crear propuesta simple: actualizar delay del timelock (ejemplo)
-  const timelock = await ethers.getContractAt("GNEWTimelock", process.env.TIMELOCK!);
+  const timelock = await ethers.getContractAt(
+    "GNEWTimelock",
+    process.env.TIMELOCK as AddressLike
+  );
   const newDelay = 3 * 24 * 60 * 60;
   const calldata = timelock.interface.encodeFunctionData("updateDelay", [newDelay]);
+
+
+  const proposeTx = await governor
+    .connect(proposer)
+    .propose(
+      [timelock.target as string],
+      [0],
+      [calldata],
+      "Proposal: Update timelock delay to 3 days"
+    );
+  const rc = await proposeTx.wait();
+  const log = rc?.logs[0] as EventLog;
+  const { proposalId } = log.args as { proposalId: ProposalId };
 
   const proposalId = await propose(
     governor,
@@ -67,6 +97,7 @@ async function main() {
     calldata,
     "Proposal: Update timelock delay to 3 days"
   );
+
 
   // Avanza a la votación y vota con ABSTAIN incluido (control: abstención calculada)
   await ethers.provider.send("hardhat_mine", ["0x1000"]); // ~votingDelay
