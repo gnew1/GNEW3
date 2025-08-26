@@ -10,9 +10,9 @@ export type Job = {
 };
 
 export class JobsMemStore {
-  private watched = new Set<number>();
-  private q: Job[] = [];
-  private progress = new Set<string>();
+  private readonly watched = new Set<number>();
+  private readonly q: Job[] = [];
+  private readonly progress = new Set<string>();
   private done = 0;
   private failed = 0;
 
