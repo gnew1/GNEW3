@@ -21,8 +21,8 @@ function App() {
     <div>
       <input className="q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Consulta…" />
       <p><button onClick={doSearch} disabled={busy}>{busy ? "Buscando…" : "Buscar"}</button></p>
-      {results.map((r, i) => (
-        <div key={i} className="result">
+      {results.map((r) => (
+        <div key={r.citation.uri} className="result">
           <div className="score">{(r.similarity*100).toFixed(1)}%</div>
           <p>{r.content}</p>
           <div className="cite">Fuente: <a href={r.citation.uri} target="_blank" rel="noreferrer">{r.citation.title}</a> — {r.citation.range}</div>

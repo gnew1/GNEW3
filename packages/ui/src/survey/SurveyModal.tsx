@@ -1,4 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
+
+function ensureDialogPolyfill(dlg: HTMLDialogElement) {
+  if (typeof dlg.showModal !== "function") {
+    (dlg as any).showModal = () => dlg.setAttribute("open", "");
+    (dlg as any).close = () => dlg.removeAttribute("open");
+  }
+}
 import type { Survey, Question } from "./types";
 
 type Props = {
@@ -14,6 +21,7 @@ export const SurveyModal: React.FC<Props> = ({ survey, userId, event, onClose, e
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   function setAnswer(qid: string, value: number | string) {
     setAnswers((a) => ({ ...a, [qid]: value }));
@@ -61,9 +69,24 @@ export const SurveyModal: React.FC<Props> = ({ survey, userId, event, onClose, e
     </div>
   );
 
+  useEffect(() => {
+    const dlg = dialogRef.current;
+    if (!dlg) return;
+    ensureDialogPolyfill(dlg);
+    dlg.showModal();
+  }, []);
+
   return (
-    <div role="dialog" aria-modal="true" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.35)", display:"grid", placeItems:"center", zIndex:1000 }}>
-      <div style={{ background:"white", borderRadius:16, padding:20, width:"min(560px, 92vw)" }}>
+    <dialog
+      ref={dialogRef}
+      aria-modal="true"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", display: "grid", placeItems: "center", zIndex: 1000 }}
+    >
+      <div style={{ background: "white", borderRadius: 16, padding: 20, width: "min(560px, 92vw)" }}>
         <h2 id="survey-title" style={{ marginTop:0 }}>{survey.name}</h2>
         {submitted ? (
           <p role="status">¡Gracias por tu feedback!</p>
@@ -105,7 +128,7 @@ export const SurveyModal: React.FC<Props> = ({ survey, userId, event, onClose, e
           </>
         )}
       </div>
-    </div>
+    </dialog>
   );
 };
 

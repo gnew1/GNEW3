@@ -14,8 +14,8 @@ export function TimeSeriesChart({ data, lines }: { data: any[]; lines: LineDef[]
           <YAxis orientation="right" yAxisId="R" />
           <Tooltip />
           <Legend />
-          {lines.map((l, i) => (
-            <Line key={i} type="monotone" dataKey={l.dataKey} name={l.name} yAxisId={l.yAxisId || "L"} dot={false} />
+          {lines.map((l) => (
+            <Line key={l.dataKey} type="monotone" dataKey={l.dataKey} name={l.name} yAxisId={l.yAxisId || "L"} dot={false} />
           ))}
         </LineChart>
       </ResponsiveContainer>
