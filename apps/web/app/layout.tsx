@@ -2,7 +2,9 @@ export const metadata = {
   title: 'GNEW Web',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+type Props = Readonly<{ children: React.ReactNode }>;
+
+export default function RootLayout({ children }: Props) {
   return (
     <html lang="es">
       <body>{children}</body>

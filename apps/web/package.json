@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@gnew/ui": "workspace:*",
@@ -20,6 +21,11 @@
   "devDependencies": {
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.5",
+    "@testing-library/react": "^14.1.2",
+    "@testing-library/jest-dom": "^6.1.5",
+    "axe-core": "^4.7.1",
+    "vitest": "^1.6.0",
+    "vitest-axe": "^0.1.0",
     "typescript": "^5.5.4"
   }
 }
