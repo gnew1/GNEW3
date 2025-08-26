@@ -8,7 +8,7 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "express": "^4.19.0",
+    "express": "^5.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -16,7 +16,7 @@
     "typescript": "^5.4.5",
     "jest": "^29.7.0",
     "@types/jest": "^29.5.12",
-    "@types/express": "^4.17.21"
+    "@types/express": "^5.0.3"
   }
 }
 
