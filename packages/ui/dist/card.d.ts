@@ -1,5 +1,8 @@
-import React from 'react';
-export declare function Card({ title, children }: {
+import React from "react";
+export declare const Card: React.ForwardRefExoticComponent<
+  Readonly<{
     title?: string;
     children?: React.ReactNode;
-}): import("react/jsx-runtime").JSX.Element;
+  }> &
+    React.RefAttributes<HTMLDivElement>
+>;
