@@ -1,8 +1,8 @@
 import React, { useEffect } from "react"; 
 import { useConsentStore } from "./store"; 
  
-export default function ConsentCenter({ subjectId }: { subjectId: 
-string }) { 
+export default function ConsentCenter({ subjectId }: Readonly<{ subjectId:
+string }>) {
   const { loadCatalog, loadState, catalog, state, toggle, save } = 
 useConsentStore(); 
  

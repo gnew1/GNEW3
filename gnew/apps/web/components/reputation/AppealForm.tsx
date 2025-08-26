@@ -1,7 +1,7 @@
 import React, { useState } from "react"; 
  
-export default function AppealForm({ address, epoch, version }:{ 
-address:string; epoch:number; version:number }) { 
+export default function AppealForm({ address, epoch, version }: Readonly<{
+address:string; epoch:number; version:number }>) {
   const [category, setCategory] = useState("dato_incorrecto"); 
   const [desc, setDesc] = useState(""); 
   const [link, setLink] = useState(""); 

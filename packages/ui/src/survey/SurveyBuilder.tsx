@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import type { Question } from "./types";
 
-type Props = { endpoint?: string };
+type Props = Readonly<{ endpoint?: string }>;
 export const SurveyBuilder: React.FC<Props> = ({ endpoint = "/feedback" }) => {
   const [name, setName] = useState("");
   const [trigger, setTrigger] = useState("post-votacion");

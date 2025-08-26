@@ -8,8 +8,8 @@ function ensureDialogPolyfill(dlg: HTMLDialogElement) {
   }
 }
 type Catalog = { uses: any[]; dataCategories: any[]; channels: any[]; matrixVersion: string };
-export default function ConsentBanner({ subjectId }: { subjectId: 
-string }) { 
+export default function ConsentBanner({ subjectId }: Readonly<{ subjectId:
+string }>) {
 const [visible, setVisible] = useState(false); 
 const [catalog, setCatalog] = useState<Catalog | null>(null); 
 const [choices, setChoices] = useState<any>({
@@ -116,8 +116,8 @@ onClick={()=>save("accept_all")}>Aceptar todo</button>
   );
 }
  
-function Card({ title, checked, onChange }:{ title:string; 
-checked:boolean; onChange:(v:boolean)=>void }) { 
+function Card({ title, checked, onChange }: Readonly<{ title:string;
+checked:boolean; onChange:(v:boolean)=>void }>) {
   return ( 
     <label className="p-3 border rounded-xl flex items-center 
 justify-between"> 

@@ -8,11 +8,11 @@ export default function AISuggestions({
   conversationId,
   messages,
   lang = "es",
-}: {
+}: Readonly<{
   conversationId?: string;
   messages: Msg[];
   lang?: "es" | "en";
-}) {
+}>) {
   const [loading, setLoading] = useState(false);
   const [error, setErr] = useState<string | null>(null);
   const [data, setData] = useState<Awaited<ReturnType<typeof callSummarize>> | null>(null);

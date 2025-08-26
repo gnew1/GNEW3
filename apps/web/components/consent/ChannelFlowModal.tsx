@@ -16,7 +16,7 @@ type ConsentState = {
   onchain: { marketing: boolean };
 };
 
-export default function ChannelFlowModal({ subjectId, open, onClose }:{ subjectId:string; open:boolean; onClose:()=>void }) { 
+export default function ChannelFlowModal({ subjectId, open, onClose }: Readonly<{ subjectId:string; open:boolean; onClose:()=>void }>) {
   const [mv, setMv] = useState<string>("v1"); 
   const [state, setState] = useState<ConsentState>({
     email: { marketing: false },
@@ -129,17 +129,16 @@ onClick={save}>Guardar</button>
   );
 }
  
-function Section({ title, children }:{ title:string; 
-children:React.ReactNode }) { 
-  return <div className="space-y-2"><h3 
-className="font-medium">{title}</h3><div 
-className="space-y-2">{children}</div></div>; 
-} 
-function Toggle({ label, checked, onChange }:{ label:string; 
-checked:boolean; onChange:(v:boolean)=>void }) { 
-  return <label className="flex items-center justify-between p-3 
-border rounded-lg"><span className="text-sm">{label}</span><input 
-type="checkbox" checked={checked} 
-onChange={e=>onChange(e.target.checked)}/></label>; 
-} 
+function Section({ title, children }: Readonly<{ title:string;
+children:React.ReactNode }>) {
+  return <div className="space-y-2"><h3
+className="font-medium">{title}</h3><div
+className="space-y-2">{children}</div></div>;
+}
+function Toggle({ label, checked, onChange }: Readonly<{ label:string;
+checked:boolean; onChange:(v:boolean)=>void }>) {
+  return <label className="flex items-center justify-between p-3
+border rounded-lg"><span className="text-sm">{label}</span><input type="checkbox" checked={checked}
+onChange={e=>onChange(e.target.checked)}/></label>;
+}
  

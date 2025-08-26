@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react"; 
 import { BrowserProvider, Contract, Eip1193Provider, ethers, type InterfaceAbi } from "ethers"; 
 import DelegationAbi from "../abis/delegation"; 
-type Props = { 
-contractAddress: string; 
-scopeLabel?: string; // p.ej. "TOKEN_VOTES" | "REPUTATION_VOTES" 
-}; 
+type Props = Readonly<{
+contractAddress: string;
+scopeLabel?: string; // p.ej. "TOKEN_VOTES" | "REPUTATION_VOTES"
+}>;
 function toBytes32(label: string) { 
 return ethers.id(label); 
 } 

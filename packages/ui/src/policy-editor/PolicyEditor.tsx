@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 
-type Props = {
+type Props = Readonly<{
   backend?: string; // http://localhost:8030
   activeVersion?: number;
-};
+}>;
 
 export default function PolicyEditor({ backend = "http://localhost:8030", activeVersion }: Props) {
   const [model, setModel] = useState<string>("");

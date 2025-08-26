@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react"; 
 type Guardian = { address: string; did?: string }; 
-type Props = { 
-guardians: Guardian[]; threshold: number; contract: string; chainId: 
-number; 
-timelockSec: number; expirySec: number; 
-}; 
-export default function RecoveryFlow({ guardians, threshold, contract, 
-chainId, timelockSec, expirySec }: Props) { 
+type Props = Readonly<{
+guardians: Guardian[]; threshold: number; contract: string; chainId:
+number;
+timelockSec: number; expirySec: number;
+}>;
+export default function RecoveryFlow({ guardians, threshold, contract,
+chainId, timelockSec, expirySec }: Props) {
   const [proposed, setProposed] = useState(""); 
   const [sigs, setSigs] = useState<{signer:string; sig:string}[]>([]); 
   const [nonce, setNonce] = useState<number>(0); 

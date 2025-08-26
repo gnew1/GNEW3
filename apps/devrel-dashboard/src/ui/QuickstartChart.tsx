@@ -2,7 +2,7 @@
 import React from "react";
 import { ResponsiveContainer, BarChart, XAxis, YAxis, Tooltip, Legend, Bar } from "recharts";
 
-type Props = { metrics: { lang: string; runs: number; avgSeconds: number }[] };
+type Props = Readonly<{ metrics: { lang: string; runs: number; avgSeconds: number }[] }>;
 
 export function QuickstartChart({ metrics }: Props) {
   return (

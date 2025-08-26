@@ -8,13 +8,13 @@ function ensureDialogPolyfill(dlg: HTMLDialogElement) {
 }
 import type { Survey, Question } from "./types";
 
-type Props = {
+type Props = Readonly<{
   survey: Survey;
   userId: string;
   event: string;
   onClose: () => void;
   endpoint?: string; // e.g. /feedback
-};
+}>;
 
 export const SurveyModal: React.FC<Props> = ({ survey, userId, event, onClose, endpoint = "/feedback" }) => {
   const [answers, setAnswers] = useState<Record<string, number | string>>({});

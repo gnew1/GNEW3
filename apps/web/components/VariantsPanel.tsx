@@ -11,8 +11,8 @@ LineChart, Line, CartesianGrid,
 type VariantKey = "one_person_one_vote" | "token_weighted" | 
 "quadratic_voting"; 
  
-export default function VariantsPanel({ demo = false }: { demo?: 
-boolean }) { 
+export default function VariantsPanel({ demo = false }: Readonly<{ demo?:
+boolean }>) {
   const [loading, setLoading] = useState(false); 
   const [err, setErr] = useState<string | null>(null); 
   const [data, setData] = useState<any | null>(null); 
