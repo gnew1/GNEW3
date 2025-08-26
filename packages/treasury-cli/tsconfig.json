@@ -10,7 +10,7 @@
     "skipLibCheck": true, 
     "types": ["node"] 
   }, 
-  "include": ["src/**/*.ts"] 
-} 
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
  
  

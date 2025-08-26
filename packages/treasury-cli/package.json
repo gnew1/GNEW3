@@ -6,30 +6,32 @@
   "bin": { 
     "gnew-treasury": "dist/index.js" 
   }, 
-  "scripts": { 
-    "build": "tsc -p tsconfig.json", 
-    "dev": "tsx src/index.ts", 
-    "lint": "eslint . --max-warnings=0", 
-    "propose:eth": "tsx src/proposeTransfer.ts", 
-    "propose:erc20": "tsx src/proposeErc20.ts", 
-    "opa:test": "opa test ../treasury-policies -v" 
-  }, 
-  "dependencies": { 
-    "@safe-global/protocol-kit": "^5.0.1", 
-    "@safe-global/api-kit": "^3.0.2", 
-    "ethers": "^6.13.2", 
-    "axios": "^1.7.7", 
-    "zod": "^3.23.8", 
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "lint": "eslint . --max-warnings=0",
+    "propose:eth": "tsx src/proposeTransfer.ts",
+    "propose:erc20": "tsx src/proposeErc20.ts",
+    "opa:test": "opa test ../treasury-policies -v",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@safe-global/protocol-kit": "^5.0.1",
+    "@safe-global/api-kit": "^3.0.2",
+    "ethers": "^6.13.2",
+    "axios": "^1.7.7",
+    "zod": "^3.23.8",
   "dotenv": "^16.4.5",
   "yargs": "^17.7.2"
-  }, 
-  "devDependencies": { 
-    
-    "@types/node": "^22.15.3", 
-    "eslint": "^9.29.0", 
-    "tsx": "^4.19.2", 
-    "typescript": "^5.6.3" 
-  } 
-} 
+  },
+  "devDependencies": {
+
+    "@types/node": "^22.15.3",
+    "eslint": "^9.29.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^1.6.0"
+  }
+}
  
  
