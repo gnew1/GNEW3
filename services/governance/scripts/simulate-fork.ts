@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import type { EventLog } from "ethers";
+import type { AddressLike, EventLog } from "ethers";
 import { GnewGovernor, GnewGovToken } from "../../../packages/contracts/types";
 
 type ProposalId = bigint;
@@ -14,21 +14,24 @@ enum VoteType {
  */
 async function main() {
   const [proposer, voterA, voterB] = await ethers.getSigners();
-  const governor = (await ethers.getContractAt(
+  const governor = await ethers.getContractAt<GnewGovernor>(
     "GnewGovernor",
-    process.env.GOVERNOR!
-  )) as unknown as GnewGovernor;
-  const token = (await ethers.getContractAt(
+    process.env.GOVERNOR as AddressLike
+  );
+  const token = await ethers.getContractAt<GnewGovToken>(
     "GnewGovToken",
-    process.env.TOKEN!
-  )) as unknown as GnewGovToken;
+    process.env.TOKEN as AddressLike
+  );
 
   // Delegar poder de voto
   await (await token.connect(voterA).delegate(voterA.address)).wait();
   await (await token.connect(voterB).delegate(voterB.address)).wait();
 
   // Crear propuesta simple: actualizar delay del timelock (ejemplo)
-  const timelock = await ethers.getContractAt("GNEWTimelock", process.env.TIMELOCK!);
+  const timelock = await ethers.getContractAt(
+    "GNEWTimelock",
+    process.env.TIMELOCK as AddressLike
+  );
   const newDelay = 3 * 24 * 60 * 60;
   const calldata = timelock.interface.encodeFunctionData("updateDelay", [newDelay]);
 
@@ -42,7 +45,7 @@ async function main() {
     );
   const rc = await proposeTx.wait();
   const log = rc?.logs[0] as EventLog;
-  const proposalId = (log.args as unknown as { proposalId: ProposalId }).proposalId;
+  const { proposalId } = log.args as { proposalId: ProposalId };
 
   // Avanza a la votación y vota con ABSTAIN incluido (control: abstención calculada)
   await ethers.provider.send("hardhat_mine", ["0x1000"]); // ~votingDelay

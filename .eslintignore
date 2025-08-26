@@ -1,0 +1,8 @@
+*
+!services
+services/*
+!services/governance
+!services/governance/**
+services/governance/node_modules/**
+services/governance/dist/**
+services/governance/test/**
