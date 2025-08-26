@@ -4,12 +4,15 @@
  * - Recolecta eventos por contrato (logs) y TXs (status) para failure-rate
  * - Webhook opcional /webhooks/failure para integrar Tenderly/Blockscout y sumar fallos
  */
-import "dotenv/config"; 
-import Fastify from "fastify"; 
+import "dotenv/config";
+import Fastify from "fastify";
 import { Registry, collectDefaultMetrics, Counter, Gauge } from "prom-client";
-import { ethers, Log } from "ethers"; 
-import { z } from "zod"; 
-import { ABIS } from "./abis.js"; 
+import { ethers, Log } from "ethers";
+import type { Block, TransactionReceipt, TransactionResponse } from "ethers";
+import { z } from "zod";
+import pino from "pino";
+import { fileURLToPath } from "node:url";
+import { ABIS } from "./abis.js";
  
 const env = z 
   .object({ 
@@ -35,6 +38,7 @@ const watched: Watched[] = env.CONTRACTS.split(",").map((pair) => {
 });
  
 const provider = new ethers.JsonRpcProvider(env.RPC_URL, env.CHAIN_ID);
+const log = pino();
  
 // ---------- Métricas ---------- 
 const registry = new Registry(); 
@@ -82,65 +86,71 @@ const cErrors = new Counter({
 // ---------- Poller de bloques ---------- 
 let lastProcessed = Math.max(env.START_BLOCK, 0); 
  
-async function discoverStart(): Promise<void> { 
-  if (lastProcessed === 0) { 
-    // comenzar en head - confirmations para evitar reorganizaciones 
-    const head = await provider.getBlockNumber(); 
-    lastProcessed = head - env.CONFIRMATIONS; 
-  } 
-} 
- 
-async function loop() {
-  try { 
-    const head = await provider.getBlockNumber(); 
-    mHeadBlock.set(head); 
-    if (lastProcessed >= head - env.CONFIRMATIONS) { 
-      mIndexerLag.set(head - lastProcessed); 
-      return; 
-    } 
- 
-    const from = lastProcessed + 1; 
-  const to = Math.min(head - env.CONFIRMATIONS, from + 1000); // lotes de 1000
-    // 1) Procesar logs (eventos) 
-    for (const w of watched) { 
-  const logs = await provider.getLogs({ fromBlock: from, toBlock: to, address: w.address });
-      for (const lg of logs as Log[]) { 
-        try { 
-          const parsed = w.iface.parseLog(lg);
-          cEvents.labels({ contract: w.name, event: parsed.name }).inc();
-        } catch { 
-          // ABI no reconoce este log; ignorar 
-        } 
-      } 
-    } 
- 
-    // 2) Procesar TXs (status) para cada bloque del rango 
-    for (let b = from; b <= to; b++) {
-      const blk: any = await provider.getBlock(b, true);
-      const txs: any[] = Array.isArray(blk?.transactions) ? blk.transactions : [];
-      if (txs.length === 0) continue;
-      const txsToWatched = txs.filter(
-        (t) => typeof t?.to === "string" && watched.some((w) => w.address.toLowerCase() === String(t.to).toLowerCase()),
-      );
-      for (const tx of txsToWatched) {
-        const toAddr = String(tx.to).toLowerCase();
-        const labelContract = watched.find((w) => w.address.toLowerCase() === toAddr)!.name;
-        cTxTotal.labels({ contract: labelContract }).inc();
-        const rcpt = await provider.getTransactionReceipt(String(tx.hash));
-        if (rcpt?.status === 0) {
-          cTxFailed.labels({ contract: labelContract, source: "chain" }).inc();
-        }
+async function discoverStart(): Promise<void> {
+  if (lastProcessed === 0) {
+    // comenzar en head - confirmations para evitar reorganizaciones
+    const head = await provider.getBlockNumber();
+    lastProcessed = head - env.CONFIRMATIONS;
+  }
+}
+
+async function processLogs(from: number, to: number, rpc = provider): Promise<void> {
+  for (const w of watched) {
+    const logs = await rpc.getLogs({ fromBlock: from, toBlock: to, address: w.address });
+    for (const lg of logs as Log[]) {
+      try {
+        const parsed = w.iface.parseLog(lg);
+        cEvents.labels({ contract: w.name, event: parsed.name }).inc();
+      } catch {
+        // ABI no reconoce este log; ignorar
       }
     }
- 
-    lastProcessed = to; 
-    mLastProcessedBlock.set(lastProcessed); 
-    mIndexerLag.set(head - lastProcessed); 
-  } catch (e) { 
-    console.error("[poller] error", e); 
-    cErrors.labels({ scope: "poller" }).inc(); 
-  } 
-} 
+  }
+}
+
+async function processTransactions(from: number, to: number, rpc = provider): Promise<void> {
+  for (let b = from; b <= to; b++) {
+    const blk = (await rpc.getBlock(b, true)) as Block & { transactions: TransactionResponse[] };
+    const txs = Array.isArray(blk?.transactions) ? blk.transactions : [];
+    if (txs.length === 0) continue;
+    const txsToWatched = txs.filter(
+      (t) => typeof t.to === "string" && watched.some((w) => w.address.toLowerCase() === String(t.to).toLowerCase()),
+    );
+    for (const tx of txsToWatched) {
+      const toAddr = String(tx.to).toLowerCase();
+      const w = watched.find((wt) => wt.address.toLowerCase() === toAddr);
+      if (!w) continue;
+      cTxTotal.labels({ contract: w.name }).inc();
+      const rcpt: TransactionReceipt | null = await rpc.getTransactionReceipt(tx.hash);
+      if (rcpt?.status === 0) {
+        cTxFailed.labels({ contract: w.name, source: "chain" }).inc();
+      }
+    }
+  }
+}
+
+async function loop() {
+  try {
+    const head = await provider.getBlockNumber();
+    mHeadBlock.set(head);
+    if (lastProcessed >= head - env.CONFIRMATIONS) {
+      mIndexerLag.set(head - lastProcessed);
+      return;
+    }
+
+    const from = lastProcessed + 1;
+    const to = Math.min(head - env.CONFIRMATIONS, from + 1000); // lotes de 1000
+    await processLogs(from, to);
+    await processTransactions(from, to);
+
+    lastProcessed = to;
+    mLastProcessedBlock.set(lastProcessed);
+    mIndexerLag.set(head - lastProcessed);
+  } catch (err) {
+    log.error({ err }, "[poller] error");
+    cErrors.labels({ scope: "poller" }).inc();
+  }
+}
  
 // ---------- HTTP server ---------- 
 const app = Fastify({ logger: false }); 
@@ -150,47 +160,60 @@ app.get("/healthz", async () => {
 });
  
 app.get("/metrics", async (_req, res) => {
-  res.header("Content-Type", registry.contentType); 
-  return registry.metrics(); 
-}); 
- 
+  res.header("Content-Type", registry.contentType);
+  return registry.metrics();
+});
+
+function extractWebhookAddress(body: { to?: string; to_address?: string; transaction?: { to?: string } } | undefined) {
+  return (body?.to || body?.to_address || body?.transaction?.to)?.toLowerCase();
+}
+
 // (Opcional) Webhook de fallos (Tenderly/Blockscout). Incrementa fallos para el contrato destinatario.
 app.post<{ Body: { to?: string; to_address?: string; transaction?: { to?: string } } }>("/webhooks/failure", async (req, res) => {
-  try { 
-  if (env.WEBHOOK_SECRET && req.headers["x-webhook-secret"] !== env.WEBHOOK_SECRET) {
-      res.code(401).send({ error: "unauthorized" }); 
-      return; 
-    } 
-  const body = req.body || {}; 
-    // Normaliza payloads genéricos: { to, txHash, chainId } 
-  const to = (body.to || body.to_address || body.transaction?.to)?.toLowerCase();
-    if (!to) { 
-      res.code(400).send({ error: "missing to" }); 
-      return; 
-    } 
-    const w = watched.find((x) => x.address.toLowerCase() === to); 
-    if (!w) { 
-      res.code(200).send({ ok: true, ignored: true }); 
-      return; 
-    } 
-    cTxTotal.labels({ contract: w.name }).inc(); 
-    cTxFailed.labels({ contract: w.name, source: "webhook" }).inc(); 
-    res.send({ ok: true }); 
-  } catch (e) { 
-    cErrors.labels({ scope: "webhook" }).inc(); 
-    res.code(500).send({ error: "internal" }); 
-  } 
-}); 
- 
-await discoverStart(); 
-setInterval(loop, env.POLL_INTERVAL_MS); 
-loop().catch(() => {}); 
- 
-app.listen({ host: env.HOST, port: env.PORT }).then(() => {
-  console.log(
-    `[observability] ready on http://${env.HOST}:${env.PORT} — watching ${watched
-      .map((w) => `${w.name}@${w.address}`)
-      .join(", ")}`,
-  );
+  try {
+    if (env.WEBHOOK_SECRET && req.headers["x-webhook-secret"] !== env.WEBHOOK_SECRET) {
+      res.code(401).send({ error: "unauthorized" });
+      return;
+    }
+    const to = extractWebhookAddress(req.body);
+    if (!to) {
+      res.code(400).send({ error: "missing to" });
+      return;
+    }
+    const w = watched.find((x) => x.address.toLowerCase() === to);
+    if (!w) {
+      res.code(200).send({ ok: true, ignored: true });
+      return;
+    }
+    cTxTotal.labels({ contract: w.name }).inc();
+    cTxFailed.labels({ contract: w.name, source: "webhook" }).inc();
+    res.send({ ok: true });
+  } catch (err) {
+    log.error({ err }, "[webhook] error");
+    cErrors.labels({ scope: "webhook" }).inc();
+    res.code(500).send({ error: "internal" });
+  }
 });
+ 
+async function start() {
+  await discoverStart();
+  setInterval(loop, env.POLL_INTERVAL_MS);
+  loop().catch(() => {});
+  app.listen({ host: env.HOST, port: env.PORT }).then(() => {
+    log.info(
+      `[observability] ready on http://${env.HOST}:${env.PORT} — watching ${watched
+        .map((w) => `${w.name}@${w.address}`)
+        .join(", ")}`,
+    );
+  });
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  start().catch((err) => {
+    log.error({ err }, "startup failed");
+    process.exit(1);
+  });
+}
+
+export { processLogs, processTransactions, extractWebhookAddress, cTxTotal, cTxFailed };
  

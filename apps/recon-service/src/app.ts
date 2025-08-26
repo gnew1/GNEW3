@@ -20,7 +20,6 @@ import { parseCsvOrJson } from "./etl/parser";
 import { runReconciliation } from "./engine/reconcile";
 import { env } from "./config/env";
 
-const DATABASE_URL = env.DATABASE_URL;
 const JWT_AUDIENCE = env.JWT_AUDIENCE;
 const JWT_ISSUER = env.JWT_ISSUER;
 const JWT_PUBLIC_KEY = env.JWT_PUBLIC_KEY;
@@ -33,7 +32,7 @@ const logger = pino({ level: env.LOG_LEVEL });
 const httpLogger = pinoHttp({ logger });
 
 async function createPool(): Promise<Pool> {
-  if (env.PG_MEM === "1" || DATABASE_URL === "pgmem" || DATABASE_URL === "mem") {
+  if (env.PG_MEM === "1" || env.DATABASE_URL === "pgmem" || env.DATABASE_URL === "mem") {
     // Lazy import to avoid bundling in production
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
@@ -44,7 +43,7 @@ async function createPool(): Promise<Pool> {
     const MemPool = pgMem.Pool as unknown as typeof Pool;
     return new MemPool() as unknown as Pool;
   }
-  return new Pool({ connectionString: DATABASE_URL });
+  return new Pool({ connectionString: env.DATABASE_URL });
 }
 
 type User = { sub: string; roles?: string[]; email?: string };

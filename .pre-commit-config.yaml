@@ -9,6 +9,7 @@ repos:
     rev: v8.18.4
     hooks:
       - id: gitleaks
+        stages: [commit, push]
   - repo: local
     hooks:
       - id: forbid-latest-tag

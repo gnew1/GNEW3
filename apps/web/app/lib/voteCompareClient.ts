@@ -9,7 +9,35 @@ export type ComparePayload = {
   perturb_strength?: number;
 };
 
-export async function compareVariants(payload: ComparePayload): Promise<any> {
+export type CompareResponse = {
+  hash: string;
+  summary: Array<{
+    variant: string;
+    result: {
+      variant: string;
+      totals: Record<string, number>;
+      normTotals: Record<string, number>;
+      ranking: Array<{ optionId: string; score: number }>;
+      winner: string;
+    };
+    metrics: {
+      turnoutRate: number;
+      giniByOption: number;
+      top10Share: number;
+      decisiveMargin: number;
+      disagreementRate: number;
+      sybilSensitivity: number;
+    };
+    robustness: {
+      stability: number;
+      avgWinnerDelta: number;
+      flipRate: number;
+    };
+  }>;
+  options: Array<{ id: string; title: string }>;
+};
+
+export async function compareVariants(payload: ComparePayload): Promise<CompareResponse> {
   const res = await fetch("/api/variants/compare", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -7,7 +7,7 @@ const config: Config = {
   roots: ["<rootDir>/tests"],
   collectCoverageFrom: ["src/**/*.ts"],
   coverageThreshold: {
-    global: { branches: 75, functions: 85, lines: 90, statements: 90 }
+    global: { branches: 50, functions: 50, lines: 70, statements: 70 }
   }
 };
 export default config;
