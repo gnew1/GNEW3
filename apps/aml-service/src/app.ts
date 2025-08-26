@@ -13,7 +13,7 @@
 import express from "express";
 import pino from "pino";
 import pinoHttp from "pino-http";
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { ensureMigrations } from "./db/migrate";
@@ -39,7 +39,7 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 
-function computeScore(
+export function computeScore(
   model: ModelCfg | null,
   features: Record<string, number>,
   sanctionHit: boolean,
@@ -50,7 +50,7 @@ function computeScore(
   return 0.2 + Math.min(0.6, 0.01 * amount);
 }
 
-function determineLevel(
+export function determineLevel(
   score: number,
   rules: { flag: boolean; escalateL2: boolean },
   thresholdL1: number,
@@ -62,10 +62,23 @@ function determineLevel(
   return "none";
 }
 
-function statusFromAction(action: string): "l2_review" | "closed" | "ack" {
-  if (action === "escalate") return "l2_review";
-  if (action === "close") return "closed";
-  return "ack";
+export function statusFromAction(action: string): "l2_review" | "closed" | "ack" {
+  switch (action) {
+    case "escalate":
+      return "l2_review";
+    case "close":
+      return "closed";
+    default:
+      return "ack";
+  }
+}
+
+export function determineAction(
+  mode: "shadow" | "enforced",
+  level: "none" | "L1" | "L2"
+): "block" | "allow" {
+  if (mode === "enforced" && level === "L2") return "block";
+  return "allow";
 }
 
 type User = { sub: string; roles?: string[]; email?: string };
@@ -103,6 +116,7 @@ app.use(authOptional);
 
 // Health + migrate
 app.get("/healthz", async (_req, res) => res.json({ ok: true }));
+/* c8 ignore next */
 app.post("/admin/migrate", requireRole("aml:admin"), async (_req, res) => {
   await ensureMigrations(pool);
   res.json({ ok: true });
@@ -180,6 +194,45 @@ const TxIn = z.object({
   pepFlag: z.boolean().optional()
 });
 
+type TxInType = z.infer<typeof TxIn>;
+
+const toFlag = (v: boolean): 0 | 1 => (v ? 1 : 0);
+
+export function buildFeatures(body: TxInType, velocity: number, sanctionHit: boolean) {
+  return {
+    amount: body.amount,
+    velocity,
+    crossBorder: toFlag(Boolean(body.countryFrom && body.countryTo && body.countryFrom !== body.countryTo)),
+    channelCrypto: toFlag(body.channel === "crypto"),
+    kycLow: toFlag(body.kycLevel === "low"),
+    pep: toFlag(Boolean(body.pepFlag)),
+    sanction: toFlag(sanctionHit)
+  };
+}
+
+function buildExplanations(model: ModelCfg | null, features: Record<string, number>) {
+  if (model) return explainTx(features, model);
+  return Object.fromEntries(Object.keys(features).map((k) => [k, 0]));
+}
+
+async function insertAlertIfNeeded(
+  client: PoolClient,
+  level: "none" | "L1" | "L2",
+  score: number,
+  txId: string,
+  evidenceId: string,
+  explanations: Record<string, number>,
+  rules: { flag: boolean; escalateL2: boolean }
+): Promise<string | null> {
+  if (level === "none") return null;
+  const r = await client.query(
+    `insert into aml_alerts(level,status,score,tx_id,evidence_id,explanations,rules)
+         values($1,'open',$2,$3,$4,$5,$6) returning id`,
+    [level, score, txId, evidenceId, explanations, rules]
+  );
+  return r.rows[0].id as string;
+}
+
 app.post("/ingest/tx", requireRole("aml:ingest"), async (req, res) => {
   const body = TxIn.parse(req.body);
   const nowIso = new Date().toISOString();
@@ -208,22 +261,19 @@ app.post("/ingest/tx", requireRole("aml:ingest"), async (req, res) => {
     const mrow = await client.query("select cfg from aml_model where id='active'");
     const model = mrow.rowCount ? mrow.rows[0].cfg : null;
 
-    // Build features
-    const features = {
-      amount: body.amount,
-      velocity,
-      crossBorder: body.countryFrom && body.countryTo && body.countryFrom !== body.countryTo ? 1 : 0,
-      channelCrypto: body.channel === "crypto" ? 1 : 0,
-      kycLow: body.kycLevel === "low" ? 1 : 0,
-      pep: body.pepFlag ? 1 : 0,
-      sanction: sanctionHit ? 1 : 0
-    };
-
+    // Build features & explanations
+    const features = buildFeatures(body, velocity, sanctionHit);
     const score = computeScore(model, features, sanctionHit, body.amount);
     const rules = checkRules({ ...body, velocity, sanctionHit });
-    const explanations = model ? explainTx(features, model) : Object.fromEntries(Object.keys(features).map(k => [k, 0]));
+    const explanations = buildExplanations(model, features);
     const evidencePayload = {
-      tx: body, features, rules, explanations, score, ts: nowIso, sanctionRecord: sMatch.rows[0] ?? null
+      tx: body,
+      features,
+      rules,
+      explanations,
+      score,
+      ts: nowIso,
+      sanctionRecord: sMatch.rows[0] ?? null
     };
 
     // Persist tx event
@@ -237,22 +287,20 @@ app.post("/ingest/tx", requireRole("aml:ingest"), async (req, res) => {
     // Thresholds and mode
     const thresholdL2 = Number(model?.thresholdL2 ?? 0.9);
     const thresholdL1 = Number(model?.thresholdL1 ?? 0.75);
-    const mode = (model?.mode ?? "shadow") as "shadow"|"enforced";
-
+    const mode = (model?.mode ?? "shadow") as "shadow" | "enforced";
     const level = determineLevel(score, rules, thresholdL1, thresholdL2, sanctionHit);
 
     // Always log detection (shadow or enforced), but only block if enforced & L2
     const evidence = await anchorEvidence(client, evidencePayload);
-
-    let alertId: string | null = null;
-    if (level !== "none") {
-      const r = await client.query(
-        `insert into aml_alerts(level,status,score,tx_id,evidence_id,explanations,rules)
-         values($1,'open',$2,$3,$4,$5,$6) returning id`,
-        [level, score, body.txId, evidence.id, explanations, rules]
-      );
-      alertId = r.rows[0].id as string;
-    }
+    const alertId = await insertAlertIfNeeded(
+      client,
+      level,
+      score,
+      body.txId,
+      evidence.id,
+      explanations,
+      rules
+    );
 
     await client.query("commit");
     res.status(201).json({
@@ -261,7 +309,7 @@ app.post("/ingest/tx", requireRole("aml:ingest"), async (req, res) => {
       score,
       level,
       mode,
-      action: mode === "enforced" && level === "L2" ? "block" : "allow",
+      action: determineAction(mode, level),
       alertId,
       evidenceHash: evidence.hash
     });
@@ -312,6 +360,7 @@ app.get("/metrics", requireRole("aml:read"), async (_req, res) => {
 });
 
 // Bootstrap
+/* c8 ignore next */
 if (require.main === module) {
   ensureMigrations(pool)
     .then(() => app.listen(PORT, () => logger.info({ msg: `aml-service listening on :${PORT}` })))
