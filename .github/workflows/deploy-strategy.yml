@@ -1,65 +1,33 @@
-name: Deploy (Strategy)
-
+name: Deploy Strategy
 on:
   workflow_dispatch:
     inputs:
       service:
         description: "Servicio"
         type: string
-        default: gateway
-      version:
-        description: "Imagen tag/digest"
-        type: string
         required: true
-      strategy:
-        description: "canary|bluegreen|direct"
+      environment:
+        description: "Entorno (dev|staging|prod)"
         type: choice
+        options: [dev, staging, prod]
         required: true
-        options:
-          - canary
-          - bluegreen
-          - direct
-      env:
-        description: "staging|prod"
-        type: choice
-        required: true
-        options:
-          - staging
-          - prod
-
-env:
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/gnew
+        default: dev
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          case "${{ inputs.strategy }}" in
-            canary)
-              kubectl apply -f apps/${{ inputs.service }}/canary/${{ inputs.service }}-canary.yaml
-              ;;
-            bluegreen)
-              FILE="apps/${{ inputs.service }}/kustomize/base/deployment-green.yaml"
-              sed -i "s#image: .*#image: ${{ env.IMAGE_PREFIX }}-${{ inputs.service }}:${{ inputs.version }}#" "$FILE"
-              git config user.name "ci"
-              git config user.email "ci@users.noreply.github.com"
-              git commit -am "deploy(${ { inputs.service } }): green ${{ inputs.version }}" || true
-              git push || true
-              echo "ArgoCD sync step intentionally omitted; wire up if needed."
-              ;;
-            direct)
-              IMAGE="${{ env.IMAGE_PREFIX }}-${{ inputs.service }}:${{ inputs.version }}"
-              yq -i ".values.services.${{ inputs.service }}.image = \"$IMAGE\"" infra/helm/gnew-platform/values.${{ inputs.env }}.yaml
-              git config user.name "ci"
-              git config user.email "ci@users.noreply.github.com"
-              git commit -am "deploy(${ { inputs.service } }): direct ${{ inputs.version }}" || true
-              git push || true
-              ;;
-            *)
-              echo "Unknown strategy: ${{ inputs.strategy }}"
-              exit 1
-              ;;
-          esac
-
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+      - run: pnpm -w install --frozen-lockfile
+      - name: Build service
+        run: pnpm --filter "${{ inputs.service }}" build
+      - name: Deploy service
+        run: pnpm --filter "${{ inputs.service }}" deploy:${{ inputs.environment }}
