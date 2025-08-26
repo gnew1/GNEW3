@@ -1,9 +1,11 @@
 import "dotenv/config"; 
 import { HardhatUserConfig } from "hardhat/config"; 
-import "@nomicfoundation/hardhat-toolbox"; 
-import "@nomicfoundation/hardhat-verify"; 
-import "solidity-coverage"; 
-import "hardhat-gas-reporter"; 
+import "@nomicfoundation/hardhat-toolbox";
+import "@typechain/hardhat";
+import "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-verify";
+import "solidity-coverage";
+import "hardhat-gas-reporter";
  
 const PRIVATE_KEY = process.env.PRIVATE_KEY ? 
 [process.env.PRIVATE_KEY] : []; 
@@ -16,7 +18,8 @@ const config: HardhatUserConfig = {
     } 
   }, 
   paths: {
-    sources: "src_min",
+    sources: "src",
+    tests: "test",
   },
   mocha: { timeout: 120_000 }, 
   networks: { 
@@ -50,17 +53,17 @@ const config: HardhatUserConfig = {
       polygonAmoy: process.env.POLYGONSCAN_API_KEY || "" 
     } 
   }, 
-  gasReporter: { 
-    enabled: true, 
-    currency: "USD", 
-    coinmarketcap: process.env.CMC_API_KEY || undefined, 
-    excludeContracts: ["mocks/"] 
-  }, 
-  typechain: { 
-    outDir: "typechain-types", 
-    target: "ethers-v6" 
-  } 
-}; 
- 
-export default config; 
- 
+  gasReporter: {
+    enabled: true,
+    currency: "USD",
+    coinmarketcap: process.env.CMC_API_KEY || undefined,
+    excludeContracts: ["mocks/"]
+  },
+  typechain: {
+    outDir: "types",
+    target: "ethers-v6"
+  }
+};
+
+export default config;
+

@@ -10,8 +10,8 @@ catalog.get("/catalog/databases", (_req, res) => {
 });
 
 catalog.get("/catalog/tables", (req, res) => {
-  const dbName = String(req.query.db ?? "");
-  const q = String((req.query.q ?? "") as string).trim();
+  const dbName = typeof req.query.db === "string" ? req.query.db : "";
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   if (!dbName) return res.status(400).json({ ok: false, error: "db_required" });
   const rows = q
     ? db.prepare("SELECT name, description, location, format FROM tables WHERE dbName=? AND (name LIKE ? OR description LIKE ?) ORDER BY name ASC")
@@ -29,8 +29,8 @@ catalog.get("/catalog/tables/:db/:table", (req, res) => {
 });
 
 catalog.get("/catalog/columns", (req, res) => {
-  const dbName = String(req.query.db ?? "");
-  const table = String(req.query.table ?? "");
+  const dbName = typeof req.query.db === "string" ? req.query.db : "";
+  const table = typeof req.query.table === "string" ? req.query.table : "";
   if (!dbName || !table) return res.status(400).json({ ok: false, error: "db_table_required" });
   const rows = db.prepare("SELECT name, type, comment, position FROM columns WHERE dbName=? AND tableName=? ORDER BY position ASC")
     .all(dbName, table);
@@ -38,8 +38,8 @@ catalog.get("/catalog/columns", (req, res) => {
 });
 
 catalog.get("/catalog/partitions", (req, res) => {
-  const dbName = String(req.query.db ?? "");
-  const table = String(req.query.table ?? "");
+  const dbName = typeof req.query.db === "string" ? req.query.db : "";
+  const table = typeof req.query.table === "string" ? req.query.table : "";
   const limit = Math.min(5000, Math.max(1, Number(req.query.limit ?? 200)));
   if (!dbName || !table) return res.status(400).json({ ok: false, error: "db_table_required" });
   const rows = db.prepare("SELECT spec, location FROM partitions WHERE dbName=? AND tableName=? ORDER BY spec ASC LIMIT ?")
@@ -49,7 +49,7 @@ catalog.get("/catalog/partitions", (req, res) => {
 });
 
 catalog.get("/search", (req, res) => {
-  const q = String(req.query.q ?? "").trim();
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   if (!q) return res.status(400).json({ ok: false, error: "q_required" });
   const rows = db.prepare(`
     SELECT kind, dbName, tableName, name, description, location, columns

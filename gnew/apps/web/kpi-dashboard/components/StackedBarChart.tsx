@@ -10,8 +10,8 @@ export function StackedBarChart({ data, bars }: { data: any[]; bars: BarDef[] })
           <YAxis />
           <Tooltip />
           <Legend />
-          {bars.map((b, i) => (
-            <Bar key={i} dataKey={b.dataKey} name={b.name} stackId="S" />
+          {bars.map((b) => (
+            <Bar key={b.dataKey} dataKey={b.dataKey} name={b.name} stackId="S" />
           ))}
         </BarChart>
       </ResponsiveContainer>

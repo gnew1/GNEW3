@@ -3,8 +3,8 @@ import { Contract, ethers } from "ethers";
 import { getSigner } from "../eth"; 
 import { ABIS } from "../abi"; 
  
-export default function QueueExecutePanel({ proposalId, description }: 
-{ proposalId: string; description: string }) { 
+export default function QueueExecutePanel({ proposalId, description }:
+Readonly<{ proposalId: string; description: string }>) {
   const [tx1, setTx1] = useState(""); const [tx2, setTx2] = 
 useState(""); 
  

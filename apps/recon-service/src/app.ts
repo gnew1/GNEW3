@@ -18,21 +18,22 @@ import { z } from "zod";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { parseCsvOrJson } from "./etl/parser";
 import { runReconciliation } from "./engine/reconcile";
+import { env } from "./config/env";
 
-const PORT = Number(process.env.PORT ?? 8096);
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/gnew_recon";
-const JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? "gnew";
-const JWT_ISSUER = process.env.JWT_ISSUER ?? "https://sso.example.com/";
-const JWT_PUBLIC_KEY = (process.env.JWT_PUBLIC_KEY ?? "").replace(/\\n/g, "\n");
-const DEFAULT_TOLERANCE = Number(process.env.RECON_TOLERANCE ?? 0.01); // 1%
-const DEFAULT_DATE_WINDOW_DAYS = Number(process.env.RECON_DATE_WINDOW_DAYS ?? 3);
-const ALERT_DIFF_THRESHOLD = Number(process.env.ALERT_DIFF_THRESHOLD ?? 0.05); // 5%
+const DATABASE_URL = env.DATABASE_URL;
+const JWT_AUDIENCE = env.JWT_AUDIENCE;
+const JWT_ISSUER = env.JWT_ISSUER;
+const JWT_PUBLIC_KEY = env.JWT_PUBLIC_KEY;
+const DEFAULT_TOLERANCE = env.RECON_TOLERANCE;
+const DEFAULT_DATE_WINDOW_DAYS = env.RECON_DATE_WINDOW_DAYS;
+const ALERT_DIFF_THRESHOLD = env.ALERT_DIFF_THRESHOLD;
 
-const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
+
+const logger = pino({ level: env.LOG_LEVEL });
 const httpLogger = pinoHttp({ logger });
 
 async function createPool(): Promise<Pool> {
-  if (process.env.PG_MEM === "1" || DATABASE_URL === "pgmem" || DATABASE_URL === "mem") {
+  if (env.PG_MEM === "1" || DATABASE_URL === "pgmem" || DATABASE_URL === "mem") {
     // Lazy import to avoid bundling in production
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
@@ -67,7 +68,7 @@ function authOptional(req: Request, res: Response, next: NextFunction) {
 }
 function requireRole(role: string) {
   return (_req: Request, res: Response, next: NextFunction) => {
-  if (process.env.DISABLE_AUTH === "1") return next();
+  if (env.DISABLE_AUTH === "1") return next();
   const u: User | undefined = res.locals.user as User | undefined;
     if (!u?.roles?.includes(role)) return res.status(403).json({ error: "forbidden" });
     next();

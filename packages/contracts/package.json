@@ -4,7 +4,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "clean": "rimraf artifacts cache out coverage typechain-types",
+    "clean": "rimraf artifacts cache out coverage types",
     "compile": "hardhat compile",
     "build": "pnpm run clean && hardhat compile",
     "test:hh": "hardhat test",

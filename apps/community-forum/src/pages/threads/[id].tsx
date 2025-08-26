@@ -13,8 +13,8 @@ export default function ThreadPage() {
       <h1 className="text-2xl font-bold mb-4">{data.title}</h1>
       <p className="text-sm text-gray-500">By {data.author}</p>
       <div className="mt-4 space-y-2">
-        {data.posts.map((p: any, i: number) => (
-          <div key={i} className="border p-2 rounded">
+        {data.posts.map((p: any) => (
+          <div key={`${p.author}-${p.content}`} className="border p-2 rounded">
             <p>{p.content}</p>
             <p className="text-xs text-gray-500">— {p.author}</p>
           </div>

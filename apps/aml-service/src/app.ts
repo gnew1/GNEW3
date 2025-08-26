@@ -10,14 +10,14 @@
  * Despliegue: Gradual (mode: "shadow"|"enforced").
  */
 
-import express, { type Request, type Response, type NextFunction } from "express";
+import express from "express";
 import pino from "pino";
 import pinoHttp from "pino-http";
 import { Pool } from "pg";
 import { z } from "zod";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { ensureMigrations } from "./db/migrate";
-import { scoreTx, explainTx } from "./engine/model";
+import { scoreTx, explainTx, type ModelCfg } from "./engine/model";
 import { checkRules } from "./engine/rules";
 import { anchorEvidence } from "./evidence/hashchain";
 import { v4 as uuidv4 } from "uuid";
@@ -30,6 +30,35 @@ const JWT_PUBLIC_KEY = (process.env.JWT_PUBLIC_KEY ?? "").replace(/\\n/g, "\n");
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 
 const pool = new Pool({ connectionString: DATABASE_URL });
+
+function computeScore(
+  model: ModelCfg | null,
+  features: Record<string, number>,
+  sanctionHit: boolean,
+  amount: number
+): number {
+  if (model) return scoreTx(features, model);
+  if (sanctionHit) return 0.99;
+  return 0.2 + Math.min(0.6, 0.01 * amount);
+}
+
+function determineLevel(
+  score: number,
+  rules: { flag: boolean; escalateL2: boolean },
+  thresholdL1: number,
+  thresholdL2: number,
+  sanctionHit: boolean
+): "none" | "L1" | "L2" {
+  if (sanctionHit || rules.escalateL2 || score >= thresholdL2) return "L2";
+  if (rules.flag || score >= thresholdL1) return "L1";
+  return "none";
+}
+
+function statusFromAction(action: string): "l2_review" | "closed" | "ack" {
+  if (action === "escalate") return "l2_review";
+  if (action === "close") return "closed";
+  return "ack";
+}
 
 type User = { sub: string; roles?: string[]; email?: string };
 function authOptional(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -178,7 +207,7 @@ app.post("/ingest/tx", requireRole("aml:ingest"), async (req, res) => {
       sanction: sanctionHit ? 1 : 0
     };
 
-    const score = model ? scoreTx(features, model) : (sanctionHit ? 0.99 : 0.2 + Math.min(0.6, 0.01 * body.amount));
+    const score = computeScore(model, features, sanctionHit, body.amount);
     const rules = checkRules({ ...body, velocity, sanctionHit });
     const explanations = model ? explainTx(features, model) : Object.fromEntries(Object.keys(features).map(k => [k, 0]));
     const evidencePayload = {
@@ -198,9 +227,7 @@ app.post("/ingest/tx", requireRole("aml:ingest"), async (req, res) => {
     const thresholdL1 = Number(model?.thresholdL1 ?? 0.75);
     const mode = (model?.mode ?? "shadow") as "shadow"|"enforced";
 
-    let level: "none"|"L1"|"L2" = "none";
-    if (sanctionHit || rules.escalateL2 || score >= thresholdL2) level = "L2";
-    else if (rules.flag || score >= thresholdL1) level = "L1";
+    const level = determineLevel(score, rules, thresholdL1, thresholdL2, sanctionHit);
 
     // Always log detection (shadow or enforced), but only block if enforced & L2
     const evidence = await anchorEvidence(client, evidencePayload);
@@ -252,7 +279,7 @@ app.post("/alerts/:id/ack", requireRole("aml:analyst"), async (req, res) => {
   const action = String(req.body?.action ?? "ack"); // ack|escalate|close
   const allowed = new Set(["ack","escalate","close"]);
   if (!allowed.has(action)) return res.status(400).json({ error: "bad_action" });
-  const status = action === "escalate" ? "l2_review" : action === "close" ? "closed" : "ack";
+  const status = statusFromAction(action);
   const r = await pool.query(
     `update aml_alerts set status=$2, updated_at=now() where id=$1 returning *`,
     [id, status]

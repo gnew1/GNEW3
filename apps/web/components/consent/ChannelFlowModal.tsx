@@ -1,5 +1,12 @@
-"use client"; 
-import React, { useEffect, useState } from "react"; 
+"use client";
+import React, { useEffect, useState, useRef } from "react";
+
+function ensureDialogPolyfill(dlg: HTMLDialogElement) {
+  if (typeof dlg.showModal !== "function") {
+    (dlg as any).showModal = () => dlg.setAttribute("open", "");
+    (dlg as any).close = () => dlg.removeAttribute("open");
+  }
+}
  
 // Flujo granular para “gestión por finalidad y canal” (email/sms/push/onchain)
 type ConsentState = {
@@ -9,7 +16,7 @@ type ConsentState = {
   onchain: { marketing: boolean };
 };
 
-export default function ChannelFlowModal({ subjectId, open, onClose }:{ subjectId:string; open:boolean; onClose:()=>void }) { 
+export default function ChannelFlowModal({ subjectId, open, onClose }: Readonly<{ subjectId:string; open:boolean; onClose:()=>void }>) {
   const [mv, setMv] = useState<string>("v1"); 
   const [state, setState] = useState<ConsentState>({
     email: { marketing: false },
@@ -18,12 +25,23 @@ export default function ChannelFlowModal({ subjectId, open, onClose }:{ subjectI
     onchain: { marketing: false },
   }); 
  
-  useEffect(() => { 
-    if (!open) return; 
+  useEffect(() => {
+    if (!open) return;
     fetch("/api/consent/catalog")
       .then(r=>r.json())
-      .then((c)=>setMv(c.matrixVersion)); 
-  }, [open]); 
+      .then((c)=>setMv(c.matrixVersion));
+  }, [open]);
+
+  useEffect(() => {
+    const dlg = dialogRef.current;
+    if (!dlg) return;
+    ensureDialogPolyfill(dlg);
+    if (open) {
+      dlg.showModal();
+    } else {
+      dlg.open && dlg.close();
+    }
+  }, [open]);
  
   const save = async () => { 
     const decisions = []; 
@@ -57,13 +75,20 @@ JSON.stringify({ decisions }) });
     onClose(); 
   }; 
  
-  if (!open) return null; 
- 
-  return ( 
-    <div role="dialog" aria-modal className="fixed inset-0 bg-black/40 
-z-50 flex items-center justify-center"> 
-      <div className="bg-white rounded-2xl w-full max-w-xl p-6 
-space-y-4"> 
+  if (!open) return null;
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-modal="true"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onClose={onClose}
+      className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
+    >
+      <div className="bg-white rounded-2xl w-full max-w-xl p-6 space-y-4">
         <h2 className="text-xl font-semibold">Preferencias por 
 canal</h2> 
         <Section title="Email"> 
@@ -98,24 +123,22 @@ onClick={onClose}>Cancelar</button>
           <button className="px-4 py-2 bg-black text-white rounded" 
 onClick={save}>Guardar</button> 
         </div> 
-        <p className="text-xs text-gray-500">Tus cambios quedan 
-auditados y puedes revocar en cualquier momento.</p> 
-      </div> 
-    </div> 
-  ); 
-} 
+        <p className="text-xs text-gray-500">Tus cambios quedan auditados y puedes revocar en cualquier momento.</p>
+      </div>
+    </dialog>
+  );
+}
  
-function Section({ title, children }:{ title:string; 
-children:React.ReactNode }) { 
-  return <div className="space-y-2"><h3 
-className="font-medium">{title}</h3><div 
-className="space-y-2">{children}</div></div>; 
-} 
-function Toggle({ label, checked, onChange }:{ label:string; 
-checked:boolean; onChange:(v:boolean)=>void }) { 
-  return <label className="flex items-center justify-between p-3 
-border rounded-lg"><span className="text-sm">{label}</span><input 
-type="checkbox" checked={checked} 
-onChange={e=>onChange(e.target.checked)}/></label>; 
-} 
+function Section({ title, children }: Readonly<{ title:string;
+children:React.ReactNode }>) {
+  return <div className="space-y-2"><h3
+className="font-medium">{title}</h3><div
+className="space-y-2">{children}</div></div>;
+}
+function Toggle({ label, checked, onChange }: Readonly<{ label:string;
+checked:boolean; onChange:(v:boolean)=>void }>) {
+  return <label className="flex items-center justify-between p-3
+border rounded-lg"><span className="text-sm">{label}</span><input type="checkbox" checked={checked}
+onChange={e=>onChange(e.target.checked)}/></label>;
+}
  
