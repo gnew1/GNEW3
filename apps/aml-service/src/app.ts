@@ -22,8 +22,16 @@ import { checkRules } from "./engine/rules";
 import { anchorEvidence } from "./evidence/hashchain";
 import { v4 as uuidv4 } from "uuid";
 
+try {
+  (0, eval)("require")("dotenv").config();
+} catch {
+  /* dotenv not installed */
+}
+
 const PORT = Number(process.env.PORT ?? 8094);
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/gnew_aml";
+const DB_PASSWORD = process.env.DB_PASSWORD ?? "";
+const DATABASE_URL =
+  process.env.DATABASE_URL ?? `postgres://postgres:${DB_PASSWORD}@localhost:5432/gnew_aml`;
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? "gnew";
 const JWT_ISSUER = process.env.JWT_ISSUER ?? "https://sso.example.com/";
 const JWT_PUBLIC_KEY = (process.env.JWT_PUBLIC_KEY ?? "").replace(/\\n/g, "\n");
@@ -61,7 +69,7 @@ function statusFromAction(action: string): "l2_review" | "closed" | "ack" {
 }
 
 type User = { sub: string; roles?: string[]; email?: string };
-function authOptional(req: express.Request, res: express.Response, next: express.NextFunction) {
+const authOptional: express.RequestHandler = (req, res, next) => {
   const h = req.headers.authorization;
   if (h?.startsWith("Bearer ") && JWT_PUBLIC_KEY) {
     try {
@@ -71,18 +79,22 @@ function authOptional(req: express.Request, res: express.Response, next: express
         audience: JWT_AUDIENCE,
         issuer: JWT_ISSUER,
       }) as JwtPayload;
-      res.locals.user = { sub: String(dec.sub), roles: dec.roles as string[] | undefined, email: dec.email as string | undefined };
-    } catch { /* ignore */ }
+      res.locals.user = {
+        sub: String(dec.sub),
+        roles: dec.roles as string[] | undefined,
+        email: dec.email as string | undefined,
+      };
+    } catch {
+      /* ignore */
+    }
   }
   next();
-}
-function requireRole(role: string) {
-  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const u: User | undefined = res.locals.user;
-    if (!u?.roles?.includes(role)) return res.status(403).json({ error: "forbidden" });
-    next();
-  };
-}
+};
+const requireRole = (role: string): express.RequestHandler => (req, res, next) => {
+  const u: User | undefined = res.locals.user;
+  if (!u?.roles?.includes(role)) return res.status(403).json({ error: "forbidden" });
+  next();
+};
 
 const app: express.Express = express();
 app.use(express.json({ limit: "1mb" }));
