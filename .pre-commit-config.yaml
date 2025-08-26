@@ -9,6 +9,7 @@ repos:
     rev: v8.18.4
     hooks:
       - id: gitleaks
+        args: [--baseline-path, .gitleaks-baseline.json, --redact]
   - repo: local
     hooks:
       - id: forbid-latest-tag
