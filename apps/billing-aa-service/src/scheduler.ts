@@ -8,6 +8,7 @@ type Options = {
   maxRetries: number;
   concurrency: number;
   hardDailyChargeLimit: number;
+  tickMs?: number;
 };
 
 export class Scheduler {
@@ -22,7 +23,7 @@ export class Scheduler {
   start(executor: (job: Job) => Promise<void>) {
     if (this.running) return;
     this.running = true;
-    this.interval = setInterval(async () => {
+    const tick = async () => {
       try {
         // reset diario
         const d = new Date().getUTCDate();
@@ -50,7 +51,9 @@ export class Scheduler {
       } catch (e: any) {
         this.logger.error({ err: e }, "scheduler_tick_error");
       }
-    }, 2_000);
+    };
+    this.interval = setInterval(tick, this.opt.tickMs ?? 2_000);
+    tick();
   }
 
   async enqueue(subId: number, cyclesDue: number) {

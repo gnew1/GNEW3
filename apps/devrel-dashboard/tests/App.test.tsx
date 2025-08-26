@@ -1,11 +1,17 @@
 
-import { test, expect } from "vitest";
-import { render } from "@testing-library/react";
+import { test, expect, vi } from "vitest";
+import { renderToString } from "react-dom/server";
+
+vi.mock("swr", () => ({
+  __esModule: true,
+  default: () => ({ data: [], error: undefined })
+}));
+
 import App from "../src/pages/App";
 
 test("renders dashboard header", () => {
-  const { getByText } = render(<App />);
-  expect(getByText(/GNEW DevRel Dashboard/)).toBeTruthy();
+  const html = renderToString(<App />);
+  expect(html).toContain("GNEW DevRel Dashboard");
 });
 
 

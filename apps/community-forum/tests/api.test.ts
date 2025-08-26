@@ -1,7 +1,29 @@
 
 import { test, expect } from "vitest";
 import handler from "../src/pages/api/threads/index";
-import { createMocks } from "node-mocks-http";
+
+function createMocks({ method = "GET", body = {} } = {}) {
+  const req: any = { method, body };
+  let jsonData: unknown;
+  const res: any = {
+    statusCode: 200,
+    status(code: number) {
+      this.statusCode = code;
+      return this;
+    },
+    json(data: unknown) {
+      jsonData = data;
+      return this;
+    },
+    end() {
+      return this;
+    },
+    _getJSONData() {
+      return jsonData;
+    }
+  };
+  return { req, res };
+}
 
 test("threads api returns list", async () => {
   const { req, res } = createMocks({ method: "GET" });
