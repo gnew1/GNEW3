@@ -76,7 +76,7 @@ app.post("/authz/evaluate", async (req: Request, res: Response) => {
 
   const cacheKey = JSON.stringify([policyVersion, input.sub.role, input.sub.id, input.obj, input.act, input.ctx?.tenant, input.ctx?.projectOwnerId]);
   const cached = cache.get(cacheKey);
-  if (cached && cached.v === policyVersion) {
+  if (cached?.v === policyVersion) {
     const latency = performance.now() - start;
     H.observe(latency);
     C.labels(String(cached.decision)).inc();
