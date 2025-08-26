@@ -1,8 +1,8 @@
 "use client"; 
 import React, { useEffect, useState } from "react"; 
 type Catalog = { uses: any[]; dataCategories: any[]; channels: any[]; matrixVersion: string };
-export default function ConsentBanner({ subjectId }: { subjectId: 
-string }) { 
+export default function ConsentBanner({ subjectId }: Readonly<{ subjectId:
+string }>) {
 const [visible, setVisible] = useState(false); 
 const [catalog, setCatalog] = useState<Catalog | null>(null); 
 const [choices, setChoices] = useState<any>({
@@ -89,8 +89,8 @@ href="/privacy">Política y configuración avanzada</a>
   ); 
 } 
  
-function Card({ title, checked, onChange }:{ title:string; 
-checked:boolean; onChange:(v:boolean)=>void }) { 
+function Card({ title, checked, onChange }: Readonly<{ title:string;
+checked:boolean; onChange:(v:boolean)=>void }>) {
   return ( 
     <label className="p-3 border rounded-xl flex items-center 
 justify-between"> 

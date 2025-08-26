@@ -1,7 +1,7 @@
-type Props = {
+type Props = Readonly<{
   chain: string; network: string; token: string; range: string;
   onChange: (p: {chain:string; network:string; token:string; range:string}) => void;
-};
+}>;
 export function Filters({ chain, network, token, range, onChange }: Props) {
   return (
     <>

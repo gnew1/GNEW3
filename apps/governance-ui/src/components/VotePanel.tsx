@@ -3,8 +3,8 @@ import { Contract } from "ethers";
 import { getSigner } from "../eth"; 
 import { ABIS } from "../abi"; 
  
-export default function VotePanel({ proposalId }: { proposalId: string 
-}) { 
+export default function VotePanel({ proposalId }: Readonly<{ proposalId: string
+}>) {
   const [state, setState] = useState<number>(0); 
   const [reason, setReason] = useState(""); 
   const [q, setQ] = useState<{ for: bigint; against: bigint; abstain: 
