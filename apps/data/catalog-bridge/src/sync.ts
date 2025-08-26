@@ -1,8 +1,11 @@
 
 import crypto from "node:crypto";
+import pino from "pino";
 import { db } from "./db.js";
 import { cfg } from "./config.js";
 import { makeGlue, listDatabases, listTables, listPartitions } from "./glue.js";
+
+const logger = pino();
 
 function id() { return crypto.randomUUID(); }
 
@@ -64,6 +67,7 @@ export async function syncFromGlue(): Promise<{ runId: string; dbs: number; tabl
     finishRun(runId, true, { dbs, tables, cols, parts });
     return { runId, dbs, tables, cols, parts };
   } catch (e: any) {
+    logger.error(e);
     finishRun(runId, false, { error: e?.message ?? String(e) });
     throw e;
   }
@@ -123,6 +127,7 @@ export function importFromJson(payload: any): { runId: string; dbs: number; tabl
     finishRun(runId, true, { dbs, tables, cols, parts });
     return { runId, dbs, tables, cols, parts };
   } catch (e: any) {
+    logger.error(e);
     finishRun(runId, false, { error: e?.message ?? String(e) });
     throw e;
   }

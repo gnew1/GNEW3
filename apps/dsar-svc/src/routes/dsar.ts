@@ -8,13 +8,13 @@ import { computeDueAt } from "../services/sla";
 export const router = Router(); 
  
 // GET list (admin console) 
-router.get("/requests", requireAdmin, async (req, res) => { 
-  const status = req.query.status as string | undefined; 
-  const where = status ? { status } : {}; 
-  const items = await prisma.dSARRequest.findMany({ where, orderBy: { 
-createdAt: "desc" }, take: 100 }); 
-  res.json({ items }); 
-}); 
+router.get("/requests", requireAdmin, async (req, res) => {
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const where = status ? { status } : {};
+  const items = await prisma.dSARRequest.findMany({ where, orderBy: {
+createdAt: "desc" }, take: 100 });
+  res.json({ items });
+});
  
 // POST create (subject/self-serve portal o soporte) 
 router.post("/requests", requireSubjectAuth, async (req, res) => { 
