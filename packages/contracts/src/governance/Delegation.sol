@@ -37,8 +37,7 @@ contract Delegation {
         address delegatee;   // 20 bytes 
         uint64  createdAt;   // 8 
         uint64  expiresAt;   // 8 (0 = sin expiración) 
-        // total 36 bytes → 2 slots. Mantener orden para packing 
-futuro. 
+    // total 36 bytes → 2 slots. Mantener orden para packing futuro. 
     } 
  
     // delegator => scope => record 
@@ -57,21 +56,18 @@ address indexed newDelegatee, uint64 newExpiresAt);
  
     // ====== Vistas ====== 
  
-    /// @notice Devuelve la delegación cruda (si existe). Si 
-`delegatee=0`, no hay delegación activa. 
+    /// @notice Devuelve la delegación cruda (si existe). Si `delegatee=0`, no hay delegación activa.
     function getDelegation(address delegator, bytes32 scope) external 
 view returns (Record memory rec) { 
         rec = _delegations[delegator][scope]; 
     } 
  
-    /// @notice Devuelve el delegado efectivo en este instante: si 
-expiró o no existe → el propio delegador. 
+    /// @notice Devuelve el delegado efectivo en este instante: si expiró o no existe, el propio delegador.
     function effectiveDelegateOf(address delegator, bytes32 scope) 
 public view returns (address effective, bool active, uint64 expiresAt) 
 { 
         Record memory r = _delegations[delegator][scope]; 
-        // activo si tiene delegatee != 0 y (expiresAt==0 || now < 
-expiresAt) 
+    // activo si tiene delegatee != 0 y (expiresAt==0 || now < expiresAt)
         bool isActive = r.delegatee != address(0) && (r.expiresAt == 0 
 || block.timestamp < r.expiresAt); 
         return (isActive ? r.delegatee : delegator, isActive, 
@@ -118,8 +114,7 @@ revert ExpiryTooSoon();
             emit Delegated(msg.sender, scope, delegatee, expiresAt); 
         } else { 
             // actualización existente 
-            if (r.delegatee == delegatee) revert SameDelegate(); // 
-usa extend() 
+            if (r.delegatee == delegatee) revert SameDelegate(); // usa extend() 
             r.delegatee = delegatee; 
             r.expiresAt = expiresAt; 
             emit Reassigned(msg.sender, scope, delegatee, expiresAt); 

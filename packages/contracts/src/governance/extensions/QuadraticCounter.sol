@@ -9,12 +9,9 @@ pragma solidity ^0.8.24;
 *  1) **On-chain**: cada voto se pondera como `sqrt(weight)` (weight 
 = poder de voto reportado por Governor::_getVotes). 
 *  2) **Off-chain tally con verificación on-chain**: 
-*      - Un "tallier" agrega off-chain los votos cuadráticos y 
-publica en cadena: 
-*          
-*      
-(forQ, againstQ, abstainQ, merkleRoot) por propuesta. - El contrato almacena ese resultado y bloquea más conteo 
-on-chain. 
+*      - Un "tallier" agrega off-chain los votos cuadráticos y publica en cadena
+*        (forQ, againstQ, abstainQ, merkleRoot) por propuesta.
+*      - El contrato almacena ese resultado y bloquea más conteo on-chain. 
 *      - Cualquiera puede verificar hojas del cómputo vía 
 `verifyOffchainLeaf(...)`. 
  * 
@@ -39,8 +36,7 @@ import {MerkleProof} from
 "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol"; 
  
 abstract contract QuadraticCounter is Governor { 
-    // ---- Votos on-chain acumulados por propuesta (si no se finalizó 
-off-chain) ---- 
+    // ---- Votos on-chain acumulados por propuesta (si no se finalizó off-chain) ---- 
     struct ProposalVotesQ { 
         uint256 againstVotes; 
         uint256 forVotes; 
@@ -51,18 +47,15 @@ _proposalVotesQ;
  
     // ---- Resultado off-chain publicado/“sellado” por propuesta ---- 
     struct OffchainTally { 
-        bool    finalized;             // true => se usan los valores 
-off-chain 
+    bool    finalized;             // true => se usan los valores off-chain 
         uint256 againstVotes;          // suma cuadrática off-chain 
         uint256 forVotes;              // suma cuadrática off-chain 
         uint256 abstainVotes;          // suma cuadrática off-chain 
-        bytes32 merkleRoot;            // raíz de hojas (opcional, 
-para verificación) 
+    bytes32 merkleRoot;            // raiz de hojas (opcional, para verificacion)
     } 
     mapping(uint256 proposalId => OffchainTally) public offchain; 
  
-    /// @notice Operador autorizado a publicar resultados off-chain 
-(agregador). 
+    /// @notice Operador autorizado a publicar resultados off-chain (agregador).
     address public tallier; 
  
     event VoteCountedQ(uint256 indexed proposalId, address indexed 
@@ -80,11 +73,9 @@ againstQ, uint256 forQ, uint256 abstainQ, bytes32 merkleRoot);
     } 
  
     /// @notice Modo de conteo (para tooling). 
-    function COUNTING_MODE() public pure virtual returns (string 
-memory) { 
+    function COUNTING_MODE() public pure virtual returns (string memory) { 
         // Bravo-style (Against/For/Abstain) con conteo "quadratic" 
-        return 
-"support=bravo&quorum=for,abstain,against&counting=quadratic"; 
+        return "support=bravo&quorum=for,abstain,against&counting=quadratic"; 
     } 
  
     /// @notice Actualiza el tallier (sólo gobernanza). 
@@ -97,8 +88,7 @@ memory) {
     //                         Núcleo de conteo 
     // ------------------------------------------------------------------------ 
  
-    /// @dev Suma `sqrt(weight)` a la canasta elegida. Bloquea si hay 
-tally off-chain finalizado. 
+    /// @dev Suma `sqrt(weight)` a la canasta elegida. Bloquea si hay tally off-chain finalizado. 
     function _countVote( 
         uint256 proposalId, 
         address account, 
@@ -113,11 +103,11 @@ tally off-chain finalizado.
         uint256 q = Math.sqrt(weight); 
  
         ProposalVotesQ storage pv = _proposalVotesQ[proposalId]; 
-        if (support == uint8(VoteType.Against)) { 
+    if (support == uint8(0)) { 
             pv.againstVotes += q; 
-        } else if (support == uint8(VoteType.For)) { 
+    } else if (support == uint8(1)) { 
             pv.forVotes += q; 
-        } else if (support == uint8(VoteType.Abstain)) { 
+    } else if (support == uint8(2)) { 
             pv.abstainVotes += q; 
         } else { 
             revert InvalidVoteType(); 
@@ -125,10 +115,8 @@ tally off-chain finalizado.
         emit VoteCountedQ(proposalId, account, support, weight, q); 
     } 
  
-    /// @notice Publica el resultado off-chain para la propuesta (sólo 
-`tallier`). 
-    /// @dev Tras finalizar, ya no se aceptan votos on-chain para esa 
-propuesta. 
+    /// @notice Publica el resultado off-chain para la propuesta (sólo "tallier"). 
+    /// @dev Tras finalizar, ya no se aceptan votos on-chain para esa propuesta. 
     function finalizeOffchainTally( 
         uint256 proposalId, 
         uint256 againstQ, 
@@ -150,8 +138,7 @@ propuesta.
 merkleRoot); 
     } 
  
-    /// @notice Devuelve los votos (Q) de la propuesta, priorizando 
-resultado off-chain si existe. 
+    /// @notice Devuelve los votos (Q) de la propuesta, priorizando resultado off-chain si existe. 
     function proposalVotes(uint256 proposalId) 
         public 
         view 
@@ -167,8 +154,7 @@ abstainVotes)
         return (pv.againstVotes, pv.forVotes, pv.abstainVotes); 
     } 
  
-    // --------- Semántica de éxito/quórum (Bravo) con conteo 
-cuadrático --------- 
+    // --------- Semantica de exito/quorum (Bravo) con conteo cuadratico --------- 
  
     function _quorumReached(uint256 proposalId) internal view virtual 
 override returns (bool) { 
@@ -190,13 +176,11 @@ proposalVotes(proposalId);
     // ------------------------------------------------------------------------ 
  
     /** 
-     * @notice Verifica que una hoja (voto individual) pertenece al 
-Merkle root de una propuesta. 
+    * @notice Verifica que una hoja (voto individual) pertenece al Merkle root de una propuesta. 
      * @dev Hoja = keccak256(abi.encode( 
      *          chainId, address(this), proposalId, 
      *          voter, support (0/1/2), rawWeight, qWeight)) 
-     *      Usa `abi.encode` (no `encodePacked`) para evitar 
-colisiones. 
+    *      Usa `abi.encode` (no `encodePacked`) para evitar colisiones. 
      */ 
     function verifyOffchainLeaf( 
         uint256 proposalId, 
@@ -208,10 +192,7 @@ colisiones.
     ) public view returns (bool) { 
         bytes32 root = offchain[proposalId].merkleRoot; 
         if (root == bytes32(0)) return false; 
-        bytes32 leaf = keccak256( 
-            abi.encode(block.chainid, address(this), proposalId, 
-voter, support, rawWeight, qWeight) 
-        ); 
+    bytes32 leaf = keccak256(abi.encode(block.chainid, address(this), proposalId, voter, support, rawWeight, qWeight)); 
         return MerkleProof.verify(merkleProof, root, leaf); 
     } 
  

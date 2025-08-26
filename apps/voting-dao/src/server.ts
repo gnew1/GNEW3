@@ -67,6 +67,29 @@ app.post("/api/dao/votes", (req,res) => {
 });
 
 // Tally votes
-app.get("/api/dao/tally
+// Tally votes (by proposal)
+app.get("/api/dao/tally/:proposalId", (req, res) => {
+  const { proposalId } = req.params;
+  const related = votes.filter((v) => v.proposalId === proposalId);
+  if (!related.length) return res.json({ proposalId, totals: { Gnew0: 0, Gnews: 0 }, votes: 0 });
+  const totals = related.reduce(
+    (acc, v) => {
+      acc[v.token] += v.weight;
+      return acc;
+    },
+    { Gnew0: 0, Gnews: 0 } as Record<"Gnew0" | "Gnews", number>,
+  );
+  res.json({ proposalId, totals, votes: related.length });
+});
+
+// Health
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
+
+if (require.main === module) {
+  const PORT = Number(process.env.PORT ?? 8087);
+  app.listen(PORT, () => log.info({ msg: `voting-dao listening on :${PORT}` }));
+}
+
+export default app;
 
 

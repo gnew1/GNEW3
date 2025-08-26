@@ -3,17 +3,13 @@ pragma solidity ^0.8.24;
 /** 
 * @title GnewGovernorTimelocked 
 * @author GNEW 
-* @notice Governor híbrido (token+reputación) con ejecución a través 
-de TimelockController. 
-*         
-delay. 
+* @notice Governor híbrido (token+reputación) con ejecución a través de TimelockController.
+* Flujo: propose → vote → queue (Timelock) → execute tras el delay.
 */ 
-Flujo: propose → vote → queue (Timelock) → execute tras el 
 import {TimelockController} from 
 "@openzeppelin/contracts/governance/TimelockController.sol"; 
-import {GovernorTimelockControl} from 
-"@openzeppelin/contracts/governance/extensions/GovernorTimelockControl
- .sol"; 
+import {Governor} from "@openzeppelin/contracts/governance/Governor.sol"; 
+import {GovernorTimelockControl} from "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol"; 
 import {IVotes} from 
 "@openzeppelin/contracts/governance/utils/IVotes.sol"; 
 import {GnewGovernor} from "./GnewGovernor.sol"; 

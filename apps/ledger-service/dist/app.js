@@ -112,10 +112,9 @@ app.post("/accounts", requireRole("ledger:write"), async (req, res) => {
         res.status(201).json(r.rows[0]);
     }
     catch (e) {
-        const err = e;
-        if (err.code === "23505")
+        if (e.code === "23505")
             return res.status(409).json({ error: "account_code_exists" });
-        res.status(400).json({ error: err?.message ?? "bad_request" });
+        res.status(400).json({ error: e?.message ?? "bad_request" });
     }
 });
 // Draft entry (unposted)
@@ -150,8 +149,7 @@ app.post("/journal/entries", requireRole("ledger:write"), async (req, res) => {
     }
     catch (e) {
         await client.query("rollback");
-        const err = e;
-        res.status(400).json({ error: err?.message ?? "bad_request" });
+        res.status(400).json({ error: e?.message ?? "bad_request" });
     }
     finally {
         client.release();
@@ -190,8 +188,7 @@ app.post("/journal/entries/:id/post", requireRole("ledger:write"), async (req, r
     }
     catch (e) {
         await client.query("rollback");
-        const err = e;
-        res.status(400).json({ error: err?.message ?? "post_failed" });
+        res.status(400).json({ error: e?.message ?? "post_failed" });
     }
     finally {
         client.release();
@@ -210,14 +207,7 @@ app.post("/periods/:ym/lock", requireRole("ledger:admin"), async (req, res) => {
 });
 // Trial balance (as of date)
 app.get("/balances/trial", requireRole("ledger:read"), async (req, res) => {
-    const qAsOf = req.query.asOf;
-    let asOf;
-    if (typeof qAsOf === "string")
-        asOf = qAsOf;
-    else if (Array.isArray(qAsOf) && typeof qAsOf[0] === "string")
-        asOf = qAsOf[0];
-    else
-        asOf = new Date().toISOString();
+    const asOf = req.query.asOf ? String(req.query.asOf) : new Date().toISOString();
     const r = await pool.query(`select * from v_trial_balance_asof($1::timestamptz)`, [asOf]);
     res.json(r.rows);
 });
@@ -258,12 +248,12 @@ app.post("/reconcile/auto", requireRole("ledger:write"), async (req, res) => {
         if (body.txid) {
             match = await client.query(`select id, entry_id from gl_entry_lines where txid=$1 order by id limit 1`, [body.txid]);
         }
-        if (!(match?.rowCount) && body.amount && body.external_ref) {
+        if ((!match || !match.rowCount) && body.amount && body.external_ref) {
             match = await client.query(`select id, entry_id from gl_entry_lines
          where (debit=$1 or credit=$1) and external_ref=$2
          order by id limit 1`, [body.amount, body.external_ref]);
         }
-        if (match?.rowCount) {
+        if (match && match.rowCount) {
             const lineId = match.rows[0].id;
             await client.query(`insert into gl_reconciliations(line_id, event_id, status, matched_at) values($1,$2,'matched',now())`, [lineId, evId]);
             await client.query("commit");
@@ -277,8 +267,7 @@ app.post("/reconcile/auto", requireRole("ledger:write"), async (req, res) => {
     }
     catch (e) {
         await client.query("rollback");
-        const err = e;
-        res.status(500).json({ error: err?.message ?? "reconcile_failed" });
+        res.status(500).json({ error: e?.message ?? "reconcile_failed" });
     }
     finally {
         client.release();
@@ -286,12 +275,7 @@ app.post("/reconcile/auto", requireRole("ledger:write"), async (req, res) => {
 });
 // XBRL export (simple instance for trial balance of a period YYYY-MM)
 app.get("/export/xbrl", requireRole("ledger:read"), async (req, res) => {
-    const qPeriod = req.query.period;
-    let ym = "";
-    if (typeof qPeriod === "string")
-        ym = qPeriod;
-    else if (Array.isArray(qPeriod) && typeof qPeriod[0] === "string")
-        ym = qPeriod[0];
+    const ym = String(req.query.period ?? "");
     if (!/^\d{4}-\d{2}$/.test(ym))
         return res.status(400).json({ error: "bad_period" });
     const period = `${ym}-01`;

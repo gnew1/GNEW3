@@ -1,7 +1,7 @@
 {
   "id": "quickstarts/hello-gnew-py",
-  "title": "Hello GNEW (Python)",
-  "description": "Coming soon. For now, see the TypeScript quickstart.",
+  "title": "hello-gnew-py",
+  "description": "",
   "source": "@site/docs/quickstarts/hello-gnew-py.mdx",
   "sourceDirName": "quickstarts",
   "slug": "/quickstarts/hello-gnew-py",

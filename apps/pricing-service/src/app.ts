@@ -64,7 +64,7 @@ function requireAdmin(req: any, res: any, next: any) {
 }
 
 // --- App wiring ---
-const app = express();
+const app: import("express").Express = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(httpLogger);
 app.use(authOptional);

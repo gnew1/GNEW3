@@ -38,19 +38,17 @@ app.get("/api/kpis/:guildId/aggregate", (req, res) => {
     const agg = {};
     for (const k of subset) {
         if (!agg[k.metric])
-            agg[k.metric] = { count: 0, avg: 0, sum: 0 };
+            agg[k.metric] = { count: 0, avg: 0 };
         const a = agg[k.metric];
-        a.count += 1;
-        a.sum += k.value;
-        a.avg = a.sum / a.count;
+        a.count++;
+        a.avg = a.avg + (k.value - a.avg) / a.count;
     }
-    // remove sum from response
-    const result = Object.fromEntries(Object.entries(agg).map(([m, { count, avg }]) => [m, { count, avg }]));
-    res.json(result);
+    res.json(agg);
 });
+// Healthcheck
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
-const PORT = Number(process.env.PORT ?? 8188);
 if (require.main === module) {
-    app.listen(PORT, () => log.info({ msg: `guild-kpi-tracker listening on :${PORT}` }));
+    const port = Number(process.env.PORT || 4010);
+    app.listen(port, () => log.info({ port }, "guild-kpi-tracker up"));
 }
 exports.default = app;

@@ -15,6 +15,9 @@ const config: HardhatUserConfig = {
       optimizer: { enabled: true, runs: 200 } 
     } 
   }, 
+  paths: {
+    sources: "src_min",
+  },
   mocha: { timeout: 120_000 }, 
   networks: { 
     hardhat: {}, 

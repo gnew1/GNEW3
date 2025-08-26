@@ -1,5 +1,6 @@
 
 import type { Config } from '@docusaurus/types';
+import { themes as prismThemes } from 'prism-react-renderer';
 
 const config: Config = {
   title: 'GNEW Developer Portal',
@@ -29,7 +30,7 @@ const config: Config = {
         { href: 'https://github.com/gnew-org', label: 'GitHub', position: 'right' }
       ]
     },
-    prism: { theme: require('prism-react-renderer/themes/github') },
+  prism: { theme: prismThemes.github },
     metadata: [{ name: 'robots', content: 'index,follow' }]
   }
 };

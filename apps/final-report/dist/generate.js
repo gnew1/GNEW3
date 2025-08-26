@@ -34,7 +34,7 @@ All prompts processed sequentially without duplication.
 Last processed: N420  
 Automation stopped successfully.
 `;
-    const summaryHtml = marked_1.marked.parse(summaryMd);
+    const summaryHtml = await (0, marked_1.marked)(summaryMd);
     await fs_extra_1.default.writeFile(`${outputDir}/final-report.md`, summaryMd, "utf8");
     await fs_extra_1.default.writeFile(`${outputDir}/final-report.html`, summaryHtml, "utf8");
     console.log("✅ Final report generated");

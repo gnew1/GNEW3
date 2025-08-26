@@ -13,11 +13,11 @@
   "frontMatter": {},
   "sidebar": "sdk",
   "previous": {
-    "title": "SDKs",
+    "title": "index",
     "permalink": "/docs/sdk/"
   },
   "next": {
-    "title": "Python SDK",
+    "title": "python",
     "permalink": "/docs/sdk/python"
   }
 }

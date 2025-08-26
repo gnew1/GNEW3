@@ -1,11 +1,12 @@
 
 import express from "express";
 import { collectDefaultMetrics, Registry, Counter, Gauge } from "prom-client";
+import { api } from "./api";
 import pino from "pino";
 
 const app = express();
 const log = pino();
-const register = new Registry();
+export const register = new Registry();
 collectDefaultMetrics({ register });
 
 // Metrics
@@ -34,6 +35,9 @@ app.post("/api/record", (req, res) => {
   log.info({ lang, minutes }, "Recorded quickstart run");
   res.json({ ok: true });
 });
+
+// API router (derived metrics)
+app.use("/api", api);
 
 // Metrics endpoint
 app.get("/metrics", async (_req, res) => {

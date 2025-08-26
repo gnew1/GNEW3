@@ -15,7 +15,7 @@ import { verifyTypedData, getAddress, isAddress } from "ethers";
 const PORT = Number(process.env.PORT ?? 8095);
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 
-const app = express();
+const app: import("express").Express = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(pinoHttp({ logger }));
 

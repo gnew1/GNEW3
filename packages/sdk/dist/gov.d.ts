@@ -5,3 +5,5 @@ export type GnewGovToken = ethers.Contract;
  * This avoids a hard dependency on @gnew/contracts.
  */
 export declare function getGnewGovToken(address: string, signerOrProvider: ethers.Signer | ethers.Provider, abi: ethers.InterfaceAbi): GnewGovToken;
+/** Convenience: returns contract using bundled minimal ABI. */
+export declare function getGnewGovTokenDefault(address: string, signerOrProvider: ethers.Signer | ethers.Provider): GnewGovToken;

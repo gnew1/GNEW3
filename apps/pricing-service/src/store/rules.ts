@@ -7,9 +7,10 @@ import crypto from "crypto";
 
 export type CollisionReport = { ok: boolean; collisions: { a: string; b: string; reason: string }[] };
 
+export type CanaryTarget = { versionId: string; percentage: number };
 export type CanaryMap = {
   // Ej.: { "premium": { versionId: "rs_abc", percentage: 20 } }
-  [segment: string]: { versionId: string; percentage: number };
+  [segment: string]: CanaryTarget;
 };
 
 function uuid() {
@@ -21,11 +22,11 @@ function now() {
 }
 
 export class RulesStore {
-  private rulesets: Ruleset[] = [];
+  private readonly rulesets: Ruleset[] = [];
   private production?: string; // id de ruleset publicado (prod)
   private canary: CanaryMap = {};
 
-  constructor(private audit: AuditStore) {
+  constructor(private readonly audit: AuditStore) {
     // Seed inicial
     const rs: Ruleset = {
       id: uuid(),
@@ -94,12 +95,73 @@ export class RulesStore {
     const rs = this.getById(id);
     if (!rs) throw new Error("not_found");
     if (rs.status !== "draft") throw new Error("not_draft");
-    const before = JSON.parse(JSON.stringify(rs));
-    if (patch.name) rs.name = patch.name;
-    if (Array.isArray(patch.rules)) rs
+  // shallow update of draft
+    if (typeof patch.name === "string" && patch.name.length > 0) {
+      rs.name = patch.name;
+    }
+    if (Array.isArray(patch.rules)) {
+      rs.rules = patch.rules;
+    }
+    if (typeof patch.notes === "string") {
+      rs.notes = patch.notes;
+    }
+    this.audit.log({ user, action: "ruleset.update_draft", before: { id }, after: { id } });
+    return rs;
+  }
 
-Tú dijiste:
-Como IA programadora de GNEW, ejecuta el siguiente prompt N del archivo "/mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt" empezando en N321 (N320 se ejecutó en la interacción actual) y avanza +1 en cada ejecución hasta N340, sin repetirte. Para cada prompt: 1) entrega exactamente lo pedido con código listo para producción; 2) empieza la respuesta con la RUTA COMPLETA del archivo de salida y debajo el código en el lenguaje indicado; 3) mantén coherencia con el monorepo (Node/TypeScript predominante, backend principal app.ts) y convenciones establecidas; 4) incluye pruebas y scripts de integración cuando proceda; 5) evita texto superfluo fuera de rutas+código salvo breves notas de uso; 6) conserva y actualiza un puntero interno de progreso para continuar en N+1 y detenerse al llegar a N340.
-ChatGPT Plus
-Pensó durante 1m 15s
+  validateCollisions(id: string): CollisionReport {
+    const rs = this.getById(id);
+    if (!rs) throw new Error("not_found");
+    const cols = detectCollisions(rs.rules).map((c) => ({ a: c.a.id, b: c.b.id, reason: c.reason }));
+    return { ok: cols.length === 0, collisions: cols };
+  }
+
+  publish(id: string, user: string, label?: string): Ruleset {
+    const rs = this.getById(id);
+    if (!rs) throw new Error("not_found");
+    if (rs.status !== "draft") throw new Error("not_draft");
+    // Deprecate previous production if any
+    if (this.production) {
+      const prev = this.getById(this.production);
+      if (prev && prev.id !== rs.id && prev.status === "published") prev.status = "deprecated";
+    }
+    rs.status = "published";
+    if (label) rs.label = label;
+    this.production = rs.id;
+    this.audit.log({ user, action: "ruleset.publish", after: { id: rs.id, label: rs.label } });
+    return rs;
+  }
+
+  getCanary(): CanaryMap {
+    return JSON.parse(JSON.stringify(this.canary));
+  }
+
+  setCanary(map: CanaryMap, user: string) {
+    const before = this.getCanary();
+    // Normalize: clamp percentage 0..100
+    const next: CanaryMap = {};
+    for (const [seg, t] of Object.entries(map)) {
+      const pct = Math.max(0, Math.min(100, Number(t.percentage ?? 0)));
+      if (!t.versionId) continue;
+      next[seg] = { versionId: t.versionId, percentage: pct };
+    }
+    this.canary = next;
+    this.audit.log({ user, action: "ruleset.set_canary", before, after: this.canary });
+  }
+
+  pickRulesetFor(segment: string | undefined, userId: string): Ruleset {
+    // Canary by segment
+    if (segment) {
+      const target = this.canary[segment];
+      if (target) {
+        const pct = hashToPct(`${userId}:${segment}`);
+        if (pct < target.percentage) {
+          const cand = this.getById(target.versionId);
+          if (cand) return cand;
+        }
+      }
+    }
+    return this.getProduction();
+  }
+}
 

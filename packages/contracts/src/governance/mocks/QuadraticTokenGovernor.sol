@@ -32,8 +32,7 @@ proposalThresholdVotes)
         QuadraticCounter(tallier) 
     {} 
  
-    // Mantenemos el quorum lineal sobre el supply del token IVotes 
-(puedes sobreescribir si quieres otro esquema). 
+    // Mantenemos el quorum lineal sobre el supply del token IVotes (puedes sobreescribir si quieres otro esquema).
     function quorum(uint256 blockNumber) public view override returns 
 (uint256) { 
         // 4% por defecto (ajusta fuera en tests con supply pequeño) 

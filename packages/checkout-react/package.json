@@ -13,10 +13,14 @@
     "react-dom": ">=18"
   },
   "dependencies": {
-    
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@gnew/checkout-sdk": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"

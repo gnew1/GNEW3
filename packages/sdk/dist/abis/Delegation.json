@@ -1,0 +1,7 @@
+{
+    "abi": [
+        { "type": "function", "name": "setDelegate", "stateMutability": "nonpayable", "inputs": [{ "name": "scope", "type": "bytes32" }, { "name": "delegate", "type": "address" }], "outputs": [] },
+        { "type": "function", "name": "clearDelegate", "stateMutability": "nonpayable", "inputs": [{ "name": "scope", "type": "bytes32" }], "outputs": [] },
+        { "type": "function", "name": "delegation", "stateMutability": "view", "inputs": [{ "name": "delegator", "type": "address" }, { "name": "scope", "type": "bytes32" }], "outputs": [{ "type": "address" }] }
+    ]
+}

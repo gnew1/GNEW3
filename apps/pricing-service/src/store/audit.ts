@@ -25,8 +25,9 @@ export class AuditStore {
     }
   }
 
-  log(ev: AuditEvent) {
-    const e = { ...ev, ts: new Date().toISOString() };
+  // Accept callers without ts; we stamp it here
+  log(ev: Omit<AuditEvent, "ts"> | AuditEvent) {
+    const e = { ...(ev as any), ts: new Date().toISOString() } as AuditEvent;
     this.buf.push(e);
     if (this.file) {
       try {

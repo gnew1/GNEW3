@@ -1,7 +1,7 @@
 {
   "id": "sdk/index",
-  "title": "SDKs",
-  "description": "- TypeScript SDK",
+  "title": "index",
+  "description": "",
   "source": "@site/docs/sdk/index.mdx",
   "sourceDirName": "sdk",
   "slug": "/sdk/",

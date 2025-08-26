@@ -1,7 +1,7 @@
 {
   "id": "sdk/python",
-  "title": "Python SDK",
-  "description": "Coming soon.",
+  "title": "python",
+  "description": "",
   "source": "@site/docs/sdk/python.mdx",
   "sourceDirName": "sdk",
   "slug": "/sdk/python",

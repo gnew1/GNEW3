@@ -1,9 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react"; 
-import { BrowserProvider, Contract, Eip1193Provider, ethers } from 
-"ethers"; 
-import DelegationAbi from 
-"@gnew/contracts/artifacts/src/governance/Delegation.sol/Delegation.js
- on"; 
+import { BrowserProvider, Contract, Eip1193Provider, ethers, type InterfaceAbi } from "ethers"; 
+import DelegationAbi from "../abis/delegation"; 
 type Props = { 
 contractAddress: string; 
 scopeLabel?: string; // p.ej. "TOKEN_VOTES" | "REPUTATION_VOTES" 
@@ -17,8 +14,7 @@ const [provider, setProvider] = useState<BrowserProvider |
 null>(null); 
 const [account, setAccount] = useState<string>(""); 
 const [delegatee, setDelegatee] = useState<string>(""); 
-const [expiresAt, setExpiresAt] = useState<string>(""); // ISO 
-datetime-local 
+const [expiresAt, setExpiresAt] = useState<string>(""); // ISO datetime-local input value
 const [status, setStatus] = useState<{ effective: string; active: 
 boolean; exp: bigint } | null>(null); 
 const [loading, setLoading] = useState(false); 
@@ -26,21 +22,19 @@ const [loading, setLoading] = useState(false);
   const scope = useMemo(() => toBytes32(scopeLabel), [scopeLabel]); 
  
   useEffect(() => { 
-    const eth = (window as any).ethereum as Eip1193Provider | 
-undefined; 
+    const eth = (window as unknown as { ethereum?: Eip1193Provider }).ethereum; 
     if (!eth) return; 
     const p = new BrowserProvider(eth); 
     setProvider(p); 
     (async () => { 
-      const [addr] = await eth.request!({ method: 
-"eth_requestAccounts" }); 
+      const [addr] = await eth.request!({ method: "eth_requestAccounts" }); 
       setAccount(addr); 
     })(); 
   }, []); 
  
   async function readStatus() { 
     if (!provider) return; 
-    const c = new Contract(contractAddress, DelegationAbi.abi, await 
+  const c = new Contract(contractAddress, DelegationAbi as InterfaceAbi, await 
 provider.getSigner()); 
     const [effective, active, exp] = await 
 c.effectiveDelegateOf(account, scope); 
@@ -56,7 +50,7 @@ c.effectiveDelegateOf(account, scope);
     setLoading(true); 
     try { 
       const signer = await provider.getSigner(); 
-      const c = new Contract(contractAddress, DelegationAbi.abi, 
+  const c = new Contract(contractAddress, DelegationAbi as InterfaceAbi, 
 signer); 
       const expTs = 
         expiresAt && expiresAt.length 
@@ -77,7 +71,7 @@ signer);
     setLoading(true); 
     try { 
       const signer = await provider.getSigner(); 
-      const c = new Contract(contractAddress, DelegationAbi.abi, 
+  const c = new Contract(contractAddress, DelegationAbi as InterfaceAbi, 
 signer); 
       const expTs = 
         newIso && newIso.length ? Math.floor(new 
@@ -95,7 +89,7 @@ Date(newIso).getTime() / 1000) : 0;
     setLoading(true); 
     try { 
       const signer = await provider.getSigner(); 
-      const c = new Contract(contractAddress, DelegationAbi.abi, 
+  const c = new Contract(contractAddress, DelegationAbi as InterfaceAbi, 
 signer); 
       const tx = await c.revoke(scope); 
       await tx.wait(); 

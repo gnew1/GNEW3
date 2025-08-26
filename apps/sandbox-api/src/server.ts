@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import pino from "pino";
 
-const app = express();
+const app: import("express").Express = express();
 const log = pino({ level: process.env.LOG_LEVEL ?? "info" });
 app.use(cors());
 app.use(express.json());

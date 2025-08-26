@@ -99,7 +99,9 @@ function abacCan(user: UserAttrs, dataset: Dataset, action: "read" | "write" | "
       return user.dept && dataset.domain ? user.dept === dataset.domain : true;
     }
     if (dataset.classification === "restricted") {
-      return (user.clearance ?? 0) >= 2 || (user.dept && user.dept === dataset.domain);
+  // Ensure boolean expressions are properly typed; avoid returning string/undefined from &&
+  const sameDomain = !!user.dept && user.dept === dataset.domain;
+  return (user.clearance ?? 0) >= 2 || sameDomain;
     }
   }
 
@@ -153,9 +155,12 @@ async function datahub<T>(query: string, variables: Record<string, any>): Promis
     body: JSON.stringify({ query, variables }),
   });
   if (!resp.ok) throw new Error(`DataHub error: ${resp.status}`);
-  const json = await resp.json();
-  if (json.errors) throw new Error(`DataHub GraphQL errors: ${JSON.stringify(json.errors)}`);
-  return json.data;
+  type GraphQLResponse<R> = { data: R; errors?: unknown };
+  const json = (await resp.json()) as unknown as GraphQLResponse<T>;
+  if (json && (json as any).errors) {
+    throw new Error(`DataHub GraphQL errors: ${JSON.stringify((json as any).errors)}`);
+  }
+  return (json as any).data as T;
 }
 
 async function searchDatasets(q: string, limit = 20): Promise<Dataset[]> {

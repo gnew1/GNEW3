@@ -3,11 +3,15 @@ import express from "express";
 import pino from "pino";
 import { z } from "zod";
 import nacl from "tweetnacl";
-import naclUtil from "tweetnacl-util";
 import { v4 as uuidv4 } from "uuid";
 
+// Minimal helpers to replace tweetnacl-util
+const b64enc = (u8: Uint8Array) => Buffer.from(u8).toString("base64");
+const b64dec = (s: string) => new Uint8Array(Buffer.from(s, "base64"));
+const utf8enc = (s: string) => new Uint8Array(Buffer.from(s, "utf8"));
+
 const log = pino();
-const app = express();
+const app: import("express").Express = express();
 app.use(express.json());
 
 /**
@@ -25,8 +29,8 @@ app.post("/api/secure/register/:userId", (req,res) => {
   const kp = nacl.box.keyPair();
   const uk: UserKey = {
     userId,
-    publicKey: naclUtil.encodeBase64(kp.publicKey),
-    secretKey: naclUtil.encodeBase64(kp.secretKey)
+  publicKey: b64enc(kp.publicKey),
+  secretKey: b64enc(kp.secretKey)
   };
   users[userId] = uk;
   log.info({ userId }, "User registered with keypair");
@@ -45,15 +49,10 @@ app.post("/api/secure/send", (req,res) => {
   const { from,to,message } = parsed.data;
   if (!users[from] || !users[to]) return res.status(404).json({ error:"User not found" });
   const nonce = nacl.randomBytes(24);
-  const cipher = nacl.box(
-    naclUtil.decodeUTF8(message),
-    nonce,
-    naclUtil.decodeBase64(users[to].publicKey),
-    naclUtil.decodeBase64(users[from].secretKey)
-  );
+  const cipher = nacl.box(utf8enc(message), nonce, b64dec(users[to].publicKey), b64dec(users[from].secretKey));
   const payload = {
-    nonce: naclUtil.encodeBase64(nonce),
-    cipher: naclUtil.encodeBase64(cipher)
+    nonce: b64enc(nonce),
+    cipher: b64enc(cipher)
   };
   const msg: Message = { id: uuidv4(), from, to, ciphertext: JSON.stringify(payload), createdAt: Date.now() };
   messages.push(msg);

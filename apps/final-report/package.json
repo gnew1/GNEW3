@@ -1,4 +1,3 @@
-
 {
   "name": "@gnew/final-report",
   "private": true,
@@ -8,13 +7,12 @@
     "generate": "node dist/generate.js"
   },
   "dependencies": {
-    "marked": "^12.0.2",
-    "fs-extra": "^11.2.0"
+    "fs-extra": "^11.2.0",
+    "marked": "^12.0.2"
   },
   "devDependencies": {
-    "typescript": "^5.5.4",
-    "tsx": "^4.15.7"
+    "@types/fs-extra": "^11.0.4",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.4"
   }
 }
-
-

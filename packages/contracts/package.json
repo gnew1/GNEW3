@@ -1,38 +1,38 @@
-{ 
-"name": "@gnew/contracts", 
-"version": "0.1.0", 
-"private": true, 
-"type": "module", 
-"scripts": { 
-  "clean": "rimraf artifacts cache out coverage typechain-types", 
-  "compile": "hardhat compile", 
-  "build": "hardhat compile && typechain --target ethers-v6 --out-dir typechain-types ./artifacts/@(contracts|src)/**/?(*).json", 
-  "test:hh": "hardhat test", 
-  "test:forge": "forge test -vvv", 
-  "coverage": "hardhat coverage", 
-  "deploy": "hardhat run scripts/deploy.ts --network anvil", 
-  "deploy:holesky": "hardhat run scripts/deploy.ts --network holesky", 
-  "deploy:amoy": "hardhat run scripts/deploy.ts --network polygonAmoy" 
-}, 
-"devDependencies": { 
-  "@nomicfoundation/hardhat-toolbox": "^5.0.0", 
-  "@nomicfoundation/hardhat-verify": "^2.0.0", 
-  "@typechain/ethers-v6": "^0.5.1", 
-  "@types/chai": "^4.3.16", 
-  "@types/mocha": "^10.0.6", 
-  "chai": "^4.5.0", 
-  "dotenv": "^16.4.5", 
-  "ethers": "^6.13.0", 
-  "hardhat": "^2.22.12", 
-  "hardhat-gas-reporter": "^2.2.2", 
-  "rimraf": "^6.0.1", 
-  "solidity-coverage": "^0.8.13", 
-  "ts-node": "^10.9.2", 
-  "typechain": "^8.3.2", 
-  "typescript": "^5.5.4" 
-}, 
-"dependencies": { 
-  "@openzeppelin/contracts": "^5.0.2" 
-} 
+{
+  "name": "@gnew/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "clean": "rimraf artifacts cache out coverage typechain-types",
+    "compile": "hardhat compile",
+    "build": "pnpm run clean && hardhat compile",
+    "test:hh": "hardhat test",
+    "test:forge": "forge test -vvv",
+    "coverage": "hardhat coverage",
+    "deploy": "hardhat run scripts/deploy.ts --network anvil",
+    "deploy:holesky": "hardhat run scripts/deploy.ts --network holesky",
+    "deploy:amoy": "hardhat run scripts/deploy.ts --network polygonAmoy"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@openzeppelin/contracts-upgradeable": "^5.0.2",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@types/chai": "^4.3.16",
+    "@types/mocha": "^10.0.6",
+    "chai": "^4.5.0",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0",
+    "hardhat": "^2.22.12",
+    "hardhat-gas-reporter": "^2.2.2",
+    "rimraf": "^6.0.1",
+    "solidity-coverage": "^0.8.13",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.2",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  }
 }
-

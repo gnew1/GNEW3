@@ -21,5 +21,5 @@ export default Gnew;
 export { AntiCollusionClient } from "./clients/antiCollusion.js";
 export { ReviewsClient } from "./clients/reviews.js";
 // Governance helpers (ABI-agnostic)
-export { getGnewGovToken } from "./gov.js";
-export { scopes as DelegationScopes, getDelegation } from "./delegation.js";
+export { getGnewGovToken, getGnewGovTokenDefault } from "./gov.js";
+export { scopes as DelegationScopes, getDelegation, getDelegationDefault } from "./delegation.js";

@@ -45,10 +45,8 @@ error InvalidBps();
  
     // -------- Datos por Operador -------- 
     struct Operator { 
-        // `registered` se empaqueta junto a `slashNonce` en el mismo 
-slot 
-        uint248 slashNonce; // suficiente, evita ocupar un slot 
-dedicado 
+        // `registered` se empaqueta junto a `slashNonce` en el mismo slot 
+        uint248 slashNonce; // suficiente, evita ocupar un slot dedicado 
         bool    registered; // ocupa 1 byte en el mismo slot 
         uint256 totalStake; // slot propio 
         uint256 totalShares;// slot propio 
@@ -171,12 +169,10 @@ whenNotPaused nonReentrant {
         // cálculo de shares 
         uint256 shares = (tsh == 0 || ts == 0) ? amount : (amount * 
 tsh) / ts; 
-        if (shares == 0) unchecked { shares = 1; } // evita bloqueo 
-por redondeo 
+    if (shares == 0) { unchecked { shares = 1; } } // evita bloqueo por redondeo 
  
-        // Efectos 
-        stakingToken.safeTransferFrom(msg.sender, address(this), 
-amount); 
+    // Efectos 
+    stakingToken.safeTransferFrom(msg.sender, address(this), amount); 
  
         // SSTORE mínimo: escribir una vez por campo 
         op.totalStake = ts + amount; 
@@ -217,13 +213,11 @@ releaseTime);
     function claim(address operator, uint256 unbondIndex) external 
 nonReentrant { 
         Position storage p = positions[operator][msg.sender]; 
-        require(unbondIndex < p.unbonds.length, "index"); // 
-infrecuente → mantener string OK 
+    require(unbondIndex < p.unbonds.length, "index"); // infrecuente: mantener string OK 
  
         Unbonding storage u = p.unbonds[unbondIndex]; 
-        if (u.used == 1) revert NotReleased(); // ya usado o nunca 
-liberado 
-        if (block.timestamp < u.releaseTime) revert NotReleased(); 
+    if (u.used == 1) revert NotReleased(); // ya usado o nunca liberado 
+    if (block.timestamp < u.releaseTime) revert NotReleased(); 
  
         Operator storage op = operators[operator]; 
         uint256 tsh = op.totalShares; 

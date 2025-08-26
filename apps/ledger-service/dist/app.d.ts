@@ -8,18 +8,5 @@
  * Seguridad & Observabilidad: Rastreabilidad por txid; logs estructurados; SSO opcional (JWT).
  * Despliegue: Migración guiada (SQL en /src/db/migrations).
  */
-import { type Application } from "express";
-type User = {
-    sub: string;
-    roles?: string[];
-    email?: string;
-};
-declare global {
-    namespace Express {
-        interface Request {
-            user?: User;
-        }
-    }
-}
-declare const app: Application;
+declare const app: import("express").Express;
 export default app;

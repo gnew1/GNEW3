@@ -4,6 +4,5 @@
  * - Cola de disputas (in-memory) y reporte de estados
  * - Endpoints de evidencia (metadatos, sin PII)
  */
-import { type Application } from "express";
-declare const app: Application;
+declare const app: import("express").Express;
 export default app;

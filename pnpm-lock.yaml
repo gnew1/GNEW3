@@ -228,8 +228,8 @@ importers:
   apps/community-forum:
     dependencies:
       next:
-        specifier: 14.2.10
-        version: 14.2.10(@opentelemetry/api@1.9.0)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+        specifier: 14.2.3
+        version: 14.2.3(@opentelemetry/api@1.9.0)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
       react:
         specifier: 18.2.0
         version: 18.2.0
@@ -364,8 +364,8 @@ importers:
   apps/devrel-hub:
     dependencies:
       next:
-        specifier: 14.2.10
-        version: 14.2.10(@opentelemetry/api@1.9.0)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+        specifier: 14.2.3
+        version: 14.2.3(@opentelemetry/api@1.9.0)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
       react:
         specifier: 18.2.0
         version: 18.2.0
@@ -818,9 +818,6 @@ importers:
       '@types/node':
         specifier: ^20.12.12
         version: 20.19.11
-      '@types/pg':
-        specifier: ^8.11.6
-        version: 8.15.5
       '@types/supertest':
         specifier: ^2.0.16
         version: 2.0.16
@@ -1398,6 +1395,9 @@ importers:
       ethers:
         specifier: ^6.13.1
         version: 6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      express:
+        specifier: ^4.19.2
+        version: 4.21.2
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
@@ -1408,6 +1408,9 @@ importers:
         specifier: ^10.0.0
         version: 10.5.0
     devDependencies:
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.23
       '@types/jest':
         specifier: ^29.5.12
         version: 29.5.14
@@ -1568,13 +1571,22 @@ importers:
 
   packages/checkout-react:
     dependencies:
+      '@gnew/checkout-sdk':
+        specifier: workspace:*
+        version: link:../checkout-sdk
       react:
-        specifier: '>=18'
+        specifier: ^18.3.1
         version: 18.3.1
       react-dom:
-        specifier: '>=18'
+        specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
     devDependencies:
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.24
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.24)
       typescript:
         specifier: ^5.5.4
         version: 5.8.2
@@ -1593,6 +1605,9 @@ importers:
       '@nomicfoundation/hardhat-verify':
         specifier: ^2.0.0
         version: 2.1.1(hardhat@2.26.3(bufferutil@4.0.9)(ts-node@10.9.2(@types/node@22.17.2)(typescript@5.8.2))(typescript@5.8.2)(utf-8-validate@5.0.10))
+      '@openzeppelin/contracts-upgradeable':
+        specifier: ^5.0.2
+        version: 5.4.0(@openzeppelin/contracts@5.4.0)
       '@typechain/ethers-v6':
         specifier: ^0.5.1
         version: 0.5.1(ethers@6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(typechain@8.3.2(typescript@5.8.2))(typescript@5.8.2)
@@ -5014,6 +5029,11 @@ packages:
     engines: {node: '>=14'}
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
+
+  '@openzeppelin/contracts-upgradeable@5.4.0':
+    resolution: {integrity: sha512-STJKyDzUcYuB35Zub1JpWW58JxvrFFVgQ+Ykdr8A9PGXgtq/obF5uoh07k2XmFyPxfnZdPdBdhkJ/n2YxJ87HQ==}
+    peerDependencies:
+      '@openzeppelin/contracts': 5.4.0
 
   '@openzeppelin/contracts@5.4.0':
     resolution: {integrity: sha512-eCYgWnLg6WO+X52I16TZt8uEjbtdkgLC0SUX/xnAksjjrQI4Xfn4iBRoI5j55dmlOhDv1Y7BoR3cU7e3WWhC6A==}
@@ -17524,6 +17544,10 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
 
+  '@openzeppelin/contracts-upgradeable@5.4.0(@openzeppelin/contracts@5.4.0)':
+    dependencies:
+      '@openzeppelin/contracts': 5.4.0
+
   '@openzeppelin/contracts@5.4.0': {}
 
   '@panva/hkdf@1.2.1': {}
@@ -23886,32 +23910,6 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       uuid: 8.3.2
-
-  next@14.2.10(@opentelemetry/api@1.9.0)(react-dom@18.2.0(react@18.2.0))(react@18.2.0):
-    dependencies:
-      '@next/env': 14.2.10
-      '@swc/helpers': 0.5.5
-      busboy: 1.6.0
-      caniuse-lite: 1.0.30001737
-      graceful-fs: 4.2.11
-      postcss: 8.4.31
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
-      styled-jsx: 5.1.1(react@18.2.0)
-    optionalDependencies:
-      '@next/swc-darwin-arm64': 14.2.10
-      '@next/swc-darwin-x64': 14.2.10
-      '@next/swc-linux-arm64-gnu': 14.2.10
-      '@next/swc-linux-arm64-musl': 14.2.10
-      '@next/swc-linux-x64-gnu': 14.2.10
-      '@next/swc-linux-x64-musl': 14.2.10
-      '@next/swc-win32-arm64-msvc': 14.2.10
-      '@next/swc-win32-ia32-msvc': 14.2.10
-      '@next/swc-win32-x64-msvc': 14.2.10
-      '@opentelemetry/api': 1.9.0
-    transitivePeerDependencies:
-      - '@babel/core'
-      - babel-plugin-macros
 
   next@14.2.10(@opentelemetry/api@1.9.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:

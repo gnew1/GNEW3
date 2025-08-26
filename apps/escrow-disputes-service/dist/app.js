@@ -43,34 +43,29 @@ app.post("/settlement/build", (req, res) => {
     };
     res.json({ domain, types, value });
 });
-const Eip712Domain = z.object({
-    name: z.string(),
-    version: z.string(),
-    chainId: z.number(),
-    verifyingContract: z.string(),
-});
-// Accept ethers.js typed-data format: { Settlement: [{ name, type }, ...] }
-const TypesShape = z.record(z.string(), z.array(z.object({ name: z.string(), type: z.string() })));
-const SettlementValue = z.object({
-    dealId: z.number(),
-    buyerAmount: z.string(),
-    sellerAmount: z.string(),
-    deadline: z.number(),
-});
 const VerifyIn = z.object({
-    domain: Eip712Domain,
-    types: TypesShape,
-    value: SettlementValue,
+    domain: z.object({
+        name: z.string(),
+        version: z.string(),
+        chainId: z.number(),
+        verifyingContract: z.string()
+    }),
+    types: z.any(),
+    value: z.object({
+        dealId: z.number(),
+        buyerAmount: z.string(),
+        sellerAmount: z.string(),
+        deadline: z.number()
+    }),
     sigBuyer: z.string(),
     sigSeller: z.string(),
     buyer: z.string(),
-    seller: z.string(),
+    seller: z.string()
 });
 app.post("/settlement/verify", (req, res) => {
     const b = VerifyIn.parse(req.body);
-    const typed = b.types;
-    const r1 = getAddress(verifyTypedData(b.domain, typed, b.value, b.sigBuyer));
-    const r2 = getAddress(verifyTypedData(b.domain, typed, b.value, b.sigSeller));
+    const r1 = getAddress(verifyTypedData(b.domain, b.types, b.value, b.sigBuyer));
+    const r2 = getAddress(verifyTypedData(b.domain, b.types, b.value, b.sigSeller));
     const ok = (r1 === getAddress(b.buyer) && r2 === getAddress(b.seller)) || (r2 === getAddress(b.buyer) && r1 === getAddress(b.seller));
     res.json({ ok, recovered: [r1, r2] });
 });

@@ -67,15 +67,12 @@ function abacCan(user, dataset, action) {
         if (dataset.classification === "public")
             return true;
         if (dataset.classification === "internal") {
-            // If either side is missing, allow by default (MVP semantics)
-            if (!dataset.domain || !user.dept)
-                return true;
-            return user.dept === dataset.domain;
+            return user.dept && dataset.domain ? user.dept === dataset.domain : true;
         }
         if (dataset.classification === "restricted") {
-            const clearanceOk = (user.clearance ?? 0) >= 2;
-            const deptOk = !!user.dept && user.dept === dataset.domain;
-            return clearanceOk || deptOk;
+            // Ensure boolean expressions are properly typed; avoid returning string/undefined from &&
+            const sameDomain = !!user.dept && user.dept === dataset.domain;
+            return (user.clearance ?? 0) >= 2 || sameDomain;
         }
     }
     if (action === "write" || action === "admin") {
@@ -125,8 +122,9 @@ async function datahub(query, variables) {
     if (!resp.ok)
         throw new Error(`DataHub error: ${resp.status}`);
     const json = (await resp.json());
-    if (json && json.errors)
+    if (json && json.errors) {
         throw new Error(`DataHub GraphQL errors: ${JSON.stringify(json.errors)}`);
+    }
     return json.data;
 }
 async function searchDatasets(q, limit = 20) {

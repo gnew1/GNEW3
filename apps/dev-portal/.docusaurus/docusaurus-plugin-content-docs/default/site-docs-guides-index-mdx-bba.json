@@ -1,7 +1,7 @@
 {
   "id": "guides/index",
-  "title": "Guides",
-  "description": "- Auth",
+  "title": "index",
+  "description": "",
   "source": "@site/docs/guides/index.mdx",
   "sourceDirName": "guides",
   "slug": "/guides/",

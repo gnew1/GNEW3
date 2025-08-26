@@ -24,9 +24,7 @@ import {Governor} from
 "@openzeppelin/contracts/governance/Governor.sol"; 
 import {GovernorSettings} from 
 "@openzeppelin/contracts/governance/extensions/GovernorSettings.sol"; 
-import {GovernorCountingSimple} from 
-"@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.
- sol"; 
+import {GovernorCountingSimple} from "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol"; 
 import {IVotes} from 
 "@openzeppelin/contracts/governance/utils/IVotes.sol"; 
 contract GnewGovernor is Governor, GovernorSettings, 
@@ -92,8 +90,7 @@ onlyGovernance {
  
     // --------- Núcleo de mezcla --------- 
  
-    /// @dev Poder de voto por cuenta en `blockNumber` = mix ponderado 
-de ambas fuentes. 
+    /// @dev Poder de voto por cuenta en `blockNumber` = mix ponderado de ambas fuentes. 
     function _getVotes(address account, uint256 blockNumber, bytes 
 memory /*params*/ ) 
         internal 
@@ -109,8 +106,7 @@ memory /*params*/ )
         } 
     } 
  
-    /// @notice Quorum = fracción del supply **ponderado** de ambas 
-fuentes en el bloque. 
+    /// @notice Quorum = fracción del supply ponderado de ambas fuentes en el bloque. 
     function quorum(uint256 blockNumber) public view override returns 
 (uint256) { 
         uint256 ts = tokenVotes.getPastTotalSupply(blockNumber); 

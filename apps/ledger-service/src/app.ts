@@ -60,7 +60,7 @@ function requireRole(role: string) {
 }
 
 // ---------- App ----------
-const app = express();
+const app: import("express").Express = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(httpLogger);
 app.use(authOptional);
@@ -343,7 +343,7 @@ app.get("/export/xbrl", requireRole("ledger:read"), async (req, res) => {
     periodYM: ym,
     entityId: "GNEW",
     currency: "EUR",
-    items: balances.rows.map((r) => ({
+    items: balances.rows.map((r: any) => ({
       code: r.code,
       name: r.name,
       type: r.type,

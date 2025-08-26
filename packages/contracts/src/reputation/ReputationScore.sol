@@ -61,11 +61,11 @@ onlyRole(SCORER_ROLE) {
  
         if (newScore > prev) { 
             uint256 delta = newScore - prev; 
-            _moveVotingUnits(address(0), account, delta); 
+            _transferVotingUnits(address(0), account, delta); 
             _totalScore += delta; 
         } else { 
             uint256 delta = prev - newScore; 
-            _moveVotingUnits(account, address(0), delta); 
+            _transferVotingUnits(account, address(0), delta); 
             _totalScore -= delta; 
         } 
         _score[account] = newScore; 
@@ -76,7 +76,7 @@ onlyRole(SCORER_ROLE) {
 scores) external onlyRole(SCORER_ROLE) { 
         require(accounts.length == scores.length, "len mismatch"); 
         for (uint256 i = 0; i < accounts.length; i++) { 
-            setScore(accounts[i], scores[i]); 
+            this.setScore(accounts[i], scores[i]); 
         } 
     } 
  
@@ -85,7 +85,7 @@ onlyRole(SCORER_ROLE) {
         if (by == 0) return; 
         _score[to] += by; 
         _totalScore += by; 
-        _moveVotingUnits(address(0), to, by); 
+    _transferVotingUnits(address(0), to, by); 
         emit ScoreIncreased(to, by, _score[to]); 
     } 
  
@@ -96,7 +96,7 @@ onlyRole(SCORER_ROLE) {
         uint256 dec = by > prev ? prev : by; 
         _score[from] = prev - dec; 
         _totalScore -= dec; 
-        _moveVotingUnits(from, address(0), dec); 
+    _transferVotingUnits(from, address(0), dec); 
         emit ScoreDecreased(from, dec, _score[from]); 
     } 
  
@@ -107,11 +107,9 @@ returns (uint256) {
         return _score[account]; 
     } 
  
-    function _transferVotingUnits(address /* from */, address /* to 
-*/, uint256 /* amount */) internal pure override { 
-        // No hay transferencias entre cuentas. Se gestionan vía 
-set/mint/burn -> _moveVotingUnits. 
-        // Mantener esta función vacía intencionalmente. 
+    function _transferVotingUnits(address from, address to, uint256 amount) internal override { 
+        // Propaga cambios a Votes (checkpoints y delegaciones)
+        super._transferVotingUnits(from, to, amount); 
     } 
  
     // ---------- Vistas ---------- 

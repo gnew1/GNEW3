@@ -35,7 +35,7 @@ Last processed: N420
 Automation stopped successfully.
 `;
 
-  const summaryHtml = marked(summaryMd);
+  const summaryHtml = await marked(summaryMd);
 
   await fs.writeFile(`${outputDir}/final-report.md`, summaryMd, "utf8");
   await fs.writeFile(`${outputDir}/final-report.html`, summaryHtml, "utf8");

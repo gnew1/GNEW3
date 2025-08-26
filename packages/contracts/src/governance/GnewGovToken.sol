@@ -96,8 +96,7 @@ onlyRole(MINTER_ROLE) {
     } 
  
     /// @notice Reclamo de faucet en testnets (bloqueado en mainnets). 
-    /// @dev Requiere que la red no sea mainnet ETH (1) ni Polygon 
-mainnet (137). 
+    /// @dev Requiere que la red no sea mainnet ETH (1) ni Polygon mainnet (137). 
     function faucet() external whenNotPaused { 
         require(_isTestnet(), "faucet:mainnet-blocked"); 
         require(FAUCET_AMOUNT > 0, "faucet:disabled"); 
@@ -109,13 +108,13 @@ mainnet (137).
         emit Minted(msg.sender, FAUCET_AMOUNT, address(this)); 
     } 
  
-    /// @inheritdoc ERC20Burnable 
+    /// @dev Override de ERC20Burnable
     function burn(uint256 value) public override whenNotPaused { 
         super.burn(value); 
         emit Burned(msg.sender, value, msg.sender); 
     } 
  
-    /// @inheritdoc ERC20Burnable 
+    /// @dev Override de ERC20Burnable
     function burnFrom(address account, uint256 value) public override 
 whenNotPaused { 
         super.burnFrom(account, value); 
@@ -131,8 +130,7 @@ override {
  
     function _isTestnet() internal view returns (bool) { 
         uint256 id = block.chainid; 
-        // permitir Holesky(17000), Goerli(5), Sepolia(11155111), 
-Polygon Amoy(80002), Anvil(31337) etc. 
+    // permitir Holesky(17000), Goerli(5), Sepolia(11155111), Polygon Amoy(80002), Anvil(31337) etc. 
         if (id == 1 || id == 137) return false; 
         return true; 
     } 
