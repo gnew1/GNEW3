@@ -142,6 +142,11 @@ describe("data-catalog-service", () => {
     expect(urns).not.toContain("urn:li:dataset:(urn:li:dataPlatform:hive,db.tbl2,PROD)");
   });
 
+  it("search missing query returns 400", async () => {
+    const res = await request(server).get("/search").set("Authorization", `Bearer ${userSales}`);
+    expect(res.status).toBe(400);
+  });
+
   it("search denies when dept mismatch for internal", async () => {
     const res = await request(server).get("/search?q=orders").set("Authorization", `Bearer ${userOther}`);
     expect(res.status).toBe(200);
