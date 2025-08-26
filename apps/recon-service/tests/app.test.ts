@@ -5,11 +5,14 @@
  */
 import request from "supertest";
 import { newDb } from "pg-mem";
+import fs from "fs";
+import path from "path";
 
 let app: any;
 beforeAll(async () => {
   process.env.DATABASE_URL = "pgmem";
-  app = (await import("../src/app")).default;
+  const createApp = (await import("../src/app")).default;
+  app = (await createApp()).app;
 });
 
 // Patch pg with pg-mem and preload migration
@@ -34,12 +37,8 @@ describe("recon-service", () => {
   });
 
   it("ETL upload + reconcile (txid and amount/date)", async () => {
-    // Provider CSV
-    const csv = `id,amount,timestamp,currency,memo,external_ref
-p1,100.00,2025-01-01T10:00:00Z,EUR,Sale A,tx-1
-p2,50.00,2025-01-01T11:00:00Z,EUR,Sale B,
-p3,25.00,2025-01-02T09:00:00Z,EUR,Sale C,tx-3`;
-    const upP = await request(app).post("/upload/provider").send({
+    const csv = fs.readFileSync(path.join(__dirname, "fixtures/provider.csv"), "utf-8");
+    const upP = await request(app).post("/provider/upload").send({
       provider: "stripe",
       currency: "EUR",
       format: "csv",
@@ -49,15 +48,12 @@ p3,25.00,2025-01-02T09:00:00Z,EUR,Sale C,tx-3`;
     expect(upP.status).toBe(201);
 
     // Ledger JSON normalized
-    const upL = await request(app).post("/upload/ledger").send({
+    const ledger = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/ledger.json"), "utf-8"));
+    const upL = await request(app).post("/ledger/upload").send({
       source: "ledger",
       currency: "EUR",
       format: "json",
-      data: [
-        { ext_id: "L1", amount: 100.00, currency: "EUR", timestamp: "2025-01-01T10:01:00Z", external_ref: "tx-1" }, // txid match
-        { ext_id: "L2", amount: 49.99, currency: "EUR", timestamp: "2025-01-01T11:30:00Z" },                       // amount/date match to p2 (1c diff)
-        { ext_id: "L3", amount: 25.00, currency: "EUR", timestamp: "2025-01-02T09:05:00Z", external_ref: "tx-3" }   // txid match
-      ]
+      data: ledger
     });
     expect(upL.status).toBe(201);
 
@@ -74,13 +70,12 @@ p3,25.00,2025-01-02T09:00:00Z,EUR,Sale C,tx-3`;
   });
 
   it("alerts when diffRatio exceeds threshold", async () => {
-    // Minimal new provider upload with no matching ledger
-    const upP = await request(app).post("/upload/provider").send({
+    const data = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures/provider_alert.json"), "utf-8"));
+    const upP = await request(app).post("/provider/upload").send({
       provider: "bankx",
       currency: "EUR",
       format: "json",
-      data: [{ id: "b1", amount: 200, timestamp: "2025-02-01T00:00:00Z" }],
-      csv: { headers: { id: "id", amount: "amount", timestamp: "timestamp" } } // not used for json normalized
+      data
     });
     expect(upP.status).toBe(201);
 
@@ -94,10 +89,9 @@ p3,25.00,2025-01-02T09:00:00Z,EUR,Sale C,tx-3`;
     expect(run.body.unmatched).toBeGreaterThan(0);
     expect(run.body.diffRatio).toBeCloseTo(1, 5);
 
-    // fetch last
-    const last = await request(app).get("/reconcile/last/bankx");
-    expect(last.status).toBe(200);
-    expect(Number(last.body.unmatched)).toBeGreaterThan(0);
+    const fetched = await request(app).get(`/reconcile/runs/${run.body.runId}`);
+    expect(fetched.status).toBe(200);
+    expect(fetched.body.summary.counts.unmatched).toBeGreaterThan(0);
   });
 });
 

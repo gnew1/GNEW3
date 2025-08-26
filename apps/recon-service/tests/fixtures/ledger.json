@@ -1,0 +1,5 @@
+[
+  {"ext_id":"L1","amount":100.00,"currency":"EUR","timestamp":"2025-01-01T10:01:00Z","external_ref":"tx-1"},
+  {"ext_id":"L2","amount":49.99,"currency":"EUR","timestamp":"2025-01-01T11:30:00Z"},
+  {"ext_id":"L3","amount":25.00,"currency":"EUR","timestamp":"2025-01-02T09:05:00Z","external_ref":"tx-3"}
+]
