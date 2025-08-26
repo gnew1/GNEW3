@@ -54,8 +54,8 @@ export default function AISuggestions({
           <div>
             <h3 className="font-medium text-gray-900">{lang === "es" ? "TL;DR del debate" : "Debate TL;DR"}</h3>
             <ul className="mt-2 list-disc ps-5 space-y-1">
-              {data.tldr.map((b, i) => (
-                <li key={i} className="text-sm text-gray-800">
+              {data.tldr.map((b) => (
+                <li key={b} className="text-sm text-gray-800">
                   {b}
                 </li>
               ))}
@@ -65,8 +65,8 @@ export default function AISuggestions({
           <div>
             <h3 className="font-medium text-gray-900">{lang === "es" ? "Sugerencias accionables" : "Actionable suggestions"}</h3>
             <ul className="mt-2 space-y-3">
-              {data.suggestions.map((sug, i) => (
-                <li key={i} className="rounded-xl border border-gray-200 p-3">
+              {data.suggestions.map((sug) => (
+                <li key={sug.title} className="rounded-xl border border-gray-200 p-3">
                   <div className="text-sm font-semibold">{sug.title}</div>
                   <div className="text-sm text-gray-700 mt-1">{sug.reason}</div>
                   {sug.cta && (

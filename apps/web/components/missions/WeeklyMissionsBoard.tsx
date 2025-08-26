@@ -122,8 +122,8 @@ export const WeeklyMissionsBoard: React.FC = () => {
             <details className="mt-2">
               <summary className="cursor-pointer text-sm text-blue-600">Criterios de aceptación</summary>
               <ul className="list-disc list-inside text-xs text-gray-700 space-y-1 mt-1">
-                {m.acceptanceCriteria.map((c, i) => (
-                  <li key={i}>{c}</li>
+                {m.acceptanceCriteria.map((c) => (
+                  <li key={c}>{c}</li>
                 ))}
               </ul>
             </details>

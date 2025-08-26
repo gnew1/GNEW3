@@ -54,30 +54,31 @@ export function DebatePanel({
  
       <section> 
         <h3 className="font-semibold">Argumentos clave</h3> 
-        <ol className="list-decimal list-inside space-y-2"> 
-          {data.key_arguments.map((a, i) => ( 
-            <li key={i} className="bg-gray-50 rounded p-3">{a}</li> 
-          ))} 
-        </ol> 
-      </section> 
+        <ol className="list-decimal list-inside space-y-2">
+          {data.key_arguments.map((a) => (
+            <li key={a} className="bg-gray-50 rounded p-3">{a}</li>
+          ))}
+        </ol>
+      </section>
  
       <section> 
         <h3 className="font-semibold">Etiquetas</h3> 
-        <div className="flex flex-wrap gap-2"> 
-          {data.tags.map((t, i) => ( 
-            <span key={i} className="px-2 py-1 rounded-full text-sm 
-border">{t}</span> 
-          ))} 
-        </div> 
-      </section> 
+        <div className="flex flex-wrap gap-2">
+          {data.tags.map((t) => (
+            <span key={t} className="px-2 py-1 rounded-full text-sm border">{t}</span>
+          ))}
+        </div>
+      </section>
  
       <section> 
         <h3 className="font-semibold">Agenda sugerida</h3> 
         {data.agenda.length ? ( 
-          <ul className="list-disc list-inside space-y-1"> 
-            {data.agenda.map((x, i) => <li key={i}>{x}</li>)} 
-          </ul> 
-        ) : ( 
+          <ul className="list-disc list-inside space-y-1">
+            {data.agenda.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        ) : (
           <p className="text-sm text-gray-500">Sin acciones 
 detectadas.</p> 
         )} 

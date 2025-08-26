@@ -1,5 +1,12 @@
-"use client"; 
-import React, { useEffect, useState } from "react"; 
+"use client";
+import React, { useEffect, useState, useRef } from "react";
+
+function ensureDialogPolyfill(dlg: HTMLDialogElement) {
+  if (typeof dlg.showModal !== "function") {
+    (dlg as any).showModal = () => dlg.setAttribute("open", "");
+    (dlg as any).close = () => dlg.removeAttribute("open");
+  }
+}
 type Catalog = { uses: any[]; dataCategories: any[]; channels: any[]; matrixVersion: string };
 export default function ConsentBanner({ subjectId }: { subjectId: 
 string }) { 
@@ -12,16 +19,28 @@ const [choices, setChoices] = useState<any>({
   marketing: false,
 }); 
  
-  useEffect(() => { 
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
     // mostrar banner si no existe cookie de preferencia o si GPC activo
-    const hasCookie = document.cookie.includes("gnew_consent="); 
-    const gpc = (navigator as any).globalPrivacyControl === true; 
-    if (!hasCookie || gpc) setVisible(true); 
-    fetch("/api/consent/catalog").then(r => 
-r.json()).then(setCatalog); 
-  }, []); 
- 
-  if (!visible || !catalog) return null; 
+    const hasCookie = document.cookie.includes("gnew_consent=");
+    const gpc = (navigator as any).globalPrivacyControl === true;
+    if (!hasCookie || gpc) setVisible(true);
+    fetch("/api/consent/catalog").then(r => r.json()).then(setCatalog);
+  }, []);
+
+  useEffect(() => {
+    const dlg = dialogRef.current;
+    if (!dlg) return;
+    ensureDialogPolyfill(dlg);
+    if (visible) {
+      dlg.showModal();
+    } else {
+      dlg.open && dlg.close();
+    }
+  }, [visible]);
+
+  if (!visible || !catalog) return null;
  
   const save = async (mode: "accept_all" | "reject_all" | "custom") => 
 { 
@@ -60,10 +79,19 @@ processingUseKey: "personalization", channelKey: "in_app", state: pe ?
     setVisible(false); 
   }; 
  
-  return ( 
-    <div role="dialog" aria-label="Consent banner" className="fixed 
-bottom-4 inset-x-4 bg-white shadow-xl rounded-2xl p-4 z-50"> 
-      <div className="flex flex-col gap-3"> 
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-label="Consent banner"
+      onCancel={(e) => {
+        e.preventDefault();
+        setVisible(false);
+      }}
+      onClose={() => setVisible(false)}
+      className="fixed bottom-4 inset-x-4 bg-white shadow-xl rounded-2xl p-4 z-50"
+    >
+      <style>{`dialog::backdrop{background:transparent}`}</style>
+      <div className="flex flex-col gap-3">
         <div> 
           <h2 className="text-lg font-semibold">Tu privacidad</h2> 
           <p className="text-sm text-gray-600">Usamos datos por 
@@ -82,12 +110,11 @@ onClick={()=>save("custom")}>Guardar selección</button>
           <button className="px-4 py-2 bg-black text-white rounded" 
 onClick={()=>save("accept_all")}>Aceptar todo</button> 
         </div> 
-        <a className="text-xs underline text-gray-500" 
-href="/privacy">Política y configuración avanzada</a> 
-      </div> 
-    </div> 
-  ); 
-} 
+        <a className="text-xs underline text-gray-500" href="/privacy">Política y configuración avanzada</a>
+      </div>
+    </dialog>
+  );
+}
  
 function Card({ title, checked, onChange }:{ title:string; 
 checked:boolean; onChange:(v:boolean)=>void }) { 

@@ -8,10 +8,9 @@ export default function TipsBox({ items }:{ items:any[] }) {
     <div className="rounded-2xl border p-4"> 
       <div className="font-semibold mb-2">Sugerencias 
 personalizadas</div> 
-      <ul className="list-disc ml-5 text-sm">{tips.map((t,i)=><li 
-key={i}>{t}</li>)}</ul> 
-    </div> 
-  ); 
-} 
+      <ul className="list-disc ml-5 text-sm">{tips.map((t)=><li key={t}>{t}</li>)}</ul>
+    </div>
+  );
+}
  
  
