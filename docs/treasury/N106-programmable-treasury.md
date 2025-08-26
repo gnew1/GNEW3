@@ -518,7 +518,8 @@ def bps(a: float, b: float) -> float:
 if a == 0 or b == 0: return float("inf") 
 return abs(a - b) / ((a + b) / 2) * 10000.0 
 Ruta completa: ./services/pricing_oracle/onchain.py 
-from web3 import Web3 
+from web3 import Web3
+from web3.contract import Contract
 from eth_account.messages import encode_defunct 
 from dataclasses import dataclass 
 SIGNED_ABI = 
@@ -544,10 +545,10 @@ CL_ABI =
  "function"}]' 
 @dataclass 
 class Chain: 
-w3: Web3 
-oracle: any 
-cl: any | None 
-pk: str | None 
+w3: Web3
+oracle: Contract
+cl: Contract | None
+pk: str | None
 def connect(rpc_url: str, signed_addr: str, cl_addr: str | None, 
 chain_id: int, pk: str | None) -> Chain: 
 w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 

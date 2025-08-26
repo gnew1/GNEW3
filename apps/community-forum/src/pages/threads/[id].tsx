@@ -1,3 +1,4 @@
+import React from "react";
 import { useRouter } from "next/router";
 import useSWR from "swr";
 
@@ -13,10 +14,10 @@ export default function ThreadPage() {
       <h1 className="text-2xl font-bold mb-4">{data.title}</h1>
       <p className="text-sm text-gray-500">By {data.author}</p>
       <div className="mt-4 space-y-2">
-        {data.posts.map((p: any) => (
-          <div key={`${p.author}-${p.content}`} className="border p-2 rounded">
-            <p>{p.content}</p>
-            <p className="text-xs text-gray-500">— {p.author}</p>
+        {data.posts.map((message: any) => (
+          <div key={message.id} className="border p-2 rounded">
+            <p>{message.content}</p>
+            <p className="text-xs text-gray-500">— {message.author}</p>
           </div>
         ))}
       </div>

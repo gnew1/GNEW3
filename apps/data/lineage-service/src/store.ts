@@ -2,9 +2,17 @@
 import { db } from "./db.js";
 import { nanoid } from "nanoid";
 
+export interface Dataset {
+  id: string;
+  namespace: string;
+  name: string;
+  key: string;
+  createdAt: number;
+}
+
 export function upsertDataset(ns: string, name: string): { id: string; key: string } {
   const key = `${ns}.${name}`;
-  const row = db.prepare("SELECT id FROM datasets WHERE key=?").get(key) as any;
+  const row = db.prepare("SELECT id FROM datasets WHERE key=?").get(key) as { id: string } | undefined;
   if (row?.id) return { id: row.id, key };
   const id = nanoid();
   db.prepare("INSERT INTO datasets(id,namespace,name,key,createdAt) VALUES(?,?,?,?,?)")
@@ -16,7 +24,7 @@ export function upsertDataset(ns: string, name: string): { id: string; key: stri
 }
 
 export function bumpVersion(datasetId: string): number {
-  const last = db.prepare("SELECT MAX(version) v FROM dataset_versions WHERE datasetId=?").get(datasetId) as any;
+  const last = db.prepare("SELECT MAX(version) v FROM dataset_versions WHERE datasetId=?").get(datasetId) as { v?: number } | undefined;
   const next = Number(last?.v ?? 1) + 1;
   db.prepare("INSERT INTO dataset_versions(id,datasetId,version,createdAt) VALUES(?,?,?,?)")
     .run(nanoid(), datasetId, next, Date.now());
@@ -31,8 +39,8 @@ export function setSchema(datasetId: string, version: number, cols: Array<{ name
   }
 }
 
-export function findDatasetByKey(key: string): any | null {
-  return db.prepare("SELECT * FROM datasets WHERE key=?").get(key) as any;
+export function findDatasetByKey(key: string): Dataset | null {
+  return db.prepare("SELECT * FROM datasets WHERE key=?").get(key) as Dataset | null;
 }
 
 

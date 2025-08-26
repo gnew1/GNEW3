@@ -1,0 +1,66 @@
+name: mono-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  get-packages:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.packages.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: List workspaces
+        id: packages
+        run: |
+          pkgs=$(pnpm -r ls --depth -1 --json | jq -r --arg cwd "$PWD" '[.[] | select(.path != $cwd) | .name]')
+          echo "matrix=$pkgs" >> $GITHUB_OUTPUT
+
+  quality:
+    needs: get-packages
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.get-packages.outputs.packages) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+      - name: Cache SonarQube
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: |
+            ${{ runner.os }}-sonar
+      - run: pnpm -w install --frozen-lockfile
+      - name: Lint
+        run: pnpm -w --filter ${{ matrix.package }} lint --if-present
+      - name: Typecheck
+        run: pnpm -w --filter ${{ matrix.package }} typecheck --if-present
+      - name: Test
+        run: pnpm -w --filter ${{ matrix.package }} test --if-present
+      - name: Sonar
+        if: github.ref == 'refs/heads/main'
+        run: pnpm -w --filter ${{ matrix.package }} sonar --if-present
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

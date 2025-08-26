@@ -19,9 +19,24 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import { exportXBRLInstance } from "./xbrl/exporter";
 import { runMigrations } from "./db/migrate";
 
+// Resolve secrets from env or Vault
+async function resolveSecret(v?: string): Promise<string | undefined> {
+  if (!v) return undefined;
+  if (!v.startsWith("vault://")) return v;
+  const addr = process.env.VAULT_ADDR ?? "http://127.0.0.1:8200";
+  const token = process.env.VAULT_TOKEN ?? "";
+  const path = v.slice("vault://".length);
+  const resp = await fetch(`${addr}/v1/${path}`, {
+    headers: { "X-Vault-Token": token },
+  });
+  if (!resp.ok) throw new Error(`vault_error:${resp.status}`);
+  const data = await resp.json();
+  return data?.data?.data?.value ?? data?.data?.value;
+}
+
 // ---------- Config ----------
 const PORT = Number(process.env.PORT ?? 8093);
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/gnew_ledger";
+const DATABASE_URL = await resolveSecret(process.env.DATABASE_URL);
 const APPLY_TRIGGERS = (process.env.APPLY_TRIGGERS ?? "true").toLowerCase() === "true";
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? "gnew";
 const JWT_ISSUER = process.env.JWT_ISSUER ?? "https://sso.example.com/";
@@ -30,12 +45,14 @@ const JWT_PUBLIC_KEY = (process.env.JWT_PUBLIC_KEY ?? "").replace(/\\n/g, "\n");
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
 const httpLogger = pinoHttp({ logger });
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+const pool = DATABASE_URL
+  ? new Pool({ connectionString: DATABASE_URL })
+  : new Pool();
 
 // ---------- Auth (optional) ----------
 type User = { sub: string; roles?: string[]; email?: string };
 function authOptional(req: any, _res: any, next: any) {
-  const h = req.headers.authorization;
+  const h = req.headers?.authorization;
   if (h?.startsWith("Bearer ") && JWT_PUBLIC_KEY) {
     try {
       const tok = h.slice(7);
@@ -234,7 +251,8 @@ app.post("/periods/:ym/lock", requireRole("ledger:admin"), async (req, res) => {
 
 // Trial balance (as of date)
 app.get("/balances/trial", requireRole("ledger:read"), async (req, res) => {
-  const asOf = req.query.asOf ? String(req.query.asOf) : new Date().toISOString();
+  const asOfParam = String(req.query?.asOf ?? "");
+  const asOf = asOfParam || new Date().toISOString();
   const r = await pool.query(
     `select * from v_trial_balance_asof($1::timestamptz)`,
     [asOf],
@@ -325,7 +343,7 @@ app.post("/reconcile/auto", requireRole("ledger:write"), async (req, res) => {
 
 // XBRL export (simple instance for trial balance of a period YYYY-MM)
 app.get("/export/xbrl", requireRole("ledger:read"), async (req, res) => {
-  const ym = String(req.query.period ?? "");
+  const ym = String(req.query?.period ?? "");
   if (!/^\d{4}-\d{2}$/.test(ym)) return res.status(400).json({ error: "bad_period" });
   const period = `${ym}-01`;
   const balances = await pool.query(

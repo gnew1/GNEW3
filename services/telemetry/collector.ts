@@ -19,7 +19,7 @@ export interface TelemetryEvent {
 }
 
 export class TelemetryCollector {
-  private events: TelemetryEvent[] = [];
+  private readonly events: TelemetryEvent[] = [];
 
   constructor(private serviceName: string) {}
 

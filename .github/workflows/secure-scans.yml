@@ -4,6 +4,12 @@ on:
   pull_request:
   push:
     branches: [main]
+name: secure-scans
+
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 jobs:
   gitleaks:
@@ -16,3 +22,9 @@ jobs:
         uses: zricethezav/gitleaks-action@v2
         with:
           args: detect --baseline-path .gitleaks-baseline.json --redact --no-banner
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_SUMMARY: "true"
+        with:
+          args: detect --no-banner --redact

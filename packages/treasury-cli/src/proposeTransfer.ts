@@ -1,25 +1,63 @@
 import "dotenv/config";
-import { getProvider, getSigner, getSafeSdk, getSafeService, getThresholdAndApprovals } from "./safe.js";
-import { evaluatePolicy, logDecision } from "./opa.js";
-import { PolicyInput } from "./types.js";
-import { ethers } from "ethers";
+import { ethers, BigNumberish } from "ethers";
+import { fileURLToPath } from "url";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import { getProvider, getSigner, getSafeSdk, getSafeService, getThresholdAndApprovals } from "./safe.js";
+import { evaluatePolicy, logDecision } from "./opa.js";
+import { PolicyInput, Role, FundKind } from "./types.js";
+import { ethToWei } from "./bignumber.js";
 
-const y = yargs(hideBin(process.argv))
+export interface TransferArgs {
+  safe: string;
+  to: string;
+  amountEth: BigNumberish;
+  note: string;
+  role: Role;
+}
+
+export interface TransferMeta {
+  chainId: number;
+  fundKind: FundKind;
+  threshold: number;
+  approvals: number;
+  initiator: string;
+  now?: Date;
+}
+
+export const buildTransferPolicyInput = (args: TransferArgs, meta: TransferMeta): PolicyInput => {
+  const now = meta.now ?? new Date();
+  return {
+    initiator: { address: meta.initiator, role: Role.parse(args.role) },
+    tx: {
+      safe: args.safe.toLowerCase(),
+      to: args.to.toLowerCase(),
+      valueWei: ethToWei(args.amountEth),
+      token: null,
+      operation: 0,
+      data: "0x",
+    },
+    context: {
+      chainId: meta.chainId,
+      fundKind: FundKind.parse(meta.fundKind),
+      utcHour: now.getUTCHours(),
+      weekday: now.getUTCDay(),
+      threshold: meta.threshold,
+      currentApprovals: meta.approvals,
+    },
+  };
+};
+
+const cli = yargs<TransferArgs>(hideBin(process.argv))
   .option("safe", { type: "string", default: process.env.DEFAULT_SAFE_ADDRESS, demandOption: true })
   .option("to", { type: "string", demandOption: true })
   .option("amountEth", { type: "number", demandOption: true })
   .option("note", { type: "string", default: "" })
-  .option("role", {
-    type: "string",
-    choices: ["CFO", "FINANCE_OPS", "GRANTS_LEAD", "RND_LEAD", "EXEC", "VIEWER"],
-    default: "FINANCE_OPS",
-  })
+  .option("role", { type: "string", choices: Role.options, default: "FINANCE_OPS" })
   .strict();
 
-(async () => {
-  const args = await y.argv;
+const main = async () => {
+  const args = await cli.parse();
   const { RPC_URL, CHAIN_ID, SAFE_TX_SERVICE_URL, SIGNER_PK, OPA_URL, OPA_DECISIONS_LOG, FUND_KIND } = process.env;
 
   if (!RPC_URL || !CHAIN_ID || !SIGNER_PK || !OPA_URL || !FUND_KIND || !SAFE_TX_SERVICE_URL) {
@@ -28,33 +66,20 @@ const y = yargs(hideBin(process.argv))
 
   const provider = getProvider(RPC_URL);
   const signer = getSigner(provider, SIGNER_PK);
-  const safe = await getSafeSdk(args.safe as string, signer);
+  const safe = await getSafeSdk(args.safe, signer);
   const service = getSafeService(SAFE_TX_SERVICE_URL, Number(CHAIN_ID));
 
-  const { threshold, approvals } = await getThresholdAndApprovals(service, args.safe as string);
+  const { threshold, approvals } = await getThresholdAndApprovals(service, args.safe);
 
-  const now = new Date();
-  const input: PolicyInput = {
-    initiator: { address: await signer.getAddress(), role: args.role as any },
-    tx: {
-      safe: (args.safe as string).toLowerCase(),
-      to: (args.to as string).toLowerCase(),
-      valueWei: ethers.parseEther((args.amountEth as number).toString()).toString(),
-      token: null,
-      operation: 0,
-      data: "0x",
-    },
-    context: {
-      chainId: Number(CHAIN_ID),
-      fundKind: FUND_KIND as any,
-      utcHour: now.getUTCHours(),
-      weekday: now.getUTCDay(),
-      threshold,
-      currentApprovals: approvals,
-    },
-  };
+  const input = buildTransferPolicyInput(args, {
+    chainId: Number(CHAIN_ID),
+    fundKind: FundKind.parse(FUND_KIND),
+    threshold,
+    approvals,
+    initiator: await signer.getAddress(),
+  });
 
-  const decision = await evaluatePolicy(OPA_URL!, input);
+  const decision = await evaluatePolicy(OPA_URL, input);
   await logDecision(OPA_DECISIONS_LOG, { input, decision });
 
   if (!decision.allow) {
@@ -63,7 +88,7 @@ const y = yargs(hideBin(process.argv))
   }
 
   const txData = {
-    to: args.to as string,
+    to: args.to,
     data: "0x",
     value: input.tx.valueWei,
   };
@@ -74,14 +99,19 @@ const y = yargs(hideBin(process.argv))
   const senderSig = await signer.signMessage(ethers.getBytes(safeTxHash));
 
   const response = await service.proposeTransaction({
-    safeAddress: args.safe as string,
-  safeTransactionData: safeTx.data,
-  safeTxHash,
-  senderAddress: sender,
-  senderSignature: senderSig,
+    safeAddress: args.safe,
+    safeTransactionData: safeTx.data,
+    safeTxHash,
+    senderAddress: sender,
+    senderSignature: senderSig,
   });
 
   console.log("✅ Propuesta enviada al Safe Tx Service:", response);
-})();
+};
 
+const __filename = fileURLToPath(import.meta.url);
+if (process.argv[1] === __filename) {
+  main();
+}
 
+export default main;

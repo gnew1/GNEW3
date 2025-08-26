@@ -1,0 +1,4 @@
+id,amount,timestamp,currency,memo,external_ref
+p1,100.00,2025-01-01T10:00:00Z,EUR,Sale A,tx-1
+p2,50.00,2025-01-01T11:00:00Z,EUR,Sale B,
+p3,25.00,2025-01-02T09:00:00Z,EUR,Sale C,tx-3

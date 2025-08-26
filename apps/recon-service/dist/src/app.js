@@ -19,7 +19,7 @@ import { ensureMigrations } from "./db/migrate";
 import { parseCsvOrJson } from "./etl/parser";
 import { runReconciliation } from "./engine/reconcile";
 const PORT = Number(process.env.PORT ?? 8096);
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/gnew_recon";
+const DATABASE_URL = process.env.DATABASE_URL;
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE ?? "gnew";
 const JWT_ISSUER = process.env.JWT_ISSUER ?? "https://sso.example.com/";
 const JWT_PUBLIC_KEY = (process.env.JWT_PUBLIC_KEY ?? "").replace(/\\n/g, "\n");

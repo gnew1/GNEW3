@@ -38,37 +38,14 @@ contract GnewGovTokenTest is Test {
         gov.transfer(user, 1); 
     } 
  
-    function testFaucetCooldown() public { 
-        // default chainid in foundry local is testnet-like; faucet 
-allowed 
-        vm.prank(user); 
-        gov.faucet(); 
-        assertEq(gov.balanceOf(user), 5e18); 
-        vm.prank(user); 
-        vm.expectRevert(bytes("faucet:cooldown")); 
-        gov.faucet(); 
-    } 
-} 
- 
-/packages/contracts/foundry.toml (añade snapshot y gas report) 
-[profile.default] 
-src = "src" 
-out = "out" 
-test = "test" 
-libs = ["lib"] 
-solc_version = "0.8.24" 
-evm_version = "paris" 
-optimizer = true 
-optimizer_runs = 200 
-fs_permissions = [{ access = "read", path = "./"}] 
-gas_reports = ["GnewGovToken"] 
- 
-remappings = [ 
-  "@openzeppelin/=../../node_modules/@openzeppelin/", 
-  "forge-std/=lib/forge-std/src/" 
-] 
- 
-/packages/contracts/.gas-snapshot (generado por forge snapshot; se actualizará en tu 
-entorno) 
-# Se generará automáticamente al ejecutar `pnpm --filter 
-@gnew/contracts snapshot` 
+    function testFaucetCooldown() public {
+        // default chainid in foundry local is testnet-like; faucet
+allowed
+        vm.prank(user);
+        gov.faucet();
+        assertEq(gov.balanceOf(user), 5e18);
+        vm.prank(user);
+        vm.expectRevert(bytes("faucet:cooldown"));
+        gov.faucet();
+    }
+}

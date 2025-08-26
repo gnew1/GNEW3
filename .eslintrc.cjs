@@ -7,9 +7,9 @@ module.exports = {
   plugins: ["@typescript-eslint"], 
   extends: ["eslint:recommended", 
 "plugin:@typescript-eslint/recommended", "prettier"], 
-  rules: { 
-    "@typescript-eslint/explicit-function-return-type": "off", 
-    "@typescript-eslint/no-explicit-any": "warn" 
-  } 
-}; 
+  rules: {
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/no-explicit-any": "error"
+  }
+};
  

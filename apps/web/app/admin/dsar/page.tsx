@@ -96,8 +96,10 @@ export default function DSARAdminPage() {
   ); 
 } 
  
-function Artifacts({ id }: { id: string }) { 
-  const [items, setItems] = React.useState<any[]>([]); 
+type ArtifactsProps = Readonly<{ id: string }>;
+
+function Artifacts({ id }: ArtifactsProps) {
+  const [items, setItems] = useState<any[]>([]);
   useEffect(()=>{ 
     fetch(`/api/dsar/requests/${id}/artifacts`)
       .then(r=>r.json())

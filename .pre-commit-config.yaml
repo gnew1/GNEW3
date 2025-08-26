@@ -10,6 +10,7 @@ repos:
     hooks:
       - id: gitleaks
         args: [--baseline-path, .gitleaks-baseline.json, --redact]
+        stages: [commit, push]
   - repo: local
     hooks:
       - id: forbid-latest-tag

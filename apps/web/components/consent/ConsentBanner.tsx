@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useId } from "react";
 
 function ensureDialogPolyfill(dlg: HTMLDialogElement) {
   if (typeof dlg.showModal !== "function") {
@@ -7,11 +7,31 @@ function ensureDialogPolyfill(dlg: HTMLDialogElement) {
     (dlg as any).close = () => dlg.removeAttribute("open");
   }
 }
+
+function resolveChoice(
+  mode: "accept_all" | "reject_all" | "custom",
+  value: boolean,
+): boolean {
+  if (mode === "accept_all") {
+    return true;
+  }
+  if (mode === "reject_all") {
+    return false;
+  }
+  return value;
+}
+
+function toConsentState(value: boolean): "granted" | "denied" {
+  if (value) {
+    return "granted";
+  }
+  return "denied";
+}
 type Catalog = { uses: any[]; dataCategories: any[]; channels: any[]; matrixVersion: string };
-export default function ConsentBanner({ subjectId }: Readonly<{ subjectId:
-string }>) {
-const [visible, setVisible] = useState(false); 
-const [catalog, setCatalog] = useState<Catalog | null>(null); 
+type Props = Readonly<{ subjectId: string }>;
+export default function ConsentBanner({ subjectId }: Props) {
+const [visible, setVisible] = useState(false);
+const [catalog, setCatalog] = useState<Catalog | null>(null);
 const [choices, setChoices] = useState<any>({
   /* defaults: strictly necessary on; marketing denied */
   analytics: false,
@@ -42,6 +62,25 @@ const [choices, setChoices] = useState<any>({
 
   if (!visible || !catalog) return null;
  
+  type Mode = "accept_all" | "reject_all" | "custom";
+  const decide = (mode: Mode, choice: boolean) => {
+    if (mode === "accept_all") return true;
+    if (mode === "reject_all") return false;
+    return choice;
+  };
+
+  const save = async (mode: Mode) => {
+    const mv = catalog.matrixVersion;
+    const base = [
+      // strictly necessary (global; no toggle)
+      { purposeKey: "account_access", dataCategoryKey: "device_id",
+processingUseKey: "strictly_necessary", channelKey: null, state:
+"granted" }
+    ];
+    const mk = decide(mode, choices.marketing);
+    const an = decide(mode, choices.analytics);
+    const pe = decide(mode, choices.personalization);
+
   const save = async (mode: "accept_all" | "reject_all" | "custom") => 
 { 
     const mv = catalog.matrixVersion; 
@@ -51,23 +90,16 @@ const [choices, setChoices] = useState<any>({
 processingUseKey: "strictly_necessary", channelKey: null, state: 
 "granted" } 
     ]; 
-    const mk = mode === "accept_all" ? true : mode === "reject_all" ? 
-false : choices.marketing; 
-    const an = mode === "accept_all" ? true : mode === "reject_all" ? 
-false : choices.analytics; 
-    const pe = mode === "accept_all" ? true : mode === "reject_all" ? 
-false : choices.personalization; 
- 
+    const mk = resolveChoice(mode, choices.marketing);
+    const an = resolveChoice(mode, choices.analytics);
+    const pe = resolveChoice(mode, choices.personalization);
+
     const decisions = [ 
       ...base.map(d => ({ ...d, policyVersion: mv, provenance: "ui_banner" as const })), 
       // por canal: web (banner), email/sms quedan para flujo posterior
-      { purposeKey: "experience_quality", dataCategoryKey: "event_raw", processingUseKey: "analytics", channelKey: "web", state: an ? "granted" : "denied", policyVersion: mv, provenance: "ui_banner" }, 
-      { purposeKey: "growth_marketing", dataCategoryKey: "email", 
-processingUseKey: "marketing", channelKey: "email", state: mk ? 
-"granted" : "denied", policyVersion: mv, provenance: "ui_banner" }, 
-      { purposeKey: "experience_quality", dataCategoryKey: "profile", 
-processingUseKey: "personalization", channelKey: "in_app", state: pe ? 
-"granted" : "denied", policyVersion: mv, provenance: "ui_banner" } 
+      { purposeKey: "experience_quality", dataCategoryKey: "event_raw", processingUseKey: "analytics", channelKey: "web", state: toConsentState(an), policyVersion: mv, provenance: "ui_banner" },
+      { purposeKey: "growth_marketing", dataCategoryKey: "email", processingUseKey: "marketing", channelKey: "email", state: toConsentState(mk), policyVersion: mv, provenance: "ui_banner" },
+      { purposeKey: "experience_quality", dataCategoryKey: "profile", processingUseKey: "personalization", channelKey: "in_app", state: toConsentState(pe), policyVersion: mv, provenance: "ui_banner" }
     ]; 
  
     await fetch(`/api/consent/${subjectId}/decisions`, { 
@@ -115,16 +147,20 @@ onClick={()=>save("accept_all")}>Aceptar todo</button>
     </dialog>
   );
 }
- 
-function Card({ title, checked, onChange }: Readonly<{ title:string;
-checked:boolean; onChange:(v:boolean)=>void }>) {
-  return ( 
-    <label className="p-3 border rounded-xl flex items-center 
-justify-between"> 
-      <span className="text-sm">{title}</span> 
-      <input type="checkbox" checked={checked} 
-onChange={e=>onChange(e.target.checked)} aria-label={title}/> 
-    </label> 
-  ); 
-} 
+
+type CardProps = Readonly<{ title: string; checked: boolean; onChange: (v: boolean) => void }>;
+function Card({ title, checked, onChange }: CardProps) {
+  return (
+    <label className="p-3 border rounded-xl flex items-center justify-between">
+      <span className="text-sm">{title}</span>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} aria-label={title} />
+function Card({ title, checked, onChange }: Readonly<{ title:string; checked:boolean; onChange:(v:boolean)=>void }>) {
+  const id = useId();
+  return (
+    <label htmlFor={id} className="p-3 border rounded-xl flex items-center justify-between">
+      <span className="text-sm">{title}</span>
+      <input id={id} type="checkbox" checked={checked} onChange={e=>onChange(e.target.checked)} aria-label={title}/>
+    </label>
+  );
+}
  

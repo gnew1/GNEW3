@@ -8,7 +8,7 @@
  * Despliegue: Integrado a SSO (JWT). Pruebas con cobertura en tablas críticas ≥90%.
  */
 
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import fetch from "node-fetch";
 import crypto from "crypto";
 import { createServer } from "http";
@@ -55,7 +55,11 @@ type Lineage = {
 };
 
 // ---------- SSO (JWT) ----------
-function authMiddleware(req: any, res: any, next: any) {
+interface AuthedRequest extends Request {
+  user?: UserAttrs;
+}
+
+function authMiddleware(req: AuthedRequest, res: Response, next: NextFunction) {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "missing_token" });
   const token = auth.slice("Bearer ".length);
@@ -64,17 +68,22 @@ function authMiddleware(req: any, res: any, next: any) {
       algorithms: ["RS256"],
       audience: JWT_AUDIENCE,
       issuer: JWT_ISSUER,
-    }) as JwtPayload;
+    });
+    if (typeof decoded !== "object" || decoded === null) {
+      throw new Error("invalid_token_payload");
+    }
+    const payload = decoded as JwtPayload;
     const user: UserAttrs = {
-      sub: String(decoded.sub),
-      email: typeof decoded.email === "string" ? decoded.email : undefined,
-      roles: Array.isArray(decoded.roles) ? decoded.roles : [],
-      dept: typeof decoded.dept === "string" ? decoded.dept : undefined,
-      clearance: typeof decoded.clearance === "number" ? decoded.clearance : 1,
+      sub: String(payload.sub),
+      email: typeof payload.email === "string" ? payload.email : undefined,
+      roles: Array.isArray(payload.roles) ? payload.roles : [],
+      dept: typeof payload.dept === "string" ? payload.dept : undefined,
+      clearance: typeof payload.clearance === "number" ? payload.clearance : 1,
     };
-    (req as any).user = user;
+    req.user = user;
     next();
-  } catch (e) {
+  } catch (e: unknown) {
+    logger.warn({ err: e }, "jwt_verify_failed");
     return res.status(401).json({ error: "invalid_token" });
   }
 }
@@ -145,7 +154,7 @@ function cosine(a: number[], b: number[]): number {
 }
 
 // ---------- DataHub Client (GraphQL) ----------
-async function datahub<T>(query: string, variables: Record<string, any>): Promise<T> {
+async function datahub<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const resp = await fetch(DATAHUB_GRAPHQL, {
     method: "POST",
     headers: {
@@ -156,11 +165,15 @@ async function datahub<T>(query: string, variables: Record<string, any>): Promis
   });
   if (!resp.ok) throw new Error(`DataHub error: ${resp.status}`);
   type GraphQLResponse<R> = { data: R; errors?: unknown };
-  const json = (await resp.json()) as unknown as GraphQLResponse<T>;
-  if (json && (json as any).errors) {
-    throw new Error(`DataHub GraphQL errors: ${JSON.stringify((json as any).errors)}`);
+  const json: unknown = await resp.json();
+  if (typeof json !== "object" || json === null) {
+    throw new Error("Invalid GraphQL response");
   }
-  return (json as any).data as T;
+  const typed = json as GraphQLResponse<T>;
+  if (typed.errors) {
+    throw Object.assign(new Error("DataHub GraphQL errors"), { details: typed.errors });
+  }
+  return typed.data;
 }
 
 async function searchDatasets(q: string, limit = 20): Promise<Dataset[]> {
@@ -349,13 +362,15 @@ function audit(user: UserAttrs, event: string, meta: Record<string, any>) {
 // --- Endpoints ---
 
 // Búsqueda con re-rank por embeddings (fallback)
-app.get("/search", async (req, res) => {
-  const user = (req as any).user as UserAttrs;
-  const q = String(req.query.q ?? "").trim();
-  if (!q) return res.status(400).json({ error: "missing_query" });
+app.get("/search", async (req: AuthedRequest, res) => {
+  const { user } = req;
+  if (!user) return res.status(401).json({ error: "unauthenticated" });
+  const q = String(req.query.q ?? "");
+  const query = q.trim();
+  if (!query) return res.status(400).json({ error: "missing_query" });
 
   try {
-    const base = await searchDatasets(q, 50);
+    const base = await searchDatasets(query, 50);
 
     // Generar embedding de consulta (fallback)
     const qe = embed(q);
@@ -372,17 +387,18 @@ app.get("/search", async (req, res) => {
       .slice(0, 20)
       .map(({ d, score }) => ({ ...d, score }));
 
-    audit(user, "catalog.search", { q, returned: allowed.length });
-    res.json({ query: q, results: allowed });
-  } catch (e: any) {
-    logger.error(e, "search_failed");
+    audit(user, "catalog.search", { q: query, returned: allowed.length });
+    res.json({ query, results: allowed });
+  } catch (e: unknown) {
+    logger.error({ err: e }, "search_failed");
     res.status(500).json({ error: "search_failed" });
   }
 });
 
 // Detalle + linaje + etiquetas
-app.get("/datasets/:urn", async (req, res) => {
-  const user = (req as any).user as UserAttrs;
+app.get("/datasets/:urn", async (req: AuthedRequest, res) => {
+  const { user } = req;
+  if (!user) return res.status(401).json({ error: "unauthenticated" });
   const urn = decodeURIComponent(req.params.urn);
   try {
     const ds = await getDataset(urn);
@@ -391,24 +407,27 @@ app.get("/datasets/:urn", async (req, res) => {
     const lineage = await getLineage(urn);
     audit(user, "catalog.get", { urn });
     res.json({ dataset: ds, lineage });
-  } catch (e: any) {
-    logger.error(e, "get_failed");
+  } catch (e: unknown) {
+    logger.error({ err: e }, "get_failed");
     res.status(500).json({ error: "get_failed" });
   }
 });
 
 // Alta (upsert) — flujo de alta
-app.post("/datasets", async (req, res) => {
-  const user = (req as any).user as UserAttrs;
-  const input = req.body as {
-    urn: string;
-    name: string;
-    platform: string;
-    description?: string;
-    owners?: string[];
-    tags?: string[];
-    domain?: string;
-  };
+interface UpsertInput {
+  urn: string;
+  name: string;
+  platform: string;
+  description?: string;
+  owners?: string[];
+  tags?: string[];
+  domain?: string;
+}
+
+app.post("/datasets", async (req: AuthedRequest, res) => {
+  const { user } = req;
+  if (!user) return res.status(401).json({ error: "unauthenticated" });
+  const input: UpsertInput = req.body;
   try {
     // Solo owners/admin deberían hacerlo — aquí delegamos en DataHub + auditoría
     // En este MVP, exigimos role específico:
@@ -416,23 +435,24 @@ app.post("/datasets", async (req, res) => {
     await upsertDataset(input);
     audit(user, "catalog.upsert", { urn: input.urn });
     res.status(201).json({ status: "ok" });
-  } catch (e: any) {
-    logger.error(e, "upsert_failed");
+  } catch (e: unknown) {
+    logger.error({ err: e }, "upsert_failed");
     res.status(500).json({ error: "upsert_failed" });
   }
 });
 
 // Baja (delete) — flujo de baja
-app.delete("/datasets/:urn", async (req, res) => {
-  const user = (req as any).user as UserAttrs;
+app.delete("/datasets/:urn", async (req: AuthedRequest, res) => {
+  const { user } = req;
+  if (!user) return res.status(401).json({ error: "unauthenticated" });
   const urn = decodeURIComponent(req.params.urn);
   try {
     if (!user.roles?.includes("catalog:admin")) return res.status(403).json({ error: "forbidden" });
     await deleteDataset(urn);
     audit(user, "catalog.delete", { urn });
     res.json({ status: "ok" });
-  } catch (e: any) {
-    logger.error(e, "delete_failed");
+  } catch (e: unknown) {
+    logger.error({ err: e }, "delete_failed");
     res.status(500).json({ error: "delete_failed" });
   }
 });
