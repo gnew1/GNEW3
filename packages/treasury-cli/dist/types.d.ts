@@ -17,25 +17,20 @@ export declare const PolicyInput: z.ZodObject<{
         token: z.ZodNullable<z.ZodString>;
         data: z.ZodOptional<z.ZodString>;
         operation: z.ZodDefault<z.ZodOptional<z.ZodNumber>>;
-        DELEGATECALL: any;
     }, "strip", z.ZodTypeAny, {
-        [x: string]: any;
-        safe?: unknown;
-        to?: unknown;
-        valueWei?: unknown;
-        token?: unknown;
-        data?: unknown;
-        operation?: unknown;
-        DELEGATECALL?: unknown;
+        safe?: string;
+        to?: string;
+        valueWei?: string;
+        token?: string;
+        data?: string;
+        operation?: number;
     }, {
-        [x: string]: any;
-        safe?: unknown;
-        to?: unknown;
-        valueWei?: unknown;
-        token?: unknown;
-        data?: unknown;
-        operation?: unknown;
-        DELEGATECALL?: unknown;
+        safe?: string;
+        to?: string;
+        valueWei?: string;
+        token?: string;
+        data?: string;
+        operation?: number;
     }>;
     context: z.ZodObject<{
         chainId: z.ZodNumber;
@@ -65,14 +60,12 @@ export declare const PolicyInput: z.ZodObject<{
         role?: "CFO" | "FINANCE_OPS" | "GRANTS_LEAD" | "RND_LEAD" | "EXEC" | "VIEWER";
     };
     tx?: {
-        [x: string]: any;
-        safe?: unknown;
-        to?: unknown;
-        valueWei?: unknown;
-        token?: unknown;
-        data?: unknown;
-        operation?: unknown;
-        DELEGATECALL?: unknown;
+        safe?: string;
+        to?: string;
+        valueWei?: string;
+        token?: string;
+        data?: string;
+        operation?: number;
     };
     context?: {
         chainId?: number;
@@ -88,14 +81,12 @@ export declare const PolicyInput: z.ZodObject<{
         role?: "CFO" | "FINANCE_OPS" | "GRANTS_LEAD" | "RND_LEAD" | "EXEC" | "VIEWER";
     };
     tx?: {
-        [x: string]: any;
-        safe?: unknown;
-        to?: unknown;
-        valueWei?: unknown;
-        token?: unknown;
-        data?: unknown;
-        operation?: unknown;
-        DELEGATECALL?: unknown;
+        safe?: string;
+        to?: string;
+        valueWei?: string;
+        token?: string;
+        data?: string;
+        operation?: number;
     };
     context?: {
         chainId?: number;

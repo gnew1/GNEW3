@@ -11,7 +11,7 @@ export type Context = {
   tenant: string;
   projectOwnerId?: string;
   resourceOwnerId?: string;
-  [k: string]: any;
+  [k: string]: unknown;
 };
 
 export type DecisionInput = {

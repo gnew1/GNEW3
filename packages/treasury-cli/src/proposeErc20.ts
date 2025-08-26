@@ -1,7 +1,3 @@
-import "dotenv/config"; 
-import { getProvider, getSigner, getSafeSdk, getSafeService, 
-getThresholdAndApprovals } from "./safe.js"; 
-import { evaluatePolicy, logDecision } from "./opa.js"; 
 import "dotenv/config";
 import { getProvider, getSigner, getSafeSdk, getSafeService, getThresholdAndApprovals } from "./safe.js";
 import { evaluatePolicy, logDecision } from "./opa.js";
@@ -38,7 +34,7 @@ const y = yargs(hideBin(process.argv))
   const data = token.interface.encodeFunctionData("transfer", [args.to!, args.amount!]);
 
   const safe = await getSafeSdk(args.safe!, signer);
-  const service = getSafeService(SAFE_TX_SERVICE_URL);
+  const service = getSafeService(SAFE_TX_SERVICE_URL, Number(CHAIN_ID));
   const { threshold, approvals } = await getThresholdAndApprovals(service, args.safe!);
 
   const now = new Date();
@@ -71,13 +67,15 @@ const y = yargs(hideBin(process.argv))
 
   const txData = { to: args.token!, data, value: "0" };
   const safeTx = await safe.createTransaction({ transactions: [txData] });
-  const signedTx = await safe.signTransaction(safeTx);
   const sender = await signer.getAddress();
+  const safeTxHash = await safe.getTransactionHash(safeTx);
+  const senderSig = await signer.signMessage(ethers.getBytes(safeTxHash));
   const response = await service.proposeTransaction({
     safeAddress: args.safe!,
-    safeTransactionData: signedTx.data,
-    safeTxHash: await safe.getTransactionHash(safeTx),
+    safeTransactionData: safeTx.data,
+    safeTxHash,
     senderAddress: sender,
+    senderSignature: senderSig,
   });
   console.log("✅ Propuesta enviada al Safe Tx Service:", response);
 })();

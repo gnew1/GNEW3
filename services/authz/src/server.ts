@@ -3,25 +3,27 @@ import helmet from "helmet";
 import { collectDefaultMetrics, Histogram, Counter, register } from "prom-client";
 import pino from "pino";
 import { v4 as uuidv4 } from "uuid";
-import LRU from "lru-cache";
+import { LRUCache } from "lru-cache";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { buildEnforcer } from "./casbin/enforcer";
 import { PolicyWatcher, ActivePolicy } from "./chain/watcher";
-import type { DecisionInput, Decision } from "./types";
+import type { DecisionInput, Decision, Subject, Context } from "./types";
 
 const log = pino({ level: process.env.LOG_LEVEL || "info" });
 collectDefaultMetrics();
 const H = new Histogram({ name: "authz_eval_ms", help: "Latency of authz decisions", buckets: [5,10,20,30,40,50,75,100,200] });
 const C = new Counter({ name: "authz_requests_total", help: "Count decisions", labelNames: ["allowed"] });
 
+import type { Request, Response } from "express";
+type Enforcer = { enforce: (sub: Subject, obj: string, act: string, ctx?: Context) => Promise<boolean> };
 const app = express();
 app.use(express.json({ limit: "128kb" }));
 app.use(helmet());
 
 let policyVersion = 0;
-let enforcer: any;
-const cache = new LRU<string, { decision: boolean; v: number }>({ max: 5000, ttl: 30_000 }); // 30s
+let enforcer: unknown;
+const cache = new LRUCache<string, { decision: boolean; v: number }>({ max: 5000, ttl: 30_000 }); // 30s
 
 // Bootstrap: carga local y arranca watcher
 const rpc = process.env.CHAIN_RPC ?? "http://localhost:8545";
@@ -37,17 +39,19 @@ async function loadLocalPolicy() {
 }
 
 watcher.start({
-  onPolicyLoaded: async (p: ActivePolicy) => {
-    enforcer = await buildEnforcer(p.model, p.policy);
-    policyVersion = p.version;
-    cache.clear();
-    log.info({ version: p.version, uri: p.uri }, "Policy activated from chain");
+  onPolicyLoaded: (p: ActivePolicy) => {
+    (async () => {
+      enforcer = await buildEnforcer(p.model, p.policy);
+      policyVersion = p.version;
+      cache.clear();
+      log.info({ version: p.version, uri: p.uri }, "Policy activated from chain");
+    })().catch((err) => log.error({ err }, "Policy activation error"));
   },
   onError: (err) => log.error({ err }, "Policy watcher error")
 });
 
 // Si el contrato no está configurado, usar local
-if (!process.env.POLICY_REGISTRY || process.env.POLICY_REGISTRY?.match(/^0x0+$/)) {
+if (!process.env.POLICY_REGISTRY || /^0x0+$/.exec(process.env.POLICY_REGISTRY)) {
   loadLocalPolicy();
 } else {
   // Intentar cargar la actual inmediatamente
@@ -58,14 +62,14 @@ if (!process.env.POLICY_REGISTRY || process.env.POLICY_REGISTRY?.match(/^0x0+$/)
   }).catch(async () => loadLocalPolicy());
 }
 
-app.get("/healthz", (_req, res) => res.json({ ok: true, policyVersion }));
+app.get("/healthz", (_req: Request, res: Response) => res.json({ ok: true, policyVersion }));
 
-app.get("/metrics", async (_req, res) => {
+app.get("/metrics", async (_req: Request, res: Response) => {
   res.set("Content-Type", register.contentType);
   res.end(await register.metrics());
 });
 
-app.post("/authz/evaluate", async (req, res) => {
+app.post("/authz/evaluate", async (req: Request, res: Response) => {
   const start = performance.now();
   const decisionId = uuidv4();
   const input = req.body as DecisionInput;
@@ -82,7 +86,7 @@ app.post("/authz/evaluate", async (req, res) => {
   }
 
   // El subject disponible en matcher como r.sub.*, y contexto r.ctx.*
-  const allowed = await enforcer.enforce(input.sub, input.obj, input.act, input.ctx ?? {});
+  const allowed = await (enforcer as Enforcer).enforce(input.sub, input.obj, input.act, input.ctx ?? {});
   const latency = performance.now() - start;
   H.observe(latency);
   C.labels(String(allowed)).inc();

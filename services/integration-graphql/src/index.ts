@@ -1,7 +1,7 @@
 import { ApolloServer } from "@apollo/server"; 
 import express from "express"; 
 import cors from "cors"; 
-import { json } from "body-parser"; 
+// use express.json instead of body-parser to avoid extra types
 import rateLimit from "express-rate-limit"; 
 import { typeDefs } from "./schema"; 
 import fetch from "node-fetch"; 
@@ -11,12 +11,11 @@ const INTEGRATION_URL = process.env.INTEGRATION_URL ||
 const PORT = Number(process.env.PORT || 8007); 
 // Rate limit por API key/JWT/IP (60 req/min) 
 const limiter = rateLimit({ 
-windowMs: Number(process.env.RL_WINDOW_SECONDS || 60) * 1000, 
-max: Number(process.env.RL_MAX_REQUESTS || 60), 
-keyGenerator: (req) => req.header("x-api-key") || 
-req.header("authorization") || req.ip, 
-standardHeaders: true, 
-legacyHeaders: false 
+  windowMs: Number(process.env.RL_WINDOW_SECONDS || 60) * 1000, 
+  max: Number(process.env.RL_MAX_REQUESTS || 60), 
+  keyGenerator: (req): string => (req.header("x-api-key") ?? req.header("authorization") ?? req.ip ?? ""), 
+  standardHeaders: true, 
+  legacyHeaders: false 
 }); 
 const server = new ApolloServer({ 
 typeDefs, 
@@ -51,9 +50,8 @@ fetch(`${INTEGRATION_URL}/${API_VERSION}/defi/stake`, {
           body: JSON.stringify({ amount: args.amount }) 
         }); 
         if (r.ok) { 
-          const data = await r.json(); 
-          return { status: data.status || "ok", txId: 
-data.upstream?.txId }; 
+          const data: any = await r.json(); 
+          return { status: data.status || "ok", txId: data.upstream?.txId }; 
         } 
         return { status: "queued" }; 
       } 
@@ -66,7 +64,7 @@ async function start() {
   const app = express(); 
  
   app.use(cors()); 
-  app.use(json()); 
+  app.use(express.json()); 
   app.use(limiter); 
  
   // Salud 
@@ -89,8 +87,8 @@ true, version: 1 }));
     }, 
     // @ts-ignore 
     async (req, res) => { 
-      const { default: expressMiddleware } = await 
-import("@apollo/server/express4"); 
+      const mod = await import("@apollo/server/express4"); 
+      const expressMiddleware = (mod as any).expressMiddleware as (srv: any, opts: any) => any; 
       // @ts-ignore 
       return expressMiddleware(server, { 
         context: async () => (req as any).context 

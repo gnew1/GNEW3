@@ -29,7 +29,7 @@ const y = yargs(hideBin(process.argv))
   const provider = getProvider(RPC_URL);
   const signer = getSigner(provider, SIGNER_PK);
   const safe = await getSafeSdk(args.safe as string, signer);
-  const service = getSafeService(SAFE_TX_SERVICE_URL);
+  const service = getSafeService(SAFE_TX_SERVICE_URL, Number(CHAIN_ID));
 
   const { threshold, approvals } = await getThresholdAndApprovals(service, args.safe as string);
 
@@ -64,19 +64,21 @@ const y = yargs(hideBin(process.argv))
 
   const txData = {
     to: args.to as string,
-    data: input.tx.data!,
+    data: "0x",
     value: input.tx.valueWei,
   };
 
   const safeTx = await safe.createTransaction({ transactions: [txData] });
-  const signedTx = await safe.signTransaction(safeTx);
   const sender = await signer.getAddress();
+  const safeTxHash = await safe.getTransactionHash(safeTx);
+  const senderSig = await signer.signMessage(ethers.getBytes(safeTxHash));
 
   const response = await service.proposeTransaction({
     safeAddress: args.safe as string,
-    safeTransactionData: signedTx.data,
-    safeTxHash: await safe.getTransactionHash(safeTx),
-    senderAddress: sender,
+  safeTransactionData: safeTx.data,
+  safeTxHash,
+  senderAddress: sender,
+  senderSignature: senderSig,
   });
 
   console.log("✅ Propuesta enviada al Safe Tx Service:", response);

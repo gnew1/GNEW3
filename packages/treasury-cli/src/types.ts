@@ -14,8 +14,7 @@ export const PolicyInput = z.object({
     valueWei: z.string(),          // string to avoid bigint issues 
     token: z.string().toLowerCase().nullable(), // null for native 
     data: z.string().optional(), 
-    operation: z.number().int().optional().default(0), // 0 CALL, 1 
-DELEGATECALL 
+  operation: z.number().int().optional().default(0), // 0 CALL, 1 DELEGATECALL
   }), 
   context: z.object({ 
     chainId: z.number().int(), 
