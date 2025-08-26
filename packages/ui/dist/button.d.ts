@@ -1,2 +1,4 @@
-import React from 'react';
-export declare function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement>): import("react/jsx-runtime").JSX.Element;
+import React from "react";
+export declare const Button: React.ForwardRefExoticComponent<
+  Readonly<React.ButtonHTMLAttributes<HTMLButtonElement>> & React.RefAttributes<HTMLButtonElement>
+>;
