@@ -5,6 +5,12 @@ type KYC = { country: string; pep: boolean; sanctionsHit: boolean };
 type Behavior = { txVolume: number; disputes: number; chargebacks: number };
 type Liquidity = { assets: number; liabilities: number };
 
+function computeBucket(score: number): "LOW" | "MEDIUM" | "HIGH" {
+  if (score >= 80) return "LOW";
+  if (score >= 50) return "MEDIUM";
+  return "HIGH";
+}
+
 export function scoreCounterparty(input: { kyc: KYC; behavior: Behavior; liquidity: Liquidity }) {
   const { kyc, behavior, liquidity } = input;
 
@@ -29,7 +35,7 @@ export function scoreCounterparty(input: { kyc: KYC; behavior: Behavior; liquidi
 
   return {
     score,
-    bucket: score >= 80 ? "LOW" : score >= 50 ? "MEDIUM" : "HIGH",
+    bucket: computeBucket(score),
     explain: [
       `PEP=${kyc.pep}`,
       `Sanctions=${kyc.sanctionsHit}`,
