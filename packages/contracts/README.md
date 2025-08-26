@@ -58,3 +58,6 @@ Riesgos & Controles
 "typescript": "^5.5.4" 
 } 
 } 
+
+---
+Más decisiones en [docs/adr](../../docs/adr/) y guía en [docs/contributing.md](../../docs/contributing.md).

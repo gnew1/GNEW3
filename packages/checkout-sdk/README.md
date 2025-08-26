@@ -69,3 +69,6 @@ SubscriptionsClient.listDue() (para paneles/diagnóstico)
 }
 
 
+
+---
+Más decisiones en [docs/adr](../../docs/adr/) y guía en [docs/contributing.md](../../docs/contributing.md).
