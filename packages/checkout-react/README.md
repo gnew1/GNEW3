@@ -10,3 +10,6 @@ Componentes React listos para usar con `@gnew/checkout-sdk`.
 > Sin dependencias externas (usa estilos inline). Compatible con Vite/Next.
 
 
+
+---
+Más decisiones en [docs/adr](../../docs/adr/) y guía en [docs/contributing.md](../../docs/contributing.md).

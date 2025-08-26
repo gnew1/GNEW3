@@ -60,3 +60,6 @@ const list = json.deployments.filter((x) => x.name === name &&
 x.chainId === chainId); 
 return list.at(-1); 
 } 
+
+---
+Más decisiones en [docs/adr](../../../docs/adr/) y guía en [docs/contributing.md](../../../docs/contributing.md).
