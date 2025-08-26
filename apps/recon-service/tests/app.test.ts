@@ -4,8 +4,13 @@
  * Usamos pg-mem para DB en tests (sin extensiones).
  */
 import request from "supertest";
-import app from "../src/app";
 import { newDb } from "pg-mem";
+
+let app: any;
+beforeAll(async () => {
+  process.env.DATABASE_URL = "pgmem";
+  app = (await import("../src/app")).default;
+});
 
 // Patch pg with pg-mem and preload migration
 jest.mock("pg", () => {
