@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useId } from "react";
 
 function ensureDialogPolyfill(dlg: HTMLDialogElement) {
   if (typeof dlg.showModal !== "function") {
@@ -7,7 +7,14 @@ function ensureDialogPolyfill(dlg: HTMLDialogElement) {
     (dlg as any).close = () => dlg.removeAttribute("open");
   }
 }
- 
+
+function toConsentState(value: boolean): "granted" | "denied" {
+  if (value) {
+    return "granted";
+  }
+  return "denied";
+}
+
 // Flujo granular para “gestión por finalidad y canal” (email/sms/push/onchain)
 type ConsentState = {
   email: { marketing: boolean };
@@ -16,15 +23,20 @@ type ConsentState = {
   onchain: { marketing: boolean };
 };
 
-export default function ChannelFlowModal({ subjectId, open, onClose }: Readonly<{ subjectId:string; open:boolean; onClose:()=>void }>) {
-  const [mv, setMv] = useState<string>("v1"); 
+export default function ChannelFlowModal({
+  subjectId,
+  open,
+  onClose,
+}: Readonly<{ subjectId:string; open:boolean; onClose:()=>void }>) {
+  const [mv, setMv] = useState<string>("v1");
   const [state, setState] = useState<ConsentState>({
     email: { marketing: false },
     sms: { notifications: false },
     push: { notifications: false },
     onchain: { marketing: false },
-  }); 
- 
+  });
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
   useEffect(() => {
     if (!open) return;
     fetch("/api/consent/catalog")
@@ -42,39 +54,39 @@ export default function ChannelFlowModal({ subjectId, open, onClose }: Readonly<
       dlg.open && dlg.close();
     }
   }, [open]);
- 
-  const save = async () => { 
-    const decisions = []; 
-    // email marketing 
-    decisions.push({ 
-      purposeKey: "growth_marketing", dataCategoryKey: "email", 
-processingUseKey: "marketing", channelKey: "email", 
-      state: state.email.marketing ? "granted" : "denied", 
-policyVersion: mv, provenance: "ui_flow" 
-    }); 
-    // sms/push notificaciones 
-    for (const channelKey of ["sms","push"] as const) { 
-      decisions.push({ 
-        purposeKey: "account_access", dataCategoryKey: "phone", 
-processingUseKey: "notifications", channelKey, 
-        state: state[channelKey].notifications ? "granted" : "denied", 
-policyVersion: mv, provenance: "ui_flow" 
-      }); 
-    } 
-    // onchain marketing (airdrop/POAPs) 
-    decisions.push({ 
-      purposeKey: "growth_marketing", dataCategoryKey: "wallet_id", 
-processingUseKey: "marketing", channelKey: "onchain", 
-      state: state.onchain.marketing ? "granted" : "denied", 
-policyVersion: mv, provenance: "ui_flow" 
-    }); 
- 
-    await fetch(`/api/consent/${subjectId}/decisions`, { 
-method:"POST", headers:{"Content-Type":"application/json"}, body: 
-JSON.stringify({ decisions }) }); 
-    onClose(); 
-  }; 
- 
+
+  const save = async () => {
+    const decisions:any[] = [];
+    // email marketing
+    decisions.push({
+      purposeKey: "growth_marketing", dataCategoryKey: "email",
+      processingUseKey: "marketing", channelKey: "email",
+      state: toConsentState(state.email.marketing),
+      policyVersion: mv, provenance: "ui_flow",
+    });
+    // sms/push notificaciones
+    for (const channelKey of ["sms","push"] as const) {
+      decisions.push({
+        purposeKey: "account_access", dataCategoryKey: "phone",
+        processingUseKey: "notifications", channelKey,
+        state: toConsentState(state[channelKey].notifications),
+        policyVersion: mv, provenance: "ui_flow",
+      });
+    }
+    // onchain marketing (airdrop/POAPs)
+    decisions.push({
+      purposeKey: "growth_marketing", dataCategoryKey: "wallet_id",
+      processingUseKey: "marketing", channelKey: "onchain",
+      state: toConsentState(state.onchain.marketing),
+      policyVersion: mv, provenance: "ui_flow",
+    });
+
+    await fetch(`/api/consent/${subjectId}/decisions`, {
+      method:"POST", headers:{"Content-Type":"application/json"}, body:
+      JSON.stringify({ decisions }) });
+    onClose();
+  };
+
   if (!open) return null;
 
   return (
@@ -89,56 +101,54 @@ JSON.stringify({ decisions }) });
       className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
     >
       <div className="bg-white rounded-2xl w-full max-w-xl p-6 space-y-4">
-        <h2 className="text-xl font-semibold">Preferencias por 
-canal</h2> 
-        <Section title="Email"> 
+        <h2 className="text-xl font-semibold">Preferencias por canal</h2>
+        <Section title="Email">
           <Toggle
             label="Marketing (boletines/ofertas)"
             checked={state.email.marketing}
             onChange={(v)=>setState((s)=>({ ...s, email: { ...s.email, marketing: v } }))}
-          /> 
-        </Section> 
-        <Section title="SMS / Push"> 
+          />
+        </Section>
+        <Section title="SMS / Push">
           <Toggle
             label="Notificaciones de seguridad y cuenta"
             checked={state.sms.notifications}
             onChange={(v)=>setState((s)=>({ ...s, sms: { notifications: v } }))}
-          /> 
+          />
           <Toggle
             label="Notificaciones push en app"
             checked={state.push.notifications}
             onChange={(v)=>setState((s)=>({ ...s, push: { notifications: v } }))}
-          /> 
-        </Section> 
-        <Section title="On‑chain"> 
+          />
+        </Section>
+        <Section title="On‑chain">
           <Toggle
             label="Marketing (airdrops/POAPs)"
             checked={state.onchain.marketing}
             onChange={(v)=>setState((s)=>({ ...s, onchain: { marketing: v } }))}
-          /> 
-        </Section> 
-        <div className="flex justify-end gap-2"> 
-          <button className="px-4 py-2 border rounded" 
-onClick={onClose}>Cancelar</button> 
-          <button className="px-4 py-2 bg-black text-white rounded" 
-onClick={save}>Guardar</button> 
-        </div> 
+          />
+        </Section>
+        <div className="flex justify-end gap-2">
+          <button className="px-4 py-2 border rounded" onClick={onClose}>Cancelar</button>
+          <button className="px-4 py-2 bg-black text-white rounded" onClick={save}>Guardar</button>
+        </div>
         <p className="text-xs text-gray-500">Tus cambios quedan auditados y puedes revocar en cualquier momento.</p>
       </div>
     </dialog>
   );
 }
- 
-function Section({ title, children }: Readonly<{ title:string;
-children:React.ReactNode }>) {
-  return <div className="space-y-2"><h3
-className="font-medium">{title}</h3><div
-className="space-y-2">{children}</div></div>;
+
+function Section({ title, children }: Readonly<{ title:string; children:React.ReactNode }>) {
+  return <div className="space-y-2"><h3 className="font-medium">{title}</h3><div className="space-y-2">{children}</div></div>;
 }
-function Toggle({ label, checked, onChange }: Readonly<{ label:string;
-checked:boolean; onChange:(v:boolean)=>void }>) {
-  return <label className="flex items-center justify-between p-3
-border rounded-lg"><span className="text-sm">{label}</span><input type="checkbox" checked={checked}
-onChange={e=>onChange(e.target.checked)}/></label>;
+
+function Toggle({ label, checked, onChange }: Readonly<{ label:string; checked:boolean; onChange:(v:boolean)=>void }>) {
+  const id = useId();
+  return (
+    <label htmlFor={id} className="flex items-center justify-between p-3 border rounded-lg">
+      <span className="text-sm">{label}</span>
+      <input id={id} type="checkbox" checked={checked} onChange={e=>onChange(e.target.checked)}/>
+    </label>
+  );
 }
- 
+
