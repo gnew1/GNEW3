@@ -23,6 +23,9 @@ type ConsentState = {
   onchain: { marketing: boolean };
 };
 
+type Props = Readonly<{ subjectId: string; open: boolean; onClose: () => void }>;
+
+export default function ChannelFlowModal({ subjectId, open, onClose }: Props) {
 export default function ChannelFlowModal({
   subjectId,
   open,
@@ -128,7 +131,7 @@ export default function ChannelFlowModal({
             onChange={(v)=>setState((s)=>({ ...s, onchain: { marketing: v } }))}
           />
         </Section>
-        <div className="flex justify-end gap-2">
+        <div classNamhttps://github.com/gnew1/GNEW3/pull/44/conflict?name=apps%252Fweb%252Fcomponents%252Fconsent%252FChannelFlowModal.tsx&ancestor_oid=78ca4278c02be8f6988172c004244d6b13d9eba9&base_oid=bf9894313477d36f8aa55163aabf3f0e455cacfb&head_oid=741e02586ebdd467f94d47e2edc8dd1268bda8f6e="flex justify-end gap-2">
           <button className="px-4 py-2 border rounded" onClick={onClose}>Cancelar</button>
           <button className="px-4 py-2 bg-black text-white rounded" onClick={save}>Guardar</button>
         </div>
@@ -136,7 +139,24 @@ export default function ChannelFlowModal({
       </div>
     </dialog>
   );
+ 
+type SectionProps = Readonly<{ title: string; children: React.ReactNode }>;
+function Section({ title, children }: SectionProps) {
+  return (
+    <div className="space-y-2">
+      <h3 className="font-medium">{title}</h3>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
 }
+
+type ToggleProps = Readonly<{ label: string; checked: boolean; onChange: (v: boolean) => void }>;
+function Toggle({ label, checked, onChange }: ToggleProps) {
+  return (
+    <label className="flex items-center justify-between p-3 border rounded-lg">
+      <span className="text-sm">{label}</span>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} />
+
 
 function Section({ title, children }: Readonly<{ title:string; children:React.ReactNode }>) {
   return <div className="space-y-2"><h3 className="font-medium">{title}</h3><div className="space-y-2">{children}</div></div>;

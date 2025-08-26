@@ -28,10 +28,10 @@ function toConsentState(value: boolean): "granted" | "denied" {
   return "denied";
 }
 type Catalog = { uses: any[]; dataCategories: any[]; channels: any[]; matrixVersion: string };
-export default function ConsentBanner({ subjectId }: Readonly<{ subjectId:
-string }>) {
-const [visible, setVisible] = useState(false); 
-const [catalog, setCatalog] = useState<Catalog | null>(null); 
+type Props = Readonly<{ subjectId: string }>;
+export default function ConsentBanner({ subjectId }: Props) {
+const [visible, setVisible] = useState(false);
+const [catalog, setCatalog] = useState<Catalog | null>(null);
 const [choices, setChoices] = useState<any>({
   /* defaults: strictly necessary on; marketing denied */
   analytics: false,
@@ -62,6 +62,25 @@ const [choices, setChoices] = useState<any>({
 
   if (!visible || !catalog) return null;
  
+  type Mode = "accept_all" | "reject_all" | "custom";
+  const decide = (mode: Mode, choice: boolean) => {
+    if (mode === "accept_all") return true;
+    if (mode === "reject_all") return false;
+    return choice;
+  };
+
+  const save = async (mode: Mode) => {
+    const mv = catalog.matrixVersion;
+    const base = [
+      // strictly necessary (global; no toggle)
+      { purposeKey: "account_access", dataCategoryKey: "device_id",
+processingUseKey: "strictly_necessary", channelKey: null, state:
+"granted" }
+    ];
+    const mk = decide(mode, choices.marketing);
+    const an = decide(mode, choices.analytics);
+    const pe = decide(mode, choices.personalization);
+
   const save = async (mode: "accept_all" | "reject_all" | "custom") => 
 { 
     const mv = catalog.matrixVersion; 
@@ -74,7 +93,7 @@ processingUseKey: "strictly_necessary", channelKey: null, state:
     const mk = resolveChoice(mode, choices.marketing);
     const an = resolveChoice(mode, choices.analytics);
     const pe = resolveChoice(mode, choices.personalization);
- 
+
     const decisions = [ 
       ...base.map(d => ({ ...d, policyVersion: mv, provenance: "ui_banner" as const })), 
       // por canal: web (banner), email/sms quedan para flujo posterior
@@ -128,7 +147,13 @@ onClick={()=>save("accept_all")}>Aceptar todo</button>
     </dialog>
   );
 }
- 
+
+type CardProps = Readonly<{ title: string; checked: boolean; onChange: (v: boolean) => void }>;
+function Card({ title, checked, onChange }: CardProps) {
+  return (
+    <label className="p-3 border rounded-xl flex items-center justify-between">
+      <span className="text-sm">{title}</span>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} aria-label={title} />
 function Card({ title, checked, onChange }: Readonly<{ title:string; checked:boolean; onChange:(v:boolean)=>void }>) {
   const id = useId();
   return (
