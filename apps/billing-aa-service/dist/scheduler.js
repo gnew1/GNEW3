@@ -16,7 +16,7 @@ export class Scheduler {
         if (this.running)
             return;
         this.running = true;
-        this.interval = setInterval(async () => {
+        const tick = async () => {
             try {
                 // reset diario
                 const d = new Date().getUTCDate();
@@ -48,7 +48,9 @@ export class Scheduler {
             catch (e) {
                 this.logger.error({ err: e }, "scheduler_tick_error");
             }
-        }, 2_000);
+        };
+        this.interval = setInterval(tick, this.opt.tickMs ?? 2_000);
+        tick();
     }
     async enqueue(subId, cyclesDue) {
         for (let i = 0; i < cyclesDue; i++) {

@@ -6,6 +6,7 @@ type Options = {
     maxRetries: number;
     concurrency: number;
     hardDailyChargeLimit: number;
+    tickMs?: number;
 };
 export declare class Scheduler {
     private store;
