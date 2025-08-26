@@ -1,8 +1,11 @@
 "use client"; 
  
-import { useMemo, useState } from "react"; 
-import { compareVariants, ComparePayload } from 
-"@/app/lib/voteCompareClient"; 
+import { useMemo, useState } from "react";
+import {
+  compareVariants,
+  ComparePayload,
+  CompareResponse,
+} from "@/app/lib/voteCompareClient";
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, 
 LineChart, Line, CartesianGrid, 
@@ -15,10 +18,10 @@ export default function VariantsPanel({ demo = false }: Readonly<{ demo?:
 boolean }>) {
   const [loading, setLoading] = useState(false); 
   const [err, setErr] = useState<string | null>(null); 
-  const [data, setData] = useState<any | null>(null); 
+  const [data, setData] = useState<CompareResponse | null>(null);
  
-  const payload: ComparePayload = useMemo(() => { 
-    if (!demo) return { options: [], voters: [], ballots: [] } as any; 
+  const payload: ComparePayload = useMemo(() => {
+    if (!demo) return { options: [], voters: [], ballots: [] };
  
     // Dataset de ejemplo: 4 opciones, 120 votantes en 3 segmentos 
     const options = [ 
@@ -77,32 +80,32 @@ Math.random() * 86400e3 };
   const barsData = useMemo(() => { 
     if (!data) return []; 
     // dataset para barras: score normalizado por opción y variante 
-    const rows: Array<any> = []; 
-    for (const op of data.options) { 
-      const row: any = { option: op.title }; 
-      for (const s of data.summary) { 
-        row[s.variant] = Number((s.result.normTotals[op.id] * 
-100).toFixed(2)); 
-      } 
-      rows.push(row); 
-    } 
-    return rows; 
-  }, [data]); 
- 
-  const metricsData = useMemo(() => { 
-    if (!data) return []; 
-    return data.summary.map((s: any) => ({ 
-      variant: s.variant, 
-      turnout: Number((s.metrics.turnoutRate * 100).toFixed(1)), 
-      gini: Number(s.metrics.giniByOption.toFixed(3)), 
-      top10: Number((s.metrics.top10Share * 100).toFixed(1)), 
-      margin: Number((s.metrics.decisiveMargin * 100).toFixed(1)), 
-      disagree: Number((s.metrics.disagreementRate * 100).toFixed(1)), 
-      sybil: Number((s.metrics.sybilSensitivity * 100).toFixed(2)), 
-      stability: Number((s.robustness.stability * 100).toFixed(1)), 
-      flip: Number((s.robustness.flipRate * 100).toFixed(1)), 
-    })); 
-  }, [data]); 
+    const rows: Array<Record<string, number | string>> = [];
+    for (const op of data.options) {
+      const row: Record<string, number | string> = { option: op.title };
+      for (const s of data.summary) {
+        row[s.variant] = Number((s.result.normTotals[op.id] *
+100).toFixed(2));
+      }
+      rows.push(row);
+    }
+    return rows;
+  }, [data]);
+
+  const metricsData = useMemo(() => {
+    if (!data) return [];
+    return data.summary.map((s) => ({
+      variant: s.variant,
+      turnout: Number((s.metrics.turnoutRate * 100).toFixed(1)),
+      gini: Number(s.metrics.giniByOption.toFixed(3)),
+      top10: Number((s.metrics.top10Share * 100).toFixed(1)),
+      margin: Number((s.metrics.decisiveMargin * 100).toFixed(1)),
+      disagree: Number((s.metrics.disagreementRate * 100).toFixed(1)),
+      sybil: Number((s.metrics.sybilSensitivity * 100).toFixed(2)),
+      stability: Number((s.robustness.stability * 100).toFixed(1)),
+      flip: Number((s.robustness.flipRate * 100).toFixed(1)),
+    }));
+  }, [data]);
  
   return ( 
     <section className="rounded-2xl border p-4 md:p-6 bg-white 

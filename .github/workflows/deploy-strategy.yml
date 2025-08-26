@@ -4,13 +4,16 @@ on:
     inputs:
       service:
         description: "Servicio"
-        type: string
         required: true
+        type: string
       environment:
         description: "Entorno (dev|staging|prod)"
-        type: choice
-        options: [dev, staging, prod]
         required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
         default: dev
 
 jobs:
