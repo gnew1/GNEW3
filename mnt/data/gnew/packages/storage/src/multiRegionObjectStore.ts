@@ -14,8 +14,8 @@ interface MultiRegionObjectStoreOptions {
 }
 
 export class MultiRegionObjectStore {
-  private primary: RegionConfig;
-  private replicas: RegionConfig[];
+  private readonly primary: RegionConfig;
+  private readonly replicas: RegionConfig[];
 
   constructor(options: MultiRegionObjectStoreOptions) {
     this.primary = options.primary;

@@ -1,8 +1,8 @@
 
 export class LRU<K, V> {
-  private max: number;
-  private ttlMs: number;
-  private map = new Map<K, { v: V; t: number }>();
+  private readonly max: number;
+  private readonly ttlMs: number;
+  private readonly map = new Map<K, { v: V; t: number }>();
 
   constructor(max = 5000, ttlMs = 60_000) {
     this.max = max;

@@ -25,7 +25,7 @@ class MPCStub {
 }
 
 export class DIDManager {
-  private docs: Map<string, DIDDocument> = new Map();
+  private readonly docs: Map<string, DIDDocument> = new Map();
 
   createDID(): DIDDocument {
     const pubKey = MPCStub.generateKey();

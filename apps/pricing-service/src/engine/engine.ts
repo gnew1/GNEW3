@@ -5,7 +5,7 @@ import { Ruleset, QuoteInput, QuoteResult, Rule, DiscountEffect } from "./types"
 import { RulesStore } from "../store/rules";
 
 export class PriceEngine {
-  private cache: LRU<string, QuoteResult>;
+  private readonly cache: LRU<string, QuoteResult>;
   constructor(private store: RulesStore) {
     const size = Number(process.env.CACHE_SIZE ?? 10_000);
     const ttl = Number(process.env.CACHE_TTL_MS ?? 60_000);

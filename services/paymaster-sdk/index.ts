@@ -7,7 +7,7 @@ import { ethers } from "ethers";
 import DynamicPaymaster from "../../artifacts/contracts/paymasters/DynamicPaymaster.sol/DynamicPaymaster.json";
 
 export class PaymasterSDK {
-  private contract: ethers.Contract;
+  private readonly contract: ethers.Contract;
 
   constructor(address: string, provider: ethers.JsonRpcProvider, signer?: ethers.Signer) {
     this.contract = new ethers.Contract(address, DynamicPaymaster.abi, signer || provider);

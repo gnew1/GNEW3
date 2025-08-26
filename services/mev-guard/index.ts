@@ -7,7 +7,7 @@ import { ethers } from "ethers";
 import FairOrdering from "../../artifacts/contracts/mev/FairOrdering.sol/FairOrdering.json";
 
 export class MevGuardSDK {
-  private contract: ethers.Contract;
+  private readonly contract: ethers.Contract;
 
   constructor(address: string, provider: ethers.JsonRpcProvider, signer?: ethers.Signer) {
     this.contract = new ethers.Contract(address, FairOrdering.abi, signer || provider);

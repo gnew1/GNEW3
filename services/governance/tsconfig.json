@@ -12,4 +12,19 @@
   "include": ["hardhat.config.ts", "src/**/*.ts"],
   "exclude": ["scripts"] 
 } 
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2020",
+    "moduleResolution": "Node",
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "typechain/*": ["typechain/*"]
+    }
+  },
+  "include": ["hardhat.config.ts", "src/**/*.ts", "scripts/**/*.ts", "typechain/**/*.ts"]
+}
  

@@ -23,7 +23,7 @@ export interface AuthenticationOptions {
 }
 
 export class PasskeyManager {
-  private store: Map<string, any> = new Map();
+  private readonly store: Map<string, any> = new Map();
 
   generateRegistrationOptions(userId: string, username: string): RegistrationOptions {
     const challenge = generateChallenge();
