@@ -9,6 +9,7 @@ export default function AISuggestions({ conversationId, messages, lang = "es" }:
   const [loading, setLoading] = useState(false);
   const [error, setErr] = useState<string | null>(null);
   const [data, setData] = useState<Awaited<ReturnType<typeof callSummarize>> | null>(null);
+  const [query, setQuery] = useState<string>("");
 
   const canRun = useMemo(() => messages && messages.length > 0, [messages]);
 
@@ -52,14 +53,22 @@ export default function AISuggestions({ conversationId, messages, lang = "es" }:
         <h2 id="ai-suggestions-title" className="text-lg md:text-xl font-semibold">
           {texts.heading}
         </h2>
-        <button
-          onClick={run}
-          disabled={!canRun || loading}
-          className="px-3 py-2 rounded-xl bg-black text-white disabled:opacity-50"
-          aria-busy={loading}
-        >
-          {buttonLabel}
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={isEs ? "Pregunta" : "Query"}
+            className="px-2 py-1 rounded-lg border border-gray-300"
+          />
+          <button
+            onClick={run}
+            disabled={!canRun || loading}
+            className="px-3 py-2 rounded-xl bg-black text-white disabled:opacity-50"
+            aria-busy={loading}
+          >
+            {buttonLabel}
+          </button>
+        </div>
       </div>
 
       {error && (

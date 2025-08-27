@@ -11,8 +11,17 @@ import {
 LineChart, Line, CartesianGrid, 
 } from "recharts"; 
  
-type VariantKey = "one_person_one_vote" | "token_weighted" | 
-"quadratic_voting"; 
+type VariantKey = "one_person_one_vote" | "token_weighted" | "quadratic_voting";
+
+function computeWeight(i: number) {
+  if (i < 12) return 10;
+  return i < 40 ? 3 : 1;
+}
+
+function computeLabel(v: VariantKey) {
+  if (v === "one_person_one_vote") return "1p=1v";
+  return v === "token_weighted" ? "Token-weighted" : "Quadratic";
+}
  
 export default function VariantsPanel({ demo = false }: Readonly<{ demo?:
 boolean }>) {
@@ -30,13 +39,13 @@ boolean }>) {
       { id: "C", title: "Opción C" }, 
       { id: "D", title: "Opción D" }, 
     ]; 
-    const voters = Array.from({ length: 120 }, (_, i) => ({ 
-      id: `v${i + 1}`, 
+    const voters = Array.from({ length: 120 }, (_, i) => ({
+      id: `v${i + 1}`,
       // 10% whales (peso 10), 28% mid (peso 3), resto 1
-      weight: i < 12 ? 10 : i < 40 ? 3 : 1,
-      credits: 9, 
-      segment: i < 40 ? "core" : "new", 
-    })); 
+      weight: computeWeight(i),
+      credits: 9,
+      segment: i < 40 ? "core" : "new",
+    }));
     const ballots = voters.map((v, i) => { 
       // preferencias sintéticas: core prefiere A/B, newcomers C/D 
       const s: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 }; 
@@ -208,20 +217,16 @@ name="Sensibilidad Sybil (p.p.)" />
                 </tr> 
               </thead> 
               <tbody> 
-                {data.summary.map((s: any) => ( 
-                  <tr key={s.variant} className="border-t"> 
-                    <td className="p-2">{s.variant === 
-"one_person_one_vote" ? "1p=1v" : s.variant === "token_weighted" ? 
-"Token-weighted" : "Quadratic"}</td> 
-                    <td className="p-2 text-right"> 
-                      {s.result.winner} 
-                    </td> 
-                    <td className="p-2 
-text-right">{(s.metrics.decisiveMargin * 100).toFixed(1)}</td> 
-                    <td className="p-2 
-text-right">{(s.metrics.disagreementRate * 100).toFixed(1)}</td> 
-                  </tr> 
-                ))} 
+                {data.summary.map((s: any) => (
+                  <tr key={s.variant} className="border-t">
+                    <td className="p-2">{computeLabel(s.variant)}</td>
+                    <td className="p-2 text-right">
+                      {s.result.winner}
+                    </td>
+                    <td className="p-2 text-right">{(s.metrics.decisiveMargin * 100).toFixed(1)}</td>
+                    <td className="p-2 text-right">{(s.metrics.disagreementRate * 100).toFixed(1)}</td>
+                  </tr>
+                ))}
               </tbody> 
             </table> 
           </div> 
