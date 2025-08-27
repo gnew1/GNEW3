@@ -1,23 +1,14 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ES2020",
-    "moduleResolution": "Node",
-    "outDir": "dist",
-    "esModuleInterop": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noUncheckedIndexedAccess": true,
+    "module": "ESNext",
+    "moduleResolution": "NodeNext",
     "baseUrl": ".",
     "paths": {
-      "typechain/*": ["typechain/*"]
-    }
+      "@contracts-types/*": ["../../packages/contracts/typechain-types/*"]
+    },
+    "types": ["node"]
   },
-  "include": [
-    "src/**/*.ts",
-    "hardhat.config.ts",
-    "typechain/**/*.ts"
-  ],
-  "exclude": ["scripts"]
+  "include": ["src", "scripts"]
 }
- 
