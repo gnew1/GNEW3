@@ -5,6 +5,7 @@ pragma solidity ^0.8.24;
 /// @title DocHashRegistry
 /// @notice Registro simple de hashes (SHA-256 como bytes32) vinculados a (docId, version).
 contract DocHashRegistry {
+    error DocHashRegistry__AlreadyRegistered(bytes32 hash);
     struct Record {
         string docId;
         uint256 version;
@@ -18,7 +19,9 @@ contract DocHashRegistry {
 
     /// @dev Registra un hash. Si ya existe, revierte (inmutabilidad).
     function registerDocument(bytes32 hash, string calldata docId, uint256 version) external {
-        require(records[hash].by == address(0), "already_registered");
+        if (records[hash].by != address(0)) {
+            revert DocHashRegistry__AlreadyRegistered(hash);
+        }
         records[hash] = Record({ docId: docId, version: version, by: msg.sender, blockTime: block.timestamp });
         emit Registered(hash, docId, version, msg.sender);
     }
