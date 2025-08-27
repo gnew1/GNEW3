@@ -77,6 +77,8 @@ export const WeeklyMissionsBoard: React.FC = () => {
     fetchMissions();
   }, []);
 
+  const missions = data?.missions ?? [];
+
   if (loading) {
     return (
       <div className="p-4 text-gray-500 animate-pulse">Cargando misiones semanales…</div>
@@ -89,7 +91,7 @@ export const WeeklyMissionsBoard: React.FC = () => {
     );
   }
 
-  if (!data || !data.missions.length) {
+  if (!missions.length) {
     return (
       <div className="p-4 text-gray-500">No hay misiones planificadas para esta semana.</div>
     );
@@ -100,11 +102,11 @@ export const WeeklyMissionsBoard: React.FC = () => {
       <header className="text-center">
         <h2 className="text-2xl font-bold">Misiones de la Semana</h2>
         <p className="text-sm text-gray-500">
-          {formatDate(data.weekStart)} – {formatDate(data.weekEnd)}
+          {formatDate(data?.weekStart ?? "")} – {formatDate(data?.weekEnd ?? "")}
         </p>
       </header>
       <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {data.missions.map((m) => (
+        {missions.map((m) => (
           <li key={m.id} className="bg-white rounded-2xl shadow p-4 flex flex-col justify-between border border-gray-200">
             <div>
               <h3 className="text-lg font-semibold mb-2">{m.title}</h3>
