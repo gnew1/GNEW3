@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true
+  },
+  "references": [
+    { "path": "./apps/governance-ui" },
+    { "path": "./apps/voting-analytics" },
+    { "path": "./apps/observability" },
+    { "path": "./packages/contracts" }
+  ],
+  "files": [],
+  "include": []
+}

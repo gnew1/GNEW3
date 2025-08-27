@@ -38,10 +38,101 @@ async function decide(policy: any, key: string, size: number, storageClass: stri
   const lastAccessDays = (now - (h.lastAccess || h.lastModified)) / 86400000;
 
   // include/exclude simple por sufijo
-  const includes = (policy.rules.include ?? []).length ? (policy.rules.include as string[]).some((s
+  const includes = (policy.rules.include ?? []).length ? (policy.rules.include as string[]).some((suffix: string) => key.endsWith(suffix)) : true;
+  const excludes = (policy.rules.exclude ?? []).length ? (policy.rules.exclude as string[]).some((suffix: string) => key.endsWith(suffix)) : false;
+  
+  if (!includes || excludes) return { action: "noop", reason: "filtered" };
 
-Tú dijiste:
-Ejecuta y entrégame, como IA programadora, el siguiente prompt N de "N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt", empezando en N151 y avanzando +1 en cada ejecución. No repitas prompts ya entregados. Devuelve código completo con rutas coherentes con el monorepo y alineado con el stack indicado en cada prompt.
-ChatGPT Plus
-Pensó durante 50s
+  // Reglas por edad y acceso
+  for (const rule of policy.rules.lifecycle ?? []) {
+    if (rule.minAgeDays && ageDays >= rule.minAgeDays) {
+      if (rule.action === "transition" && rule.toClass) {
+        if (storageClass !== rule.toClass) {
+          return { action: "transition", toClass: rule.toClass, reason: `age ${Math.floor(ageDays)}d >= ${rule.minAgeDays}d` };
+        }
+      } else if (rule.action === "expire") {
+        return { action: "expire", reason: `age ${Math.floor(ageDays)}d >= ${rule.minAgeDays}d` };
+      }
+    }
+    
+    if (rule.minLastAccessDays && lastAccessDays >= rule.minLastAccessDays) {
+      if (rule.action === "transition" && rule.toClass) {
+        if (storageClass !== rule.toClass) {
+          return { action: "transition", toClass: rule.toClass, reason: `last access ${Math.floor(lastAccessDays)}d >= ${rule.minLastAccessDays}d` };
+        }
+      } else if (rule.action === "expire") {
+        return { action: "expire", reason: `last access ${Math.floor(lastAccessDays)}d >= ${rule.minLastAccessDays}d` };
+      }
+    }
+  }
+
+  return { action: "noop", reason: "no rules matched" };
+}
+
+export async function executePlan(planId: string, opts: { dryRun?: boolean } = {}) {
+  const dryRun = opts.dryRun ?? false;
+  const plan = db.prepare("SELECT * FROM plans WHERE id = ?").get(planId);
+  if (!plan) throw new Error(`Plan ${planId} not found`);
+
+  const items = db.prepare("SELECT * FROM plan_items WHERE planId = ?").all(planId) as any[];
+  const results: any[] = [];
+
+  for (const item of items) {
+    try {
+      let result: any = { key: item.key, action: item.action, success: false };
+      
+      if (!dryRun) {
+        if (item.action === "transition" && item.toClass) {
+          await transitionTo(item.key, item.toClass);
+          result.success = true;
+          result.message = `Transitioned to ${item.toClass}`;
+        } else if (item.action === "expire") {
+          await deleteKey(item.key);
+          result.success = true;
+          result.message = "Deleted";
+        }
+      } else {
+        result.success = true;
+        result.message = `Would ${item.action}${item.toClass ? ` to ${item.toClass}` : ''}`;
+      }
+      
+      results.push(result);
+    } catch (error: any) {
+      results.push({ 
+        key: item.key, 
+        action: item.action, 
+        success: false, 
+        error: error.message 
+      });
+    }
+  }
+
+  // Actualizar plan como ejecutado
+  if (!dryRun) {
+    db.prepare("UPDATE plans SET dryRun = 0, executedAt = ? WHERE id = ?")
+      .run(Date.now(), planId);
+  }
+
+  return { planId, results, dryRun };
+}
+
+export async function getCostEstimate(planId: string) {
+  const items = db.prepare("SELECT * FROM plan_items WHERE planId = ?").all(planId) as any[];
+  let totalSavings = 0;
+
+  for (const item of items) {
+    if (item.action === "transition" && item.toClass) {
+      const currentCost = storageCostPerTB[item.storageClass] || 0;
+      const newCost = storageCostPerTB[item.toClass] || 0;
+      const sizeInTB = item.size / (1024 * 1024 * 1024 * 1024);
+      totalSavings += (currentCost - newCost) * sizeInTB * 12; // yearly savings
+    } else if (item.action === "expire") {
+      const currentCost = storageCostPerTB[item.storageClass] || 0;
+      const sizeInTB = item.size / (1024 * 1024 * 1024 * 1024);
+      totalSavings += currentCost * sizeInTB * 12; // yearly savings
+    }
+  }
+
+  return { totalSavings, currency: "USD" };
+}
 

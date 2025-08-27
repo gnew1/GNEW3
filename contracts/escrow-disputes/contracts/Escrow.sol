@@ -50,10 +50,248 @@ contract Escrow is Ownable, ReentrancyGuard, EIP712 {
     uint256 public nextId = 1;
     address public feeTreasury;
     uint16 public constant MAX_FEE_BPS = 1000; // 10%
-    bytes32 public constant SETTLE_TYPEHASH = keccak
+    bytes32 public constant SETTLE_TYPEHASH = keccak256(
+        "SettleDispute(uint256 dealId,uint8 outcome,uint256 nonce,uint256 deadline)"
+    );
 
-Tú dijiste:
-Como IA programadora de GNEW, ejecuta el siguiente prompt N del archivo "/mnt/data/N1 AL N420 PROMPTS DE PROGRAMACIÓN DE GNEW.txt" empezando en N321 (N320 se ejecutó en la interacción actual) y avanza +1 en cada ejecución hasta N340, sin repetirte. Para cada prompt: 1) entrega exactamente lo pedido con código listo para producción; 2) empieza la respuesta con la RUTA COMPLETA del archivo de salida y debajo el código en el lenguaje indicado; 3) mantén coherencia con el monorepo (Node/TypeScript predominante, backend principal app.ts) y convenciones establecidas; 4) incluye pruebas y scripts de integración cuando proceda; 5) evita texto superfluo fuera de rutas+código salvo breves notas de uso; 6) conserva y actualiza un puntero interno de progreso para continuar en N+1 y detenerse al llegar a N340.
-ChatGPT Plus
-Pensó durante 56s
+    mapping(uint256 => Deal) public deals;
+    mapping(uint256 => string) public evidenceHashes; // IPFS hash para evidencias
+    mapping(address => uint256) public nonces;
+
+    event DealCreated(uint256 indexed dealId, address indexed buyer, address indexed seller, uint256 amount);
+    event DealFunded(uint256 indexed dealId, uint256 fundedAt);
+    event DealReleased(uint256 indexed dealId, uint256 releasedAt);
+    event DealRefunded(uint256 indexed dealId, uint256 refundedAt);
+    event DisputeRaised(uint256 indexed dealId, address indexed raiser, string evidenceHash);
+    event DisputeResolved(uint256 indexed dealId, uint8 outcome, address resolver);
+
+    error InvalidDeal();
+    error InvalidState();
+    error Unauthorized();
+    error InvalidSignature();
+    error DeadlineExpired();
+    error InsufficientAmount();
+
+    constructor(address _feeTreasury) Ownable(msg.sender) EIP712("GNEWEscrow", "1") {
+        feeTreasury = _feeTreasury;
+    }
+
+    /**
+     * @notice Crear nuevo deal de escrow
+     * @param buyer Dirección del comprador
+     * @param seller Dirección del vendedor
+     * @param token Token a usar (address(0) para nativo)
+     * @param amount Monto bruto
+     * @param feeBps Fee en basis points
+     * @param respondBy Tiempo límite para respuesta inicial (segundos desde funding)
+     * @param arbitrateBy Tiempo límite para arbitraje (segundos desde disputa)
+     */
+    function createDeal(
+        address buyer,
+        address seller,
+        address token,
+        uint256 amount,
+        uint16 feeBps,
+        uint64 respondBy,
+        uint64 arbitrateBy
+    ) external returns (uint256 dealId) {
+        if (buyer == address(0) || seller == address(0)) revert InvalidDeal();
+        if (feeBps > MAX_FEE_BPS) revert InvalidDeal();
+        if (amount == 0) revert InsufficientAmount();
+
+        dealId = nextId++;
+        deals[dealId] = Deal({
+            id: dealId,
+            buyer: buyer,
+            seller: seller,
+            token: token,
+            amount: amount,
+            feeBps: feeBps,
+            state: State.Pending,
+            createdAt: uint64(block.timestamp),
+            fundedAt: 0,
+            respondBy: respondBy,
+            arbitrateBy: arbitrateBy
+        });
+
+        emit DealCreated(dealId, buyer, seller, amount);
+    }
+
+    /**
+     * @notice Financiar deal (solo comprador)
+     */
+    function fundDeal(uint256 dealId) external payable nonReentrant {
+        Deal storage deal = deals[dealId];
+        if (deal.state != State.Pending) revert InvalidState();
+        if (msg.sender != deal.buyer) revert Unauthorized();
+
+        if (deal.token == address(0)) {
+            if (msg.value != deal.amount) revert InsufficientAmount();
+        } else {
+            IERC20(deal.token).safeTransferFrom(msg.sender, address(this), deal.amount);
+        }
+
+        deal.state = State.Funded;
+        deal.fundedAt = uint64(block.timestamp);
+
+        emit DealFunded(dealId, deal.fundedAt);
+    }
+
+    /**
+     * @notice Liberar fondos al vendedor (solo comprador o después de SLA)
+     */
+    function releaseFunds(uint256 dealId) external nonReentrant {
+        Deal storage deal = deals[dealId];
+        if (deal.state != State.Funded) revert InvalidState();
+        
+        bool canRelease = msg.sender == deal.buyer || 
+                         (block.timestamp > deal.fundedAt + deal.respondBy);
+        if (!canRelease) revert Unauthorized();
+
+        deal.state = State.Released;
+        _transferFunds(deal, deal.seller);
+
+        emit DealReleased(dealId, block.timestamp);
+    }
+
+    /**
+     * @notice Solicitar reembolso (solo vendedor)
+     */
+    function requestRefund(uint256 dealId) external nonReentrant {
+        Deal storage deal = deals[dealId];
+        if (deal.state != State.Funded) revert InvalidState();
+        if (msg.sender != deal.seller) revert Unauthorized();
+
+        deal.state = State.Refunded;
+        _transferFunds(deal, deal.buyer);
+
+        emit DealRefunded(dealId, block.timestamp);
+    }
+
+    /**
+     * @notice Levantar disputa con evidencia
+     */
+    function raiseDispute(uint256 dealId, string calldata evidenceHash) external {
+        Deal storage deal = deals[dealId];
+        if (deal.state != State.Funded) revert InvalidState();
+        if (msg.sender != deal.buyer && msg.sender != deal.seller) revert Unauthorized();
+
+        deal.state = State.Disputed;
+        evidenceHashes[dealId] = evidenceHash;
+
+        emit DisputeRaised(dealId, msg.sender, evidenceHash);
+    }
+
+    /**
+     * @notice Resolver disputa con firma (EIP-712)
+     * @param dealId ID del deal
+     * @param outcome 0=refund, 1=release, 2=split
+     * @param nonce Nonce para replay protection
+     * @param deadline Deadline de la firma
+     * @param signature Firma del árbitro autorizado
+     */
+    function resolveDispute(
+        uint256 dealId,
+        uint8 outcome,
+        uint256 nonce,
+        uint256 deadline,
+        bytes calldata signature
+    ) external nonReentrant {
+        if (block.timestamp > deadline) revert DeadlineExpired();
+        
+        Deal storage deal = deals[dealId];
+        if (deal.state != State.Disputed) revert InvalidState();
+        
+        // Verificar firma EIP-712
+        bytes32 structHash = keccak256(abi.encode(SETTLE_TYPEHASH, dealId, outcome, nonce, deadline));
+        bytes32 hash = _hashTypedDataV4(structHash);
+        address signer = ECDSA.recover(hash, signature);
+        
+        if (signer != owner() || nonces[signer] != nonce) revert InvalidSignature();
+        nonces[signer]++;
+
+        deal.state = State.Resolved;
+
+        if (outcome == 0) {
+            // Refund al comprador
+            _transferFunds(deal, deal.buyer);
+        } else if (outcome == 1) {
+            // Release al vendedor
+            _transferFunds(deal, deal.seller);
+        } else if (outcome == 2) {
+            // Split 50/50
+            _transferSplit(deal);
+        }
+
+        emit DisputeResolved(dealId, outcome, signer);
+    }
+
+    /**
+     * @notice Transferir fondos descontando fees
+     */
+    function _transferFunds(Deal memory deal, address recipient) internal {
+        uint256 feeAmount = (deal.amount * deal.feeBps) / 10000;
+        uint256 netAmount = deal.amount - feeAmount;
+
+        if (deal.token == address(0)) {
+            if (feeAmount > 0) {
+                payable(feeTreasury).transfer(feeAmount);
+            }
+            payable(recipient).transfer(netAmount);
+        } else {
+            if (feeAmount > 0) {
+                IERC20(deal.token).safeTransfer(feeTreasury, feeAmount);
+            }
+            IERC20(deal.token).safeTransfer(recipient, netAmount);
+        }
+    }
+
+    /**
+     * @notice Transferir fondos en split 50/50
+     */
+    function _transferSplit(Deal memory deal) internal {
+        uint256 feeAmount = (deal.amount * deal.feeBps) / 10000;
+        uint256 netAmount = deal.amount - feeAmount;
+        uint256 halfAmount = netAmount / 2;
+
+        if (deal.token == address(0)) {
+            if (feeAmount > 0) {
+                payable(feeTreasury).transfer(feeAmount);
+            }
+            payable(deal.buyer).transfer(halfAmount);
+            payable(deal.seller).transfer(netAmount - halfAmount);
+        } else {
+            if (feeAmount > 0) {
+                IERC20(deal.token).safeTransfer(feeTreasury, feeAmount);
+            }
+            IERC20(deal.token).safeTransfer(deal.buyer, halfAmount);
+            IERC20(deal.token).safeTransfer(deal.seller, netAmount - halfAmount);
+        }
+    }
+
+    /**
+     * @notice Obtener información del deal
+     */
+    function getDeal(uint256 dealId) external view returns (Deal memory) {
+        return deals[dealId];
+    }
+
+    /**
+     * @notice Actualizar treasury (solo owner)
+     */
+    function setFeeTreasury(address newTreasury) external onlyOwner {
+        feeTreasury = newTreasury;
+    }
+
+    /**
+     * @notice Emergency withdraw (solo owner, solo en casos extremos)
+     */
+    function emergencyWithdraw(address token, uint256 amount) external onlyOwner {
+        if (token == address(0)) {
+            payable(owner()).transfer(amount);
+        } else {
+            IERC20(token).safeTransfer(owner(), amount);
+        }
+    }
+}
 
