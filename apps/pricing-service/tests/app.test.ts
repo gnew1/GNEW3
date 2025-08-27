@@ -70,7 +70,7 @@ describe("pricing-service app", () => {
         ],
       });
     expect(draft.status).toBe(201);
-    const id = draft.body.id as string;
+    const id = String(draft.body.id);
 
     const val = await request(app)
       .post(`/admin/rulesets/${id}/validate`)
@@ -96,7 +96,7 @@ describe("pricing-service app", () => {
           },
         ],
       });
-    const id = created.body.id as string;
+    const id = String(created.body.id);
 
     const pub = await request(app)
       .post(`/admin/rulesets/${id}/publish`)

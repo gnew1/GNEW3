@@ -10,7 +10,9 @@
 import express from "express";
 import pino from "pino";
 import pinoHttp from "pino-http";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
+import type { JwtPayload } from "jsonwebtoken";
+import { z } from "zod";
 import { PriceEngine } from "./engine/engine";
 import { RulesStore, CanaryMap } from "./store/rules";
 import { AuditStore } from "./store/audit";
@@ -34,7 +36,11 @@ export type User = {
   segment?: string;
 };
 
-function authOptional(req: any, _res: any, next: any) {
+interface AuthedRequest extends express.Request {
+  user?: User;
+}
+
+function authOptional(req: AuthedRequest, _res: express.Response, next: express.NextFunction) {
   const auth = req.headers.authorization;
   if (auth?.startsWith("Bearer ")) {
     try {
@@ -42,13 +48,15 @@ function authOptional(req: any, _res: any, next: any) {
         algorithms: ["RS256"],
         audience: JWT_AUDIENCE,
         issuer: JWT_ISSUER,
-      }) as JwtPayload;
-      (req as any).user = {
-        sub: String(decoded.sub),
-        email: typeof decoded.email === "string" ? decoded.email : undefined,
-        roles: Array.isArray(decoded.roles) ? decoded.roles : [],
-        segment: typeof decoded.segment === "string" ? decoded.segment : undefined,
-      } as User;
+      });
+      if (typeof decoded !== "string") {
+        req.user = {
+          sub: String(decoded.sub),
+          email: typeof decoded.email === "string" ? decoded.email : undefined,
+          roles: Array.isArray(decoded.roles) ? decoded.roles : [],
+          segment: typeof decoded.segment === "string" ? decoded.segment : undefined,
+        };
+      }
     } catch {
       // ignora, endpoints públicos seguirán funcionando sin user
     }
@@ -56,9 +64,8 @@ function authOptional(req: any, _res: any, next: any) {
   next();
 }
 
-function requireAdmin(req: any, res: any, next: any) {
-  const user = (req as any).user as User | undefined;
-  if (!user?.roles?.includes("pricing:admin")) return res.status(403).json({ error: "forbidden" });
+function requireAdmin(req: AuthedRequest, res: express.Response, next: express.NextFunction) {
+  if (!req.user?.roles?.includes("pricing:admin")) return res.status(403).json({ error: "forbidden" });
   next();
 }
 
@@ -72,6 +79,7 @@ app.use(authOptional);
 const audit = new AuditStore(process.env.AUDIT_FILE ?? "");
 const rules = new RulesStore(audit);
 const engine = new PriceEngine(rules);
+const canarySchema = z.record(z.object({ versionId: z.string(), percentage: z.number() }));
 
 // Static panel
 app.use("/panel", express.static(path.join(__dirname, "..", "public")));
@@ -128,17 +136,19 @@ app.get("/admin/rulesets", requireAdmin, (_req, res) => {
 });
 
 // Create draft ruleset
-app.post("/admin/rulesets", requireAdmin, (req, res) => {
-  const body = req.body as { name: string; rules: any[]; notes?: string };
-  const user = (req as any).user as User;
+app.post("/admin/rulesets", requireAdmin, (req: AuthedRequest, res) => {
+  const body = z
+    .object({ name: z.string(), rules: z.array(z.any()).default([]), notes: z.string().optional() })
+    .parse(req.body);
+  const user = req.user!;
   const r = rules.createDraft(body.name, body.rules ?? [], user.sub, body.notes);
   res.status(201).json(r);
 });
 
 // Update draft
-app.put("/admin/rulesets/:id", requireAdmin, (req, res) => {
+app.put("/admin/rulesets/:id", requireAdmin, (req: AuthedRequest, res) => {
   const id = req.params.id;
-  const user = (req as any).user as User;
+  const user = req.user!;
   const updated = rules.updateDraft(id, req.body, user.sub);
   res.json(updated);
 });
@@ -151,18 +161,18 @@ app.post("/admin/rulesets/:id/validate", requireAdmin, (req, res) => {
 });
 
 // Publish ruleset (new production version)
-app.post("/admin/rulesets/:id/publish", requireAdmin, (req, res) => {
+app.post("/admin/rulesets/:id/publish", requireAdmin, (req: AuthedRequest, res) => {
   const id = req.params.id;
-  const user = (req as any).user as User;
-  const label = typeof req.body?.label === "string" ? req.body.label : undefined;
-  const published = rules.publish(id, user.sub, label);
+  const user = req.user!;
+  const body = z.object({ label: z.string().optional() }).parse(req.body);
+  const published = rules.publish(id, user.sub, body.label);
   res.json(published);
 });
 
 // Configure canary per segment
-app.post("/admin/canary", requireAdmin, (req, res) => {
-  const body = req.body as CanaryMap;
-  const user = (req as any).user as User;
+app.post("/admin/canary", requireAdmin, (req: AuthedRequest, res) => {
+  const body = canarySchema.parse(req.body);
+  const user = req.user!;
   const before = rules.getCanary();
   rules.setCanary(body, user.sub);
   res.json({ ok: true, before, after: rules.getCanary() });
