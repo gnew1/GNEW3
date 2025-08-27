@@ -34,7 +34,11 @@ const watched: Watched[] = env.CONTRACTS.split(",").map((pair) => {
   const [name, addr] = pair.split(":");
   const abi = ABIS[name]?.abi;
   if (!abi) throw new Error(`ABI no encontrada para ${name}`);
-  return { name, address: addr as `0x${string}`, iface: new ethers.Interface(abi) };
+  const address: `0x${string}` = z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .parse(addr);
+  return { name, address, iface: new ethers.Interface(abi) };
 });
  
 const provider = new ethers.JsonRpcProvider(env.RPC_URL, env.CHAIN_ID);
@@ -96,8 +100,8 @@ async function discoverStart(): Promise<void> {
 
 async function processLogs(from: number, to: number, rpc = provider): Promise<void> {
   for (const w of watched) {
-    const logs = await rpc.getLogs({ fromBlock: from, toBlock: to, address: w.address });
-    for (const lg of logs as Log[]) {
+    const logs: Log[] = await rpc.getLogs({ fromBlock: from, toBlock: to, address: w.address });
+    for (const lg of logs) {
       try {
         const parsed = w.iface.parseLog(lg);
         cEvents.labels({ contract: w.name, event: parsed.name }).inc();
@@ -110,7 +114,7 @@ async function processLogs(from: number, to: number, rpc = provider): Promise<vo
 
 async function processTransactions(from: number, to: number, rpc = provider): Promise<void> {
   for (let b = from; b <= to; b++) {
-    const blk = (await rpc.getBlock(b, true)) as Block & { transactions: TransactionResponse[] };
+    const blk: Block & { transactions: TransactionResponse[] } = await rpc.getBlock(b, true);
     const txs = Array.isArray(blk?.transactions) ? blk.transactions : [];
     if (txs.length === 0) continue;
     const txsToWatched = txs.filter(

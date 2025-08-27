@@ -30,8 +30,9 @@ async function resolveSecret(v?: string): Promise<string | undefined> {
     headers: { "X-Vault-Token": token },
   });
   if (!resp.ok) throw new Error(`vault_error:${resp.status}`);
-  const data = await resp.json();
-  return data?.data?.data?.value ?? data?.data?.value;
+  const payload = await resp.json();
+  const value = payload?.data?.data?.value ?? payload?.data?.value;
+  return value;
 }
 
 // ---------- Config ----------
@@ -51,7 +52,10 @@ const pool = DATABASE_URL
 
 // ---------- Auth (optional) ----------
 type User = { sub: string; roles?: string[]; email?: string };
-function authOptional(req: any, _res: any, next: any) {
+interface AuthedRequest extends express.Request {
+  user?: User;
+}
+function authOptional(req: AuthedRequest, _res: express.Response, next: express.NextFunction) {
   const h = req.headers?.authorization;
   if (h?.startsWith("Bearer ") && JWT_PUBLIC_KEY) {
     try {
@@ -60,8 +64,14 @@ function authOptional(req: any, _res: any, next: any) {
         algorithms: ["RS256"],
         audience: JWT_AUDIENCE,
         issuer: JWT_ISSUER,
-      }) as JwtPayload;
-      (req as any).user = { sub: String(dec.sub), roles: dec.roles as string[] | undefined, email: dec.email as string | undefined };
+      });
+      if (typeof dec !== "string") {
+        req.user = {
+          sub: String(dec.sub),
+          roles: Array.isArray(dec.roles) ? dec.roles : undefined,
+          email: typeof dec.email === "string" ? dec.email : undefined,
+        };
+      }
     } catch {
       /* ignore */
     }
@@ -69,8 +79,8 @@ function authOptional(req: any, _res: any, next: any) {
   next();
 }
 function requireRole(role: string) {
-  return (req: any, res: any, next: any) => {
-    const u: User | undefined = (req as any).user;
+  return (req: AuthedRequest, res: express.Response, next: express.NextFunction) => {
+    const u = req.user;
     if (!u?.roles?.includes(role)) return res.status(403).json({ error: "forbidden" });
     next();
   };
@@ -251,11 +261,16 @@ app.post("/periods/:ym/lock", requireRole("ledger:admin"), async (req, res) => {
 
 // Trial balance (as of date)
 app.get("/balances/trial", requireRole("ledger:read"), async (req, res) => {
-  const asOfParam = String(req.query?.asOf ?? "");
-  const asOf = asOfParam || new Date().toISOString();
+  const asOf =
+    typeof req.query?.asOf === "string"
+      ? req.query.asOf
+      : Array.isArray(req.query?.asOf)
+        ? req.query.asOf[0] ?? ""
+        : "";
+  const asOfVal = asOf || new Date().toISOString();
   const r = await pool.query(
     `select * from v_trial_balance_asof($1::timestamptz)`,
-    [asOf],
+    [asOfVal],
   );
   res.json(r.rows);
 });
@@ -343,7 +358,12 @@ app.post("/reconcile/auto", requireRole("ledger:write"), async (req, res) => {
 
 // XBRL export (simple instance for trial balance of a period YYYY-MM)
 app.get("/export/xbrl", requireRole("ledger:read"), async (req, res) => {
-  const ym = String(req.query?.period ?? "");
+  const ym =
+    typeof req.query?.period === "string"
+      ? req.query.period
+      : Array.isArray(req.query?.period)
+        ? req.query.period[0] ?? ""
+        : "";
   if (!/^\d{4}-\d{2}$/.test(ym)) return res.status(400).json({ error: "bad_period" });
   const period = `${ym}-01`;
   const balances = await pool.query(
