@@ -19,7 +19,6 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@nomicfoundation/hardhat-verify": "^2.0.0",
-    "@openzeppelin/contracts-upgradeable": "5.0.2",
     "@typechain/ethers-v6": "^0.5.1",
     "@types/chai": "^4.3.16",
     "@types/mocha": "^10.0.6",
@@ -36,6 +35,5 @@
     "solhint": "^3.6.2"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "5.0.2"
   }
 }
