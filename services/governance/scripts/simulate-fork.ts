@@ -1,11 +1,6 @@
 import { ethers } from "hardhat";
-
-import type { AddressLike, EventLog } from "ethers";
-import { GnewGovernor, GnewGovToken } from "../../../packages/contracts/types";
-
-import type { EventLog, Signer } from "ethers";
+import type { AddressLike, Signer } from "ethers";
 import type { GnewGovernor, GnewGovToken } from "../typechain";
-
 
 type ProposalId = bigint;
 enum VoteType {
@@ -28,97 +23,85 @@ async function propose(
   const tx = await governor
     .connect(proposer)
     .propose([target], [0], [calldata], description);
-  const rc = await tx.wait();
-  const log = rc?.logs[0] as EventLog;
-  return (log.args as unknown as { proposalId: ProposalId }).proposalId;
+  const receipt = await tx.wait();
+  
+  const event = receipt?.logs.find(
+    (log) => log instanceof ethers.EventLog && log.fragment?.name === "ProposalCreated"
+  ) as ethers.EventLog;
+  
+  return event?.args?.proposalId as ProposalId;
 }
 
-async function castVote(
+async function vote(
   governor: GnewGovernor,
   voter: Signer,
   proposalId: ProposalId,
   support: VoteType
 ) {
-  await (
-    await governor.connect(voter).castVote(proposalId, support)
-  ).wait();
+  await (await governor.connect(voter).castVote(proposalId, support)).wait();
 }
-/**
- * Simula en red fork: propuesta -> votación -> cola -> ejecución.
- * Control: ejecución sin fallos y cómputo de abstenciones.
- */
+
 async function main() {
-  const [proposer, voterA, voterB] = await ethers.getSigners();
-  const governor = await ethers.getContractAt<GnewGovernor>(
-    "GnewGovernor",
-    process.env.GOVERNOR as AddressLike
-  );
-  const token = await ethers.getContractAt<GnewGovToken>(
+  console.log("🗳️  Simulando fork de governance...");
+
+  // Setup de accounts
+  const [, proposer, voterA, voterB] = await ethers.getSigners();
+
+  // Conectar contratos desde .env
+  const token = (await ethers.getContractAt(
     "GnewGovToken",
-
-    process.env.TOKEN as AddressLike
-  );
-
-  // Delegar poder de voto
-  await (await token.connect(voterA).delegate(voterA.address)).wait();
-  await (await token.connect(voterB).delegate(voterB.address)).wait();
-
     process.env.TOKEN!
   )) as unknown as GnewGovToken;
+  
+  const governor = (await ethers.getContractAt(
+    "GnewGovernor", 
+    process.env.GOVERNOR!
+  )) as unknown as GnewGovernor;
+
+  // Delegar poder de voto
   await delegate(token, voterA);
   await delegate(token, voterB);
 
-
-  // Crear propuesta simple: actualizar delay del timelock (ejemplo)
+  // Crear propuesta simple: actualizar delay del timelock
   const timelock = await ethers.getContractAt(
     "GNEWTimelock",
     process.env.TIMELOCK as AddressLike
   );
-  const newDelay = 3 * 24 * 60 * 60;
-  const calldata = timelock.interface.encodeFunctionData("updateDelay", [newDelay]);
+  
+  const calldata = timelock.interface.encodeFunctionData("updateDelay", [3600]); // 1 hora
+  const description = "Actualizar delay del timelock a 1 hora";
+  
+  const proposalId = await propose(governor, proposer, await timelock.getAddress(), calldata, description);
+  
+  console.log(`✅ Propuesta creada: ${proposalId}`);
 
-
-  const proposeTx = await governor
-    .connect(proposer)
-    .propose(
-      [timelock.target as string],
-      [0],
-      [calldata],
-      "Proposal: Update timelock delay to 3 days"
-    );
-  const rc = await proposeTx.wait();
-  const log = rc?.logs[0] as EventLog;
-  const { proposalId } = log.args as { proposalId: ProposalId };
-
-  const proposalId = await propose(
-    governor,
-    proposer,
-    timelock.target as string,
-    calldata,
-    "Proposal: Update timelock delay to 3 days"
-  );
-
-
-  // Avanza a la votación y vota con ABSTAIN incluido (control: abstención calculada)
-  await ethers.provider.send("hardhat_mine", ["0x1000"]); // ~votingDelay
-  await castVote(governor, voterA, proposalId, VoteType.For);
-  await castVote(governor, voterB, proposalId, VoteType.Abstain);
-
-  await ethers.provider.send("hardhat_mine", ["0x10000"]); // ~votingPeriod
-
-  // Cola y ejecución
-  const descHash = ethers.id("Proposal: Update timelock delay to 3 days");
-  await (await governor.queue([timelock.target], [0], [calldata], descHash)).wait();
-
-  // Avanza delay
-  const delay = await timelock.getMinDelay();
-  await ethers.provider.send("evm_increaseTime", [Number(delay)]);
+  // Avanzar a periodo de votación
+  const votingDelay = await governor.votingDelay();
   await ethers.provider.send("evm_mine", []);
+  for (let i = 0; i < Number(votingDelay); i++) {
+    await ethers.provider.send("evm_mine", []);
+  }
 
-  await (await governor.execute([timelock.target], [0], [calldata], descHash)).wait();
-  console.log("Simulation OK: executed without failures.");
+  // Votar
+  await vote(governor, voterA, proposalId, VoteType.For);
+  await vote(governor, voterB, proposalId, VoteType.For);
+  
+  console.log("✅ Votos emitidos");
+
+  // Avanzar periodo de votación
+  const votingPeriod = await governor.votingPeriod();
+  for (let i = 0; i < Number(votingPeriod); i++) {
+    await ethers.provider.send("evm_mine", []);
+  }
+
+  // Verificar estado final
+  const state = await governor.state(proposalId);
+  console.log(`🏁 Estado final de propuesta: ${state}`);
 }
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

@@ -1,33 +1,37 @@
-import { resolvePolicyFor } from "../src/services/engine"; 
-import { prisma } from "../src/infra/prisma"; 
- 
-describe("resolvePolicyFor", () => { 
-  beforeAll(async () => { 
-    await prisma.retentionPolicy.create({ 
-      data: { version: "vtest", scope: { purpose: "marketing", 
-baseLegal: "consent" }, action: "delete", ttlDays: 180, isActive: true 
-} 
-    }); 
-  }); 
-  it("matches rule by purpose/baseLegal", async () => { 
-    const pol = await resolvePolicyFor({ system: 
-"postgres:core.users", dataCategory: "email", purpose: "marketing", 
-baseLegal: "consent" }); 
-    expect(pol.ttlDays).toBe(180); 
-    expect(pol.action).toBe("delete"); 
-  }); 
+import { resolvePolicyFor } from "../src/services/engine";
+import { prisma } from "../src/infra/prisma";
+
+describe("resolvePolicyFor", () => {
+  beforeAll(async () => {
+    await prisma.retentionPolicy.create({
+      data: {
+        version: "vtest",
+        scope: { purpose: "marketing", baseLegal: "consent" },
+        action: "delete",
+        ttlDays: 180,
+        isActive: true
+      }
+    });
+  });
+
+  it("matches rule by purpose/baseLegal", async () => {
+    const pol = await resolvePolicyFor({
+      system: "postgres:core.users",
+      dataCategory: "email",
+      purpose: "marketing",
+      baseLegal: "consent"
+    });
+    expect(pol.ttlDays).toBe(180);
+    expect(pol.action).toBe("delete");
+  });
+
+  afterAll(async () => {
+    await prisma.retentionPolicy.deleteMany({
+      where: { version: "vtest" }
+    });
+    await prisma.$disconnect();
+  });
 }); 
-Métricas & Dashboards 
-● KPIs: 
-○ % registros con tag de retención por sistema. 
-○ purgas/día, fallos, retries, tiempo medio de enforcement. 
-○ días hasta expiración media por categoría/propósito. 
-● Alertas: 
-○ Tags vencidos > X durante Y minutos. 
-○ Políticas desactivadas o versión desfasada vs archivo YAML. 
-● OTel: 
-○ Spans: tagResource, enforceDueTags, anchorBatch. 
-○ Atributos: system, action, data_category, nunca PII. 
 Playbooks (operativos) 
 1. Cargar/actualizar políticas 
 POST /v1/retention/policies/reload tras PR aprobado del YAML → snapshot 
