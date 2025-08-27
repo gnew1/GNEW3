@@ -1,62 +1,19 @@
-<!doctype html> 
-<html> 
-  <head> 
-    <meta charset="UTF-8" /> 
-    <title>GNEW — Delegación</title> 
-    <meta name="viewport" content="width=device-width, 
-initial-scale=1" /> 
-    
-<style>body{font-family:ui-sans-serif,system-ui,Arial;margin:0;padding
- :0}</style> 
-  </head> 
-  <body> 
-    <div id="root"></div> 
-    <script type="module" src="/src/main.tsx"></script> 
-  </body> 
-</html> 
- 
-/packages/contracts/README.md (N13 guía) 
-## N13 — Delegables revocables, con expiración 
- 
-**Contrato**: `src/governance/Delegation.sol`   - Registro *multi‑scope* (`bytes32`) para delegaciones con expiración y 
-revocación. 
-- Vistas clave: - `effectiveDelegateOf(delegator, scope)` → `(address effective, 
-bool active, uint64 expiresAt)`   
-(si expiró/no existe, el **efectivo** es el propio delegador, sin 
-pérdida). - `getDelegation(...)`, `isExpired(...)` - Mutadores: - `delegate(scope, delegatee, expiresAt)` — crea/actualiza 
-(re‑asigna) en un único paso. - `extend(scope, newExpiry)` — cambia expiración sin tocar 
-`delegatee`. - `revoke(scope)` — borra la entrada (fallback inmediato al 
-delegador). 
-**UI delegación**: `@gnew/governance-ui`   - Componente `DelegationCard.tsx` (React + ethers) con: - Formulario de **delegar/reasignar**, **quitar expiración**, 
-**revocar**. - Estado en vivo leyendo `effectiveDelegateOf`. - `scopeLabel` libre (se hashea con `keccak256`). 
-**DoD** - 
-✅
- Expiración: tras el `expiresAt`, `effectiveDelegateOf` retorna el 
-**delegador** (no hay pérdida). - 
-✅
- Reasignación: `delegate()` con nuevo `delegatee` actualiza en el 
-acto; `extend()` ajusta expiración. - 
-✅
- Evita colisiones: `scope` es `bytes32` recomendado como 
-`keccak256("TOKEN_VOTES")` / `keccak256("REPUTATION_VOTES")`. - 
-✅
- Gas OK: 2 SSTORE por operación típica; structs compactos. 
-**Notas de integración (opcional)** - Si deseas que la delegación afecte automáticamente a un contrato 
-`IVotes`, sincroniza desde el frontend usando 
-`token.delegate(effective)` y `rep.delegate(effective)` al 
-crear/cambiar/revocar (o vía *tally* off‑chain en el Governor). 
-Comandos útiles 
-● Tests: pnpm --filter @gnew/contracts test:hh (incluye 
-Delegation.spec.ts) 
-UI local: 
-pnpm --filter @gnew/governance-ui dev 
-# Define VITE_DELEGATION_ADDRESS en .env.local 
-●  
-¿Quieres que agregue una tarea Hardhat para desplegar Delegation.sol y un hook en la 
-UI que sincronice automáticamente la delegación con tus módulos IVotes (token y/o 
-reputación) al confirmar la transacción? 
-Tú dijiste: 
-N13 Objetivo: Delegables revocables, con expiración. Roles: Eng. SC, Frontend. Entregables: 
-Delegation.sol, UI delegación. DoD: expiración + reasignación funcionan sin pérdida. 
-ChatGPT Plus 
-Pensó durante 24s 
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>GNEW — Governance UI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, Arial;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
