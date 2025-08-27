@@ -1,7 +1,13 @@
 {
     "chat.agent.maxRequests": 2500,
+    "solidity.remappings": [
+        "@openzeppelin/=packages/contracts/lib/openzeppelin-contracts/",
+        "@openzeppelin/contracts/=packages/contracts/lib/openzeppelin-contracts/contracts/",
+        "@openzeppelin/contracts-upgradeable/=packages/contracts/lib/openzeppelin-contracts-upgradeable/contracts/"
+    ],
     "solidity.packageDefaultDependenciesDirectory": "node_modules",
-    "solidity.packageDefaultDependenciesContractsDirectory": "",
-    "solidity.compileUsingLocalVersion": "",
-    "solidity.defaultCompiler": "remote"
+    "solidity.packageDefaultDependenciesContractsDirectory": "contracts",
+    "solidity.compileUsingRemoteVersion": "v0.8.24+commit.e11b9ed9",
+    "solidity.defaultCompiler": "remote",
+    "editor.inlineSuggest.enabled": true
 }

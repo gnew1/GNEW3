@@ -69,10 +69,10 @@ function authMiddleware(req: AuthedRequest, res: Response, next: NextFunction) {
       audience: JWT_AUDIENCE,
       issuer: JWT_ISSUER,
     });
-    if (typeof decoded !== "object" || decoded === null) {
+    if (typeof decoded === "string" || decoded === null) {
       throw new Error("invalid_token_payload");
     }
-    const payload = decoded as JwtPayload;
+    const payload: JwtPayload = decoded;
     const user: UserAttrs = {
       sub: String(payload.sub),
       email: typeof payload.email === "string" ? payload.email : undefined,
@@ -365,7 +365,12 @@ function audit(user: UserAttrs, event: string, meta: Record<string, any>) {
 app.get("/search", async (req: AuthedRequest, res) => {
   const { user } = req;
   if (!user) return res.status(401).json({ error: "unauthenticated" });
-  const q = String(req.query.q ?? "");
+  const q =
+    typeof req.query.q === "string"
+      ? req.query.q
+      : Array.isArray(req.query.q)
+        ? req.query.q[0] ?? ""
+        : "";
   const query = q.trim();
   if (!query) return res.status(400).json({ error: "missing_query" });
 

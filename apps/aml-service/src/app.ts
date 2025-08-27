@@ -62,7 +62,8 @@ export function determineLevel(
   return "none";
 }
 
-export function statusFromAction(action: string): "l2_review" | "closed" | "ack" {
+export type AMLStatus = "l2_review" | "closed" | "ack";
+export function statusFromAction(action: string): AMLStatus {
   switch (action) {
     case "escalate":
       return "l2_review";

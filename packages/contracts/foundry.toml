@@ -7,9 +7,11 @@ solc = "0.8.24"
 evm_version = "paris" 
 optimizer = true 
 optimizer_runs = 200 
-fs_permissions = [{ access = "read", path = "./"}] 
-# Remappings para usar OZ desde node_modules y forge-std desde lib 
-remappings = [ 
-"@openzeppelin/=../../node_modules/@openzeppelin/", 
-"forge-std/=lib/forge-std/src/" 
-] 
+fs_permissions = [{ access = "read", path = "./"}]
+# Remappings para usar librerías locales de OpenZeppelin y forge-std
+remappings = [
+"@openzeppelin/=lib/openzeppelin-contracts/",
+"@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+"@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+"forge-std/=lib/forge-std/src/"
+]

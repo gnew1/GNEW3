@@ -48,8 +48,6 @@
     "*.{ts,tsx,mts,cts}": "eslint --fix"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^5.0.2",
-    "@openzeppelin/contracts-upgradeable": "^5.0.2",
     "next-auth": "^4.24.11"
   }
 }

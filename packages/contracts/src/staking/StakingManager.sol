@@ -17,19 +17,22 @@ import {AccessControl} from
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol"; 
 import {ReentrancyGuard} from 
 "@openzeppelin/contracts/utils/ReentrancyGuard.sol"; 
-contract StakingManager is AccessControl, Pausable, ReentrancyGuard { 
-using SafeERC20 for IERC20; 
-// ===== Custom errors (más baratas que strings) ===== 
-error AmountZero(); 
-error OperatorNotRegistered(); 
-error InsufficientShares(); 
-error NotReleased(); 
-error InvalidBps(); 
-    error Delay(); 
-    error AppealPending(); 
-    error NotStakeholder(); 
-    error EmptyPool(); 
-    error ZeroAddr(); 
+contract StakingManager is AccessControl, Pausable, ReentrancyGuard {
+using SafeERC20 for IERC20;
+// ===== Custom errors (más baratas que strings) =====
+error Staking__ZeroAmount();
+error Staking__OperatorNotRegistered();
+error Staking__InsufficientBalance(uint256 requested, uint256 available);
+error Staking__NotReleased();
+error Staking__InvalidBps();
+error Staking__Delay();
+error Staking__AppealPending();
+error Staking__NotStakeholder();
+error Staking__EmptyPool();
+error Staking__ZeroAddress();
+error Staking__InvalidUnbondIndex();
+error Staking__SlashProposalInvalid();
+error Staking__AppealNotOpen();
  
     // -------- Roles -------- 
     bytes32 public constant PAUSER_ROLE   = keccak256("PAUSER_ROLE"); 
@@ -37,8 +40,8 @@ error InvalidBps();
     bytes32 public constant APPEALS_ROLE  = keccak256("APPEALS_ROLE"); 
  
     // -------- Parámetros globales -------- 
-    IERC20  public immutable stakingToken; 
-    address public slashReceiver; 
+    IERC20  public immutable STAKING_TOKEN;
+    address public immutable TREASURY;
     uint256 public minOperatorStake; 
     uint256 public unbondingWindow; 
     uint256 public slashDelay; 
@@ -104,52 +107,50 @@ uint256 bps, bytes32 evidence, uint64 executeAfter);
 address indexed by); 
     event SlashResolved(address indexed operator, uint256 indexed id, 
 bool upheld); 
-    event Slashed(address indexed operator, uint256 indexed id, 
-uint256 amount, address receiver); 
-    event ParamsUpdated(uint256 minOperatorStake, uint256 
-unbondingWindow, uint256 slashDelay, address slashReceiver); 
+    event Slashed(address indexed operator, uint256 indexed id,
+uint256 amount, address receiver);
+    event ParamsUpdated(uint256 minOperatorStake, uint256
+unbondingWindow, uint256 slashDelay);
  
-    constructor( 
-        address token_, 
-        address admin_, 
-        address slashReceiver_, 
-        uint256 minOperatorStake_, 
-        uint256 unbondingWindow_, 
-        uint256 slashDelay_ 
-    ) { 
-        if (token_ == address(0) || admin_ == address(0) || 
-slashReceiver_ == address(0)) revert ZeroAddr(); 
-        stakingToken = IERC20(token_); 
-        slashReceiver = slashReceiver_; 
-        minOperatorStake = minOperatorStake_; 
-        unbondingWindow = unbondingWindow_; 
-        slashDelay = slashDelay_; 
+    constructor(
+        IERC20 stakingToken_,
+        address admin_,
+        address treasury_,
+        uint256 minOperatorStake_,
+        uint256 unbondingWindow_,
+        uint256 slashDelay_
+    ) {
+        if (
+            address(stakingToken_) == address(0) ||
+            admin_ == address(0) ||
+            treasury_ == address(0)
+        ) revert Staking__ZeroAddress();
+        STAKING_TOKEN = stakingToken_;
+        TREASURY = treasury_;
+        minOperatorStake = minOperatorStake_;
+        unbondingWindow = unbondingWindow_;
+        slashDelay = slashDelay_;
  
         _grantRole(DEFAULT_ADMIN_ROLE, admin_); 
         _grantRole(PAUSER_ROLE, admin_); 
         _grantRole(SLASHER_ROLE, admin_); 
         _grantRole(APPEALS_ROLE, admin_); 
  
-        emit ParamsUpdated(minOperatorStake, unbondingWindow, 
-slashDelay, slashReceiver); 
-    } 
+        emit ParamsUpdated(minOperatorStake, unbondingWindow, slashDelay);
+    }
  
     // ---------------- Admin ---------------- 
  
-    function setParams( 
-        uint256 minOperatorStake_, 
-        uint256 unbondingWindow_, 
-        uint256 slashDelay_, 
-        address slashReceiver_ 
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) { 
-        if (slashReceiver_ == address(0)) revert ZeroAddr(); 
-        minOperatorStake = minOperatorStake_; 
-        unbondingWindow = unbondingWindow_; 
-        slashDelay = slashDelay_; 
-        slashReceiver = slashReceiver_; 
-        emit ParamsUpdated(minOperatorStake_, unbondingWindow_, 
-slashDelay_, slashReceiver_); 
-    } 
+    function setParams(
+        uint256 minOperatorStake_,
+        uint256 unbondingWindow_,
+        uint256 slashDelay_
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        minOperatorStake = minOperatorStake_;
+        unbondingWindow = unbondingWindow_;
+        slashDelay = slashDelay_;
+        emit ParamsUpdated(minOperatorStake_, unbondingWindow_, slashDelay_);
+    }
  
     function pause() external onlyRole(PAUSER_ROLE) { _pause(); } 
     function unpause() external onlyRole(PAUSER_ROLE) { _unpause(); } 
@@ -158,7 +159,7 @@ slashDelay_, slashReceiver_);
  
     function delegate(address operator, uint256 amount) external 
 whenNotPaused nonReentrant { 
-        if (amount == 0) revert AmountZero(); 
+        if (amount == 0) revert Staking__ZeroAmount();
  
         Operator storage op = operators[operator]; 
  
@@ -172,7 +173,7 @@ tsh) / ts;
     if (shares == 0) { unchecked { shares = 1; } } // evita bloqueo por redondeo 
  
     // Efectos 
-    stakingToken.safeTransferFrom(msg.sender, address(this), amount); 
+      STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
  
         // SSTORE mínimo: escribir una vez por campo 
         op.totalStake = ts + amount; 
@@ -183,7 +184,7 @@ tsh) / ts;
             op.registered = true; 
             emit OperatorRegistered(operator); 
         } 
-        if (!op.registered) revert OperatorNotRegistered(); 
+        if (!op.registered) revert Staking__OperatorNotRegistered();
  
         positions[operator][msg.sender].activeShares += shares; 
  
@@ -192,10 +193,10 @@ tsh) / ts;
  
     function undelegate(address operator, uint256 shares) external 
 whenNotPaused { 
-        if (shares == 0) revert AmountZero(); 
+        if (shares == 0) revert Staking__ZeroAmount();
         Position storage p = positions[operator][msg.sender]; 
         uint256 act = p.activeShares; 
-        if (act < shares) revert InsufficientShares(); 
+        if (act < shares) revert Staking__InsufficientBalance(shares, act);
         unchecked { p.activeShares = act - shares; } 
  
         uint64 releaseTime = uint64(block.timestamp + 
@@ -213,16 +214,18 @@ releaseTime);
     function claim(address operator, uint256 unbondIndex) external 
 nonReentrant { 
         Position storage p = positions[operator][msg.sender]; 
-    require(unbondIndex < p.unbonds.length, "index"); // infrecuente: mantener string OK 
+    if (unbondIndex >= p.unbonds.length) {
+        revert Staking__InvalidUnbondIndex();
+    }
  
         Unbonding storage u = p.unbonds[unbondIndex]; 
-    if (u.used == 1) revert NotReleased(); // ya usado o nunca liberado 
-    if (block.timestamp < u.releaseTime) revert NotReleased(); 
+    if (u.used == 1) revert Staking__NotReleased(); // ya usado o nunca liberado
+    if (block.timestamp < u.releaseTime) revert Staking__NotReleased();
  
         Operator storage op = operators[operator]; 
         uint256 tsh = op.totalShares; 
         uint256 ts = op.totalStake; 
-        if (tsh == 0 || ts == 0) revert EmptyPool(); 
+        if (tsh == 0 || ts == 0) revert Staking__EmptyPool();
  
         // payout = shares * totalStake / totalShares 
         uint256 shares = uint256(u.shares); 
@@ -233,7 +236,7 @@ nonReentrant {
         op.totalStake  = ts - payout; 
         u.used = 1; 
  
-        stakingToken.safeTransfer(msg.sender, payout); 
+        STAKING_TOKEN.safeTransfer(msg.sender, payout);
         emit UndelegationClaimed(msg.sender, operator, shares, 
 payout); 
     } 
@@ -252,10 +255,10 @@ evidence)
         whenNotPaused 
         returns (uint256 id) 
     { 
-        if (bps == 0 || bps > 10_000) revert InvalidBps(); 
+        if (bps == 0 || bps > 10_000) revert Staking__InvalidBps();
  
         Operator storage op = operators[operator]; 
-        if (op.totalStake == 0) revert EmptyPool(); 
+        if (op.totalStake == 0) revert Staking__EmptyPool();
  
         // ++nonce (packed en el mismo slot que `registered`) 
         unchecked { op.slashNonce += 1; } 
@@ -279,8 +282,10 @@ evidence)
     function openAppeal(address operator, uint256 id) external 
 whenNotPaused { 
         SlashProposal storage sp = slashes[operator][id]; 
-        require(sp.id == id && !sp.executed, "invalid"); 
-        if (sp.appeal != AppealState.None) revert AppealPending(); 
+        if (sp.id != id || sp.executed) {
+            revert Staking__SlashProposalInvalid();
+        }
+        if (sp.appeal != AppealState.None) revert Staking__AppealPending();
  
         // stakeholder: operador o delegador con posición 
         Position storage p = positions[operator][msg.sender]; 
@@ -295,7 +300,7 @@ stakeholder = true; break; }
                 unchecked { ++i; } 
             } 
         } 
-        if (!stakeholder) revert NotStakeholder(); 
+        if (!stakeholder) revert Staking__NotStakeholder();
  
         sp.appeal = AppealState.Open; 
         emit SlashAppealed(operator, id, msg.sender); 
@@ -307,8 +312,12 @@ stakeholder = true; break; }
         whenNotPaused 
     { 
         SlashProposal storage sp = slashes[operator][id]; 
-        require(sp.id == id && !sp.executed, "invalid"); 
-        require(sp.appeal == AppealState.Open, "appeal:not-open"); 
+        if (sp.id != id || sp.executed) {
+            revert Staking__SlashProposalInvalid();
+        }
+        if (sp.appeal != AppealState.Open) {
+            revert Staking__AppealNotOpen();
+        }
         sp.appeal = AppealState.Resolved; 
         sp.appealUpheld = uphold; 
         emit SlashResolved(operator, id, uphold); 
@@ -318,24 +327,26 @@ stakeholder = true; break; }
 whenNotPaused nonReentrant { 
         Operator storage op = operators[operator]; 
         SlashProposal storage sp = slashes[operator][id]; 
-        require(sp.id == id && !sp.executed, "invalid"); 
-        if (block.timestamp < sp.executeAfter) revert Delay(); 
-        if (sp.appeal == AppealState.Open) revert AppealPending(); 
+        if (sp.id != id || sp.executed) {
+            revert Staking__SlashProposalInvalid();
+        }
+        if (block.timestamp < sp.executeAfter) revert Staking__Delay();
+        if (sp.appeal == AppealState.Open) revert Staking__AppealPending();
  
         if (sp.appeal == AppealState.Resolved && !sp.appealUpheld) { 
             sp.executed = true; 
-            emit Slashed(operator, id, 0, slashReceiver); 
+            emit Slashed(operator, id, 0, TREASURY);
             return; 
         } 
  
         uint256 amount = (op.totalStake * sp.bps) / 10_000; 
         if (amount > 0) { 
             op.totalStake = op.totalStake - amount; 
-            stakingToken.safeTransfer(slashReceiver, amount); 
+              STAKING_TOKEN.safeTransfer(TREASURY, amount);
         } 
         sp.executed = true; 
  
-        emit Slashed(operator, id, amount, slashReceiver); 
+        emit Slashed(operator, id, amount, TREASURY);
     } 
  
     // ---------------- Views ---------------- 

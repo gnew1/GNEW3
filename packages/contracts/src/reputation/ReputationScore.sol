@@ -21,14 +21,19 @@ puntuaciones).
  *  - mintScore / burnScore: helpers incrementales. 
  *  - getVotes / getPastVotes: expone poder de voto por bloque. 
  */ 
-import {AccessControl} from 
-"@openzeppelin/contracts/access/AccessControl.sol"; 
-import {EIP712} from 
-"@openzeppelin/contracts/utils/cryptography/EIP712.sol"; 
-import {Votes} from 
-"@openzeppelin/contracts/governance/utils/Votes.sol"; 
- 
-contract ReputationScore is AccessControl, EIP712, Votes { 
+import {AccessControl} from
+"@openzeppelin/contracts/access/AccessControl.sol";
+import {EIP712} from
+"@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {Votes} from
+"@openzeppelin/contracts/governance/utils/Votes.sol";
+
+error Reputation__InsufficientScore(uint256 required, uint256 actual);
+error Reputation__Unauthorized(address account);
+error Reputation__ZeroAddress();
+error Reputation__LengthMismatch();
+
+contract ReputationScore is AccessControl, EIP712, Votes {
     bytes32 public constant SCORER_ROLE = keccak256("SCORER_ROLE"); 
  
     // almacenamiento del "score" actual por cuenta y total agregado 
@@ -42,21 +47,24 @@ newScore);
     event ScoreDecreased(address indexed account, uint256 by, uint256 
 newScore); 
  
-    constructor(address admin, address scorer) 
-        EIP712("GNEW-Reputation", "1") 
-        Votes() 
-    { 
-        require(admin != address(0) && scorer != address(0), 
-"admin/scorer=0"); 
-        _grantRole(DEFAULT_ADMIN_ROLE, admin); 
-        _grantRole(SCORER_ROLE, scorer); 
-    } 
+    constructor(address admin, address scorer)
+        EIP712("GNEW-Reputation", "1")
+        Votes()
+    {
+        if (admin == address(0) || scorer == address(0)) {
+            revert Reputation__ZeroAddress();
+        }
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(SCORER_ROLE, scorer);
+    }
  
     // ---------- Gestión de score (soulbound) ---------- 
  
-    function setScore(address account, uint256 newScore) external 
-onlyRole(SCORER_ROLE) { 
-        uint256 prev = _score[account]; 
+    function setScore(address account, uint256 newScore) external {
+        if (!hasRole(SCORER_ROLE, msg.sender)) {
+            revert Reputation__Unauthorized(msg.sender);
+        }
+        uint256 prev = _score[account];
         if (newScore == prev) return; 
  
         if (newScore > prev) { 
@@ -72,28 +80,37 @@ onlyRole(SCORER_ROLE) {
         emit ScoreSet(account, prev, newScore); 
     } 
  
-    function setScores(address[] calldata accounts, uint256[] calldata 
-scores) external onlyRole(SCORER_ROLE) { 
-        require(accounts.length == scores.length, "len mismatch"); 
-        for (uint256 i = 0; i < accounts.length; i++) { 
-            this.setScore(accounts[i], scores[i]); 
-        } 
-    } 
+    function setScores(address[] calldata accounts, uint256[] calldata
+scores) external {
+        if (!hasRole(SCORER_ROLE, msg.sender)) {
+            revert Reputation__Unauthorized(msg.sender);
+        }
+        if (accounts.length != scores.length) {
+            revert Reputation__LengthMismatch();
+        }
+        for (uint256 i = 0; i < accounts.length; i++) {
+            this.setScore(accounts[i], scores[i]);
+        }
+    }
  
-    function mintScore(address to, uint256 by) external 
-onlyRole(SCORER_ROLE) { 
-        if (by == 0) return; 
-        _score[to] += by; 
-        _totalScore += by; 
-    _transferVotingUnits(address(0), to, by); 
-        emit ScoreIncreased(to, by, _score[to]); 
-    } 
+    function mintScore(address to, uint256 by) external {
+        if (!hasRole(SCORER_ROLE, msg.sender)) {
+            revert Reputation__Unauthorized(msg.sender);
+        }
+        if (by == 0) return;
+        _score[to] += by;
+        _totalScore += by;
+    _transferVotingUnits(address(0), to, by);
+        emit ScoreIncreased(to, by, _score[to]);
+    }
  
-    function burnScore(address from, uint256 by) external 
-onlyRole(SCORER_ROLE) { 
-        if (by == 0) return; 
-        uint256 prev = _score[from]; 
-        uint256 dec = by > prev ? prev : by; 
+    function burnScore(address from, uint256 by) external {
+        if (!hasRole(SCORER_ROLE, msg.sender)) {
+            revert Reputation__Unauthorized(msg.sender);
+        }
+        if (by == 0) return;
+        uint256 prev = _score[from];
+        uint256 dec = by > prev ? prev : by;
         _score[from] = prev - dec; 
         _totalScore -= dec; 
     _transferVotingUnits(from, address(0), dec); 
