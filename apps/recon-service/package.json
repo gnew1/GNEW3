@@ -12,7 +12,7 @@
   "migrate": "node dist/db/migrate.js"
   },
   "dependencies": {
-    "csv-parse": "^5.5.6",
+    "csv-parse": "^6.1.0",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.12.0",
